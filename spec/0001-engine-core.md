@@ -196,8 +196,12 @@ Runs for both players, player 0 first, when the board empties.
 
 - **[E1-32]** Refill deals `FACTORY_SIZE` tiles to each display in order `0..4`, drawing from the
   end of the bag.
-- **[E1-33]** When the bag empties mid-deal, all lid tiles move to the bag, the lid is emptied,
-  and the bag is shuffled ([E1-46]). Dealing then continues.
+- **[E1-33]** When a draw finds the bag empty, all lid tiles move to the bag, the lid is emptied,
+  and the bag is shuffled ([E1-46]). Dealing then continues. The recycle is triggered by a draw
+  finding the bag empty, **not** by the bag reaching zero: a deal that consumes the last tile
+  exactly ends with an empty bag and no shuffle, and the recycle happens at the next refill's
+  first draw. The distinction is observable — an eager implementation shuffles once more, at a
+  different point, and deals a different game from that moment on.
 - **[E1-34]** When bag *and* lid are both empty, dealing stops early and the remaining displays
   stay short. This is a legal position, not an error.
 - **[E1-35]** `roundIndex` counts *round transitions*, not deals. A new game deals the first
@@ -247,13 +251,16 @@ Assertable after every ply, and checked by the property tests in *0002*.
 - **[E1-49]** The port does NOT reproduce ludometer's tile order for a given numeric seed —
   Python's Mersenne Twister is a different generator. Conformance is therefore replay-based, not
   seed-based; see *0002 — Engine conformance vectors*.
-- **[E1-61]** `newGame` MUST accept an optional shuffle function in place of the seeded default.
-  It is called exactly where [E1-47] permits randomness and nowhere else: once in `newGame` on
-  the full bag, and once per lid recycle ([E1-33]). An ordinary refill draws from the bag without
-  shuffling, so most rounds call it zero times. This is the seam the conformance harness uses to
-  replay a recorded bag order ([0002 V2-6]), which is why the call count is part of the contract
-  and not an implementation detail; it is the only supported way to influence the engine's
-  randomness, and production callers pass a seed.
+- **[E1-61]** Both constructors — `newGame` and `fromCanonical` — MUST accept an optional shuffle
+  function in place of the seeded default. `fromCanonical` needs it as much as `newGame` does: a
+  handcrafted position is typically one with a nearly-empty bag, so a lid recycle during its next
+  few plies is the normal case, not an exotic one. The function is called exactly where [E1-47]
+  permits randomness and nowhere else: once in `newGame` on the full bag, and once per lid
+  recycle ([E1-33]). An ordinary refill draws from the bag without shuffling, so most rounds call
+  it zero times, and a state restored by `fromCanonical` may never call it at all. This is the
+  seam the conformance harness uses to replay a recorded bag order ([0002 V2-6]), which is why
+  the call count is part of the contract and not an implementation detail; it is the only
+  supported way to influence the engine's randomness, and production callers pass a seed.
 
 ## Interfaces
 
@@ -282,7 +289,11 @@ function recount(s: AzulState): void;
 // serialisation and display
 function toJSON(s: AzulState): AzulJSON;              // lossy view for the UI, see [E1-52]
 function toCanonical(s: AzulState): CanonicalState;   // lossless, see [E1-62]
-function fromCanonical(c: CanonicalState): AzulState; // exact inverse
+function fromCanonical(                               // one-sided inverse: see [E1-62]
+  c: CanonicalState,
+  seed: number,
+  shuffle?: Shuffle,
+): AzulState;
 function renderText(s: AzulState): string;            // debugging aid
 function encode(s: AzulState): Float32Array;          // length ENCODED_SIZE
 ```
@@ -295,17 +306,22 @@ function encode(s: AzulState): Float32Array;          // length ENCODED_SIZE
   untouched and MUST NOT read or write anything outside them — no module-level mutable state, no
   ambient clock, no globals.
 - **[E1-52]** `toJSON` MUST return structurally-cloneable plain data (no class instances, no
-  functions) so a state can cross a worker boundary. It is the **UI view** and is deliberately
-  lossy: it reports the bag as per-colour counts, not as an order, because the bag's order is
-  hidden information no player may see. It MUST NOT be used to compare or restore positions.
+  functions) so a state can cross a worker boundary. It MUST report the bag as per-colour counts
+  and MUST NOT expose its order, which is hidden information no player may see.
+
+  *It follows that `toJSON` cannot distinguish two positions that will deal differently, so it is
+  the wrong tool for comparing or restoring states — use [E1-62]. That is guidance for callers,
+  not a rule the engine can enforce, which is why it is not phrased as a requirement.*
 - **[E1-62]** `toCanonical` MUST return a lossless, structurally-cloneable snapshot — every field
   of the data model, with the bag as an ordered colour array — with object keys emitted in a
-  fixed, documented order, and MUST exclude derived caches ([E1-5]). `fromCanonical` MUST be its
-  exact inverse: `toCanonical(fromCanonical(c))` deep-equals `c`, and a state restored this way
-  MUST continue play identically to the state it came from. This pair is what makes handcrafted
-  conformance positions loadable ([0002 V2-16]) and what state comparison is defined against
-  ([0002 V2-5]). A canonical snapshot does NOT carry the PRNG's internal state: a restored state
-  MUST be given a seed or a shuffle function of its own.
+  fixed, documented order, and MUST exclude derived caches ([E1-5]). `fromCanonical` MUST be a
+  **one-sided** inverse: `toCanonical(fromCanonical(c, …))` deep-equals `c` for every canonical
+  `c`. The other direction does not hold, and MUST NOT be claimed: a snapshot deliberately omits
+  the PRNG's internal state, so `fromCanonical` takes a seed of its own, and a restored state
+  continues play identically to its source only under the same randomness — which for conformance
+  means the recorded shuffles of [E1-61]. `clone` is the operation that preserves the stream
+  exactly ([E1-48]); this pair is not. Together they are what makes handcrafted conformance
+  positions loadable ([0002 V2-16]) and what state comparison is defined against ([0002 V2-5]).
 
 ## Observation encoding
 
@@ -335,8 +351,10 @@ contract, not an implementation detail.
 | `[176, 179)` | 3 | My complete rows `/5`, columns `/5`, colours `/5` |
 | `[179, 182)` | 3 | Theirs, same three |
 
-- **[E1-53]** `ENCODED_SIZE` is 182. Offsets MUST be exported as named constants rather than
-  written as literals at call sites.
+- **[E1-53]** `ENCODED_SIZE` is 182, and every field offset in the table above MUST be exported
+  as a named constant with that value. *(Using those constants instead of bare literals at call
+  sites is a lint concern, not something a test can observe — hence not part of the
+  requirement.)*
 - **[E1-54]** An empty pattern line contributes all zeros — no colour bit, zero fill.
 - **[E1-55]** Bag and lid *counts* are public information in Azul and are encoded; the bag's
   *order* is not encoded and MUST NOT be.
@@ -392,10 +410,14 @@ here or the suite fails:
 | --- | --- |
 | [E1-8], [E1-57] | Process constraints on changing the encoding and the observation layout. A test cannot observe a promise about future specs. |
 | [E1-49] | A statement about the reference implementation, not about this engine's behaviour. |
-| [E1-50] | Enforced by the package manifest and the browser build, not by a unit test. |
-| [E1-58], [E1-59], [E1-60] | `SHOULD` budgets, explicitly declared above to be non-gating. The benchmark suite measures them; it does not fail the build. |
+| [E1-58], [E1-59] | `SHOULD` budgets, explicitly declared above to be non-gating. The benchmark suite measures them; it does not fail the build. |
+| [E1-60] | An implementation-strategy `SHOULD`. No behavioural test can see how `legalActions` builds its result — [E1-58] measures whether the strategy worked. |
 
-Every other requirement in this document MUST have a citing test.
+Every other requirement in this document MUST have a citing test. [E1-50] is deliberately **not**
+exempt despite being a build-level concern: a test can assert the manifest declares no runtime
+dependencies, and can run a full game with `document`, `fetch`, `Date.now` and the filesystem
+replaced by throwing stubs. It is a `MUST` about behaviour, and [0002 V2-31] does not let those
+be excused.
 
 ## Open questions
 

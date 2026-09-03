@@ -80,11 +80,14 @@ old one `superseded`, and set `supersedes` in the new one's frontmatter.
   spec names the intent it serves in its `intent` field and refers to others by number and title.
 - Cite a requirement in the same spec as `[E1-14]`, and one in another spec as `[0001 E1-14]` —
   spec number inside the brackets, so a whole citation is one token a script can match with
-  `\[(?:(\d{4}) )?([A-Z]+\d+-\d+)\]`. Spell out every identifier in a range: `[0001 E1-41]`
-  through `[0001 E1-45]`, never `[0001 E1-41] to [E1-45]`, which the traceability check
-  ([0002 V2-27]) reads as one citation and one dangling reference. Prefixes are unique across
-  specs, so citations from *outside* the `spec/` tree — test names, comments, commit messages —
-  use the bare `[E1-24]`: there is only one thing it can mean.
+  `\[(?:(\d{4}) )?([A-Z]+\d+-\d+)\]`. Prefixes are unique across specs, so the spec number is
+  never needed to *resolve* a citation — it is there to tell a reader which file to open, which
+  is why citations from outside the `spec/` tree (test names, comments, commit messages) use the
+  bare `[E1-24]`.
+- Qualify **both ends** of a range and never leave one bare: `[0001 E1-41]` through
+  `[0001 E1-45]`, not `[0001 E1-41] to [E1-45]`. Where the members of a range each need to be
+  traceable — a requirement that mandates a test per item — list them individually instead;
+  a range cites its endpoints, and the three identifiers in the middle are mentioned nowhere.
 - Length follows the subject. A spec is allowed to be long where the detail is real, but prefer
   splitting a second subject into a second spec over one document that covers everything.
 - Dates are the date the spec was first written; the git log covers the rest.

@@ -48,10 +48,12 @@ means two different bags.
 - **[V2-2]** Vectors MUST therefore carry the tile order itself, not the seed that produced it.
   The recorded seed is provenance only, never an input to the replay.
 - **[V2-3]** The harness MUST feed that order in through the shuffle seam ([0001 E1-61]), and
-  MUST build starting positions with `fromCanonical` ([0001 E1-62]). It MUST NOT edit state
-  fields directly, even though [0001 E1-5] permits that elsewhere: a fixture assembled by poking
-  fields tests the poking, and anything the harness can only reach that way is a gap in the
-  engine's own surface.
+  MUST build starting positions with `fromCanonical` ([0001 E1-62]), passing the seam to it in
+  the same call. Both vector kinds need it: a handcrafted position is usually one with a nearly
+  empty bag, so a lid recycle within its few plies is the common case. The harness MUST NOT edit
+  state fields directly, even though [0001 E1-5] permits that elsewhere: a fixture assembled by
+  poking fields tests the poking, and anything the harness can only reach that way is a gap in
+  the engine's own surface.
 
 ## Vector format
 
@@ -89,7 +91,9 @@ One JSON file per vector, under `packages/engine/test/vectors/`, named `game-NN.
   canonical forms are deep-equal.
 - **[V2-6]** `shuffles[k]` is the bag contents *after* the k-th shuffle, as an array in storage
   order — tiles are drawn from the **end**, so the last element is dealt first ([0001 E1-32]).
-  The replay harness returns one entry per shuffle call. Shuffles happen at game creation and at
+  The seam is a `void` callback that reorders the array it is handed ([0001 E1-61]), so the
+  harness *writes* the next recorded order into the bag in place — it does not return it.
+  Shuffles happen at game creation and at
   each lid recycle only ([0001 E1-61]), never on an ordinary refill, so the count is small and
   exact: the harness MUST fail if the engine asks for more shuffles than the vector recorded, or
   finishes with unused entries. A vector whose shuffle count drifts is reporting a real
@@ -115,8 +119,12 @@ its provenance fields matter as much as the vectors themselves.
   a wrong vector is a bug in the script or a real disagreement, and editing it by hand hides
   both.
 - **[V2-10]** The script MUST patch the oracle's shuffling to record the resulting bag order, and
-  MUST record the state *after* each ply by the oracle's own accessors, so the fixture is the
-  oracle's opinion and not the script's.
+  MUST read every recorded value from the oracle — its accessors where they exist, its documented
+  state attributes otherwise. The oracle has no canonical-state accessor of its own (`to_json`
+  reports the bag as counts, which is exactly the information a vector needs in order), so
+  reading attributes directly is expected. What the script MUST NOT do is *compute* anything a
+  vector records — no re-deriving scores, legality, or tile totals in Python. A fixture must be
+  the oracle's opinion, or it proves nothing.
 - **[V2-11]** Regenerating MUST be reproducible: same ludometer commit, same seeds, byte-identical
   files. A diff in `git status` after a regeneration means something changed upstream, and that
   is worth reading.
@@ -127,7 +135,10 @@ its provenance fields matter as much as the vectors themselves.
 
 ### Full games
 
-- **[V2-13]** At least 30 complete games, each from a distinct seed, replayed end to end.
+- **[V2-13]** At least 30 complete games, each from a distinct seed, replayed end to end. The
+  number is set by the runtime budget in [V2-28], not inherited from anything upstream: 30 games
+  of roughly 150–200 plies is around 5 000 compared states, which stays well inside a
+  ten-second suite. Raise it if the budget allows; the figure is a floor, not a ritual.
 - **[V2-14]** Move choice during generation MUST NOT be uniformly random in every game. At least
   a third SHOULD use policies that steer into awkward territory — prefer the floor line, always
   take the largest pile, always take from the centre, never take the marker — because uniform
@@ -158,8 +169,8 @@ its provenance fields matter as much as the vectors themselves.
 
 - **[V2-18]** Tile conservation ([0001 E1-40]) MUST be asserted after every ply of every replay,
   not only at the end.
-- **[V2-19]** The remaining invariants ([0001 E1-41] through [0001 E1-45]) MUST be asserted per
-  ply.
+- **[V2-19]** The remaining invariants — [0001 E1-41], [0001 E1-42], [0001 E1-43], [0001 E1-44]
+  and [0001 E1-45] — MUST be asserted per ply.
 - **[V2-20]** `legalActions()` MUST be cross-checked against brute force — `isLegal` over all 180
   encodings — on every ply of at least one full game per run.
 - **[V2-21]** Derived caches ([0001 E1-5]) MUST be checked fresh: after a ply, `recount()` on a
@@ -182,10 +193,12 @@ its provenance fields matter as much as the vectors themselves.
   `<= 1`. Centre counts and scores legitimately exceed 1, so a blanket upper bound would fail a
   correct engine. A test asserting `<= 1` here is itself the bug.
 - **[V2-30]** The `[174, 175)` flag MUST have a dedicated test for its disjunction
-  ([0001 E1-63]): a position mid-round where *both* players see it set, and one where the player
-  who started the round is not the player who takes the marker. Encoding both perspectives of the
-  same position is the cheapest way to catch a port that implemented the field's misleading name
-  instead of its formula.
+  ([0001 E1-63]). One position suffices, and there is only one shape that discriminates: the
+  round's starter is not the player who took the marker, so *both* players see the flag set.
+  Encoding that position from both perspectives catches a port that implemented the field's
+  misleading name instead of its formula — such a port reports 0 for the starter. The test MUST
+  also cover the only case where the flag is 0: a player who neither started the round nor holds
+  the marker.
 
 ## Traceability
 
@@ -219,7 +232,8 @@ pnpm -F engine test -t "[E1-24]" # every test citing one requirement
 
 - Should vectors also be replayed *backwards* — reconstructing each prior state from the next —
   once the undo question in *0001* is settled?
-- Is 30 games the right number, or should the count be whatever keeps a full run inside [V2-28]?
+- Once the suite exists and [V2-28] can be measured rather than guessed at, does the game count
+  in [V2-13] go up? The floor is set by the budget, so the honest answer needs a stopwatch.
 - Do we vendor a pinned copy of the ludometer engine into `tools/` so vectors can be regenerated
   without a separate checkout, at the cost of carrying someone else's code in the repo?
 
