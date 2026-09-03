@@ -18,10 +18,14 @@ pnpm monorepo:
 | `packages/ui` | planned | Solid.js v2 web client |
 | `packages/bot` | planned | AI agent |
 
-## Intent
+## Intent and spec
 
 Planned work is described in plain language under [`intent/`](intent/) — one file per idea,
 written before the code exists. See [`intent/README.md`](intent/README.md) for the conventions.
+
+The technical counterparts live in [`spec/`](spec/): precise, numbered requirements you can build
+from and test against, each linked to the intent it serves. See
+[`spec/README.md`](spec/README.md).
 
 ## Development
 

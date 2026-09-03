@@ -12,6 +12,13 @@ TypeScript implementation of the board game Azul, delivered in three roadmap ste
 
 The repo is a **pnpm monorepo**. Only the pieces described below exist yet; the rest is planned — check what is actually on disk before assuming a package is present.
 
+## Intent and spec
+
+- `intent/` — plain-language documents saying what we want and why, written before the code. Never technical; frozen once written.
+- `spec/` — the technical counterparts: numbered, testable requirements (`[E1-14]`) you build from and cite in tests. Living documents; revised in place.
+
+Before implementing a package, read its spec. When code and spec disagree, one of them is a bug — fix it, don't silently diverge. New requirement identifiers are append-only.
+
 ## Reference implementation
 
 The engine is a TypeScript port of the Azul engine in [RemiFabre/ludometer](https://github.com/RemiFabre/ludometer) (`ludometer/azul/engine.py`, Python). Port the logic and, importantly, the **test vectors** — ludometer validates its engine by replaying ~30 seeded games plus ~5 handcrafted edge positions move-by-move, and checks tile conservation across full self-play games. Reuse that strategy.
