@@ -98,8 +98,11 @@ interface AzulState {
 - **[E1-4]** A pattern line with `plCount[r] === 0` MUST have `plColor[r] === -1`.
 - **[E1-5]** Implementations MAY keep derived caches (tile totals, per-colour placement masks)
   as long as [E1-13] and the invariants hold, and MUST expose a `recount()` that rebuilds them
-  after a caller edits state fields directly. Tests and the UI do that; the engine itself keeps
-  caches current on every `apply`.
+  after a caller edits state fields directly. The engine itself keeps caches current on every
+  `apply`. Direct editing plus `recount()` is a convenience for exploratory work and for the UI;
+  anything that must be reproducible — conformance fixtures above all — MUST go through
+  `fromCanonical` ([E1-62]) instead, which is why [0002 V2-3] forbids field-poking in the
+  harness.
 
 ## Action encoding
 
@@ -123,10 +126,13 @@ For the current player, action `(source, color, dest)` is legal exactly when all
 - **[E1-12]** Taking to the floor is legal whenever [E1-9] holds, so a player with tiles
   available always has at least one legal action — the engine never deadlocks and never needs to
   pass. Forced-to-floor is an ordinary move the caller must choose, not something the engine does
-  on the player's behalf.
+  on the player's behalf. *(This settles the open question in intent 0001: the referee does not
+  place tiles for anyone. It matches the reference implementation, and it keeps the engine free
+  of the one thing it must never have — an opinion about what a player should do.)*
 - **[E1-13]** `legalActions()` MUST return exactly the set of actions for which `isLegal()` is
-  true, with no duplicates. Order is unspecified but MUST be deterministic for a given state;
-  callers that need a canonical order sort.
+  true, with no duplicates, in **ascending** action order. The reference implementation returns
+  ascending order and its brute-force cross-check compares the two lists for equality, so
+  matching it lets [0002 V2-7] and [0002 V2-20] compare without sorting first.
 
 ## Applying a move
 
@@ -194,7 +200,11 @@ Runs for both players, player 0 first, when the board empties.
   and the bag is shuffled ([E1-46]). Dealing then continues.
 - **[E1-34]** When bag *and* lid are both empty, dealing stops early and the remaining displays
   stay short. This is a legal position, not an error.
-- **[E1-35]** `roundIndex` increments once per refill.
+- **[E1-35]** `roundIndex` counts *round transitions*, not deals. A new game deals the first
+  round with `roundIndex` at 0 and does not increment; every later round increments once, before
+  its refill runs. A refill that deals nothing ([E1-34]) still leaves the increment in place. A
+  fresh game therefore reports `roundIndex === 0`, and an implementation that reports 1
+  mismatches every conformance vector from its first ply.
 
 ## Game end
 
@@ -237,9 +247,12 @@ Assertable after every ply, and checked by the property tests in *0002*.
 - **[E1-49]** The port does NOT reproduce ludometer's tile order for a given numeric seed —
   Python's Mersenne Twister is a different generator. Conformance is therefore replay-based, not
   seed-based; see *0002 — Engine conformance vectors*.
-- **[E1-61]** `newGame` MUST accept an optional shuffle function in place of the seeded default,
-  called with the bag before every deal. This is the seam the conformance harness uses to replay
-  a recorded bag order ([V2-6]); it is the only supported way to influence the engine's
+- **[E1-61]** `newGame` MUST accept an optional shuffle function in place of the seeded default.
+  It is called exactly where [E1-47] permits randomness and nowhere else: once in `newGame` on
+  the full bag, and once per lid recycle ([E1-33]). An ordinary refill draws from the bag without
+  shuffling, so most rounds call it zero times. This is the seam the conformance harness uses to
+  replay a recorded bag order ([0002 V2-6]), which is why the call count is part of the contract
+  and not an implementation detail; it is the only supported way to influence the engine's
   randomness, and production callers pass a seed.
 
 ## Interfaces
@@ -267,7 +280,9 @@ function tileCensus(s: AzulState): number[];          // always [20,20,20,20,20]
 function recount(s: AzulState): void;
 
 // serialisation and display
-function toJSON(s: AzulState): AzulJSON;              // plain data for the UI
+function toJSON(s: AzulState): AzulJSON;              // lossy view for the UI, see [E1-52]
+function toCanonical(s: AzulState): CanonicalState;   // lossless, see [E1-62]
+function fromCanonical(c: CanonicalState): AzulState; // exact inverse
 function renderText(s: AzulState): string;            // debugging aid
 function encode(s: AzulState): Float32Array;          // length ENCODED_SIZE
 ```
@@ -275,10 +290,22 @@ function encode(s: AzulState): Float32Array;          // length ENCODED_SIZE
 - **[E1-50]** The package MUST have no runtime dependencies and MUST NOT touch the DOM, the
   filesystem, timers, or the network — it has to run unchanged in a browser, in a worker, and
   under Vitest in Node.
-- **[E1-51]** Every function above MUST be pure with respect to everything except the state
-  passed in. `apply` and `recount` mutate their argument; nothing else mutates anything.
+- **[E1-51]** `apply` and `recount` mutate the state passed to them, and an injected shuffle
+  ([E1-61]) mutates the array it is handed. Every other function above MUST leave its arguments
+  untouched and MUST NOT read or write anything outside them — no module-level mutable state, no
+  ambient clock, no globals.
 - **[E1-52]** `toJSON` MUST return structurally-cloneable plain data (no class instances, no
-  functions) so a state can cross a worker boundary.
+  functions) so a state can cross a worker boundary. It is the **UI view** and is deliberately
+  lossy: it reports the bag as per-colour counts, not as an order, because the bag's order is
+  hidden information no player may see. It MUST NOT be used to compare or restore positions.
+- **[E1-62]** `toCanonical` MUST return a lossless, structurally-cloneable snapshot — every field
+  of the data model, with the bag as an ordered colour array — with object keys emitted in a
+  fixed, documented order, and MUST exclude derived caches ([E1-5]). `fromCanonical` MUST be its
+  exact inverse: `toCanonical(fromCanonical(c))` deep-equals `c`, and a state restored this way
+  MUST continue play identically to the state it came from. This pair is what makes handcrafted
+  conformance positions loadable ([0002 V2-16]) and what state comparison is defined against
+  ([0002 V2-5]). A canonical snapshot does NOT carry the PRNG's internal state: a restored state
+  MUST be given a seed or a shuffle function of its own.
 
 ## Observation encoding
 
@@ -303,7 +330,7 @@ contract, not an implementation detail.
 | `[163, 168)` | 5 | Bag colour counts `/20` |
 | `[168, 173)` | 5 | Lid colour counts `/20` |
 | `[173, 174)` | 1 | Tiles left on the board this round `/20` |
-| `[174, 175)` | 1 | I start the next round, 0/1 |
+| `[174, 175)` | 1 | `floorMarker[me] || firstPlayer === me` — see [E1-63] |
 | `[175, 176)` | 1 | `min(roundIndex, 10) / 10` |
 | `[176, 179)` | 3 | My complete rows `/5`, columns `/5`, colours `/5` |
 | `[179, 182)` | 3 | Theirs, same three |
@@ -313,8 +340,21 @@ contract, not an implementation detail.
 - **[E1-54]** An empty pattern line contributes all zeros — no colour bit, zero fill.
 - **[E1-55]** Bag and lid *counts* are public information in Azul and are encoded; the bag's
   *order* is not encoded and MUST NOT be.
-- **[E1-56]** Every value MUST stay within `[0, 1]` for any reachable state, including the
-  clamped floor and round fields.
+- **[E1-56]** Every value MUST be finite and non-negative. Most fields are normalised into
+  `[0, 1]`, and two are explicitly clamped there — floor slots (`min(occupied, 7) / 7`) and the
+  round index (`min(roundIndex, 10) / 10`). The divisors elsewhere are **scaling constants, not
+  clamps**, and two fields provably exceed 1 in legal positions: centre colour counts are divided
+  by 10 though the centre can hold more of one colour, and scores are divided by 100 though a
+  finished game can score well past that. Neither MUST be clamped — clamping would silently
+  diverge from the reference encoder and corrupt every vector. Tests MUST assert the real bound
+  (finite, `>= 0`) plus the two clamped fields, not a blanket `<= 1`.
+- **[E1-63]** The `[174, 175)` flag is exactly `floorMarker[me] || firstPlayer === me`. It is a
+  **disjunction**, and both halves matter: it is set for the player currently holding the marker
+  *and* for the player who started the current round. It is therefore not "I start the next
+  round" — mid-round, both players can see it set at once, and a player who started this round
+  but did not take the marker sees it set while someone else starts the next one. The reference
+  implementation's own inline comment glosses this field as the "next round" flag; the code is
+  the contract, and the code is a disjunction.
 - **[E1-57]** Changing this layout requires a new spec: it invalidates every trained model.
 
 ## Performance
@@ -324,8 +364,8 @@ UI unless a worker is used. Targets on a modern laptop, single-threaded, measure
 benchmark suite:
 
 - **[E1-58]** `legalActions` + `apply` SHOULD sustain at least 200 000 plies per second.
-- **[E1-59]** `clone` SHOULD cost no more than ~1 µs, and MUST NOT allocate more than the state
-  it copies.
+- **[E1-59]** `clone` SHOULD cost no more than ~1 µs and SHOULD NOT allocate beyond the state it
+  copies.
 - **[E1-60]** `legalActions` SHOULD build its result from precomputed tables rather than
   scanning all 180 actions. The reference implementation keeps a 5-bit "open rows" mask per
   colour per player, updated on placement and rebuilt at round end, and indexes a table of
@@ -336,9 +376,26 @@ build.
 
 ## Verification
 
-Specified in *0002 — Engine conformance vectors*. In summary: replay recorded ludometer games
-ply by ply and compare full state at every step, plus handcrafted edge positions, plus property
-tests for the invariants in [E1-40] to [E1-45] on every ply of randomly played games.
+Specified in *0002 — Engine conformance vectors*. In summary: replay games recorded from the
+Python reference ply by ply and compare full state at every step, with every invariant above
+asserted on every ply of every replay ([0002 V2-18], [0002 V2-19]); handcrafted
+edge positions for the cases random play never reaches; and randomised self-play as fuzz
+coverage, where conservation and non-throwing behaviour are what is checked ([0002 V2-24]).
+
+### Traceability exemptions
+
+[0002 V2-26] requires every requirement here to be cited by a test. These cannot be, and are
+exempt by name — the check in [0002 V2-27] reads this list, so an exemption must be justified
+here or the suite fails:
+
+| Requirement | Why it is not testable |
+| --- | --- |
+| [E1-8], [E1-57] | Process constraints on changing the encoding and the observation layout. A test cannot observe a promise about future specs. |
+| [E1-49] | A statement about the reference implementation, not about this engine's behaviour. |
+| [E1-50] | Enforced by the package manifest and the browser build, not by a unit test. |
+| [E1-58], [E1-59], [E1-60] | `SHOULD` budgets, explicitly declared above to be non-gating. The benchmark suite measures them; it does not fail the build. |
+
+Every other requirement in this document MUST have a citing test.
 
 ## Open questions
 

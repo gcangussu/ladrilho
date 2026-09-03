@@ -42,14 +42,16 @@ cancelling errors.
 ## The seed problem
 
 Both engines are deterministic, but they are not deterministic *the same way*: ludometer draws
-from Python's Mersenne Twister and the port uses its own PRNG ([0001 E1-46], [E1-49]). Seed 7
+from Python's Mersenne Twister and the port uses its own PRNG ([0001 E1-46], [0001 E1-49]). Seed 7
 means two different bags.
 
 - **[V2-2]** Vectors MUST therefore carry the tile order itself, not the seed that produced it.
   The recorded seed is provenance only, never an input to the replay.
-- **[V2-3]** The harness MUST feed that order in through the shuffle seam ([0001 E1-61]) and MUST
-  NOT reach into engine internals to place tiles. Anything the harness can only test by editing
-  private state is a gap in the engine's own surface.
+- **[V2-3]** The harness MUST feed that order in through the shuffle seam ([0001 E1-61]), and
+  MUST build starting positions with `fromCanonical` ([0001 E1-62]). It MUST NOT edit state
+  fields directly, even though [0001 E1-5] permits that elsewhere: a fixture assembled by poking
+  fields tests the poking, and anything the harness can only reach that way is a gap in the
+  engine's own surface.
 
 ## Vector format
 
@@ -68,7 +70,7 @@ One JSON file per vector, under `packages/engine/test/vectors/`, named `game-NN.
     "generatedAt": "2026-09-03"
   },
   "note": "…",                     // required for handcrafted positions: what it exercises
-  "shuffles": [[0, 3, 4, 1, …], …],// bag order after each shuffle, in order of use
+  "shuffles": [[0, 3, 4, 1, …], …],// bag contents after each shuffle; last element drawn first
   "initial": { /* canonical state, see below */ },
   "plies": [
     { "action": 47, "legal": [3, 9, 47, …], "state": { /* canonical state after */ } }
@@ -80,21 +82,32 @@ One JSON file per vector, under `packages/engine/test/vectors/`, named `game-NN.
 - **[V2-4]** `initial` and every `plies[i].state` MUST be a *complete* canonical state, not a
   digest or a diff. Fixtures are read by humans when a test fails; a mismatching hash tells you
   nothing.
-- **[V2-5]** The canonical state is `toJSON` ([0001 E1-52]) extended with the fields the UI does
-  not need but conformance does — `bag` as an ordered colour array, `lid`, `tilesLeft`,
-  `roundIndex`, `firstPlayer`, `markerInCenter`, `floorMarker`, `isTerminal`, `exhausted` — with
-  object keys emitted in a fixed order and no derived caches. Two states compare equal iff their
+- **[V2-5]** The canonical state is exactly what `toCanonical` produces ([0001 E1-62]): every
+  field of the data model, `bag` as an ordered colour array, fixed key order, no derived caches.
+  It is deliberately *not* `toJSON`, which hides the bag's order ([0001 E1-52]) and so cannot
+  distinguish two positions that will deal differently. Two states compare equal iff their
   canonical forms are deep-equal.
-- **[V2-6]** `shuffles[k]` is the bag contents *after* the k-th shuffle, in draw order, drawn
-  from the end ([0001 E1-32]). The replay harness pops one entry per shuffle call and MUST fail
-  if the engine asks for more shuffles than the vector recorded, or finishes with unused entries.
-- **[V2-7]** `plies[i].legal` is the sorted list of legal actions in the position *before* the
-  ply. The harness compares it against `legalActions()` sorted, so a legality bug surfaces at the
-  ply that first exposes it rather than at some later divergence.
+- **[V2-6]** `shuffles[k]` is the bag contents *after* the k-th shuffle, as an array in storage
+  order — tiles are drawn from the **end**, so the last element is dealt first ([0001 E1-32]).
+  The replay harness returns one entry per shuffle call. Shuffles happen at game creation and at
+  each lid recycle only ([0001 E1-61]), never on an ordinary refill, so the count is small and
+  exact: the harness MUST fail if the engine asks for more shuffles than the vector recorded, or
+  finishes with unused entries. A vector whose shuffle count drifts is reporting a real
+  divergence in when the engine consumes randomness.
+- **[V2-7]** `plies[i].legal` is the legal action list in the position *before* the ply, in
+  ascending order. Both engines produce ascending order natively ([0001 E1-13]), so the harness
+  compares without sorting and a legality bug surfaces at the ply that first exposes it rather
+  than at some later divergence.
 - **[V2-8]** Files MUST be committed to the repository. The suite MUST run with no network access
   and no Python installed.
 
 ## Generating vectors
+
+These recordings do not exist upstream and cannot be copied from it. ludometer validates its
+engine with roughly forty-five hand-written unit tests plus a fuzz run of self-played games; it
+ships no move-by-move fixtures. Every vector in this repository is therefore *produced* by us,
+by driving the oracle and writing down what it does — which is also why the generator script and
+its provenance fields matter as much as the vectors themselves.
 
 - **[V2-9]** A single script `tools/vectors/dump_vectors.py` produces every vector. It runs
   against a local ludometer checkout, takes the output directory as an argument, and is the only
@@ -124,16 +137,17 @@ One JSON file per vector, under `packages/engine/test/vectors/`, named `game-NN.
 
 ### Handcrafted positions
 
-- **[V2-16]** At least 5 positions built by hand in the oracle and replayed for a few plies each,
-  covering situations random play reaches rarely or never. At minimum:
+- **[V2-16]** The seven positions below MUST exist, built by hand in the oracle and replayed for
+  a few plies each; they cover situations random play reaches rarely or never. More are welcome,
+  these are the floor:
 
   | Position | Exercises |
   | --- | --- |
   | Tile joining a horizontal and a vertical run at once | [0001 E1-24] |
   | Multiple lines resolving top-down, later scoring off earlier | [0001 E1-25] |
-  | Floor overfilled past seven slots with the marker held | [0001 E1-20], [E1-26], [E1-27] |
+  | Floor overfilled past seven slots with the marker held | [0001 E1-20], [0001 E1-26], [0001 E1-27] |
   | Big penalty against a small score | [0001 E1-28] clamping |
-  | Bag and lid both empty at refill | [0001 E1-33], [E1-34] |
+  | Bag and lid both empty at refill | [0001 E1-33], [0001 E1-34] |
   | A round where nobody takes from the centre | [0001 E1-31] |
   | Final position with a full column and a full colour | [0001 E1-38] |
 
@@ -144,7 +158,8 @@ One JSON file per vector, under `packages/engine/test/vectors/`, named `game-NN.
 
 - **[V2-18]** Tile conservation ([0001 E1-40]) MUST be asserted after every ply of every replay,
   not only at the end.
-- **[V2-19]** The remaining invariants ([0001 E1-41] to [E1-45]) MUST be asserted per ply.
+- **[V2-19]** The remaining invariants ([0001 E1-41] through [0001 E1-45]) MUST be asserted per
+  ply.
 - **[V2-20]** `legalActions()` MUST be cross-checked against brute force — `isLegal` over all 180
   encodings — on every ply of at least one full game per run.
 - **[V2-21]** Derived caches ([0001 E1-5]) MUST be checked fresh: after a ply, `recount()` on a
@@ -159,17 +174,35 @@ One JSON file per vector, under `packages/engine/test/vectors/`, named `game-NN.
   without throwing, with conservation holding and every ply legal by construction. This is fuzz
   coverage, not oracle coverage: it catches crashes and invariant breaks in positions the
   vectors never reach.
-- **[V2-25]** The observation vector MUST be checked for length, dtype, range `[0, 1]`
-  ([0001 E1-56]) and current-player relativity: encoding a position and encoding it again after
-  the turn passes MUST swap the "me"/"them" halves.
+- **[V2-25]** The observation vector MUST be checked for length, dtype, and current-player
+  relativity: encoding a position and encoding it again after the turn passes MUST swap the
+  "me"/"them" halves.
+- **[V2-29]** Its numeric range MUST be checked as [0001 E1-56] actually states it — every value
+  finite and `>= 0`, the two clamped fields within `[0, 1]` — and **not** as a blanket
+  `<= 1`. Centre counts and scores legitimately exceed 1, so a blanket upper bound would fail a
+  correct engine. A test asserting `<= 1` here is itself the bug.
+- **[V2-30]** The `[174, 175)` flag MUST have a dedicated test for its disjunction
+  ([0001 E1-63]): a position mid-round where *both* players see it set, and one where the player
+  who started the round is not the player who takes the marker. Encoding both perspectives of the
+  same position is the cheapest way to catch a port that implemented the field's misleading name
+  instead of its formula.
 
 ## Traceability
 
-- **[V2-26]** Every requirement in *0001* MUST be cited by at least one test, by identifier, in
-  the test name or an adjacent comment (`it("scores both runs when a tile joins two [E1-24]")`).
-- **[V2-27]** A check MUST fail the suite when a requirement identifier in *0001* has no citing
-  test, or a test cites an identifier that no longer exists. This is the mechanism that keeps the
-  spec honest as the code moves.
+- **[V2-26]** Every requirement in *0001* MUST be either cited by at least one test — by
+  identifier, in the test name or an adjacent comment
+  (`it("scores both runs when a tile joins two [E1-24]")`) — or listed with a reason in that
+  spec's *Traceability exemptions* table. Nothing may be quietly untested: a requirement is
+  covered or it is excused in writing.
+- **[V2-27]** A check MUST fail the suite when a requirement in *0001* is neither cited nor
+  exempt, when a test cites an identifier that does not exist, or when the exemption table names
+  an identifier that no longer exists. The third case is the one that rots silently — a
+  requirement gets rewritten into something testable and its stale excuse keeps it out of the
+  suite forever.
+- **[V2-31]** Exemptions are for requirements a test *cannot* observe — process promises,
+  build-level constraints, non-gating budgets. Difficulty is not a reason, and a `MUST` about
+  engine behaviour MUST NOT be exempted. Adding a row to that table is a spec change and gets
+  read like one.
 
 ## Running
 

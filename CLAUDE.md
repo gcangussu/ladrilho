@@ -21,7 +21,9 @@ Before implementing a package, read its spec. When code and spec disagree, one o
 
 ## Reference implementation
 
-The engine is a TypeScript port of the Azul engine in [RemiFabre/ludometer](https://github.com/RemiFabre/ludometer) (`ludometer/azul/engine.py`, Python). Port the logic and, importantly, the **test vectors** — ludometer validates its engine by replaying ~30 seeded games plus ~5 handcrafted edge positions move-by-move, and checks tile conservation across full self-play games. Reuse that strategy.
+The engine is a TypeScript port of the Azul engine in [RemiFabre/ludometer](https://github.com/RemiFabre/ludometer) (`ludometer/azul/engine.py`, Python). Treat it as the oracle for correctness.
+
+Note that ludometer ships **no recorded test vectors** — `tests/test_engine.py` is ~45 hand-written unit tests plus a 200-game fuzz self-play run and a few seeded sanity games. So the move-by-move fixtures are ours to *generate* by driving that engine, not to copy. Spec 0002 specifies how; don't go looking upstream for files that aren't there.
 
 Key shape of the ludometer engine to preserve:
 
