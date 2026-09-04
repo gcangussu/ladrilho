@@ -25,8 +25,10 @@ opponent*). The engine ranks nothing and prefers nothing.
 
 This is a port of the Python engine in [RemiFabre/ludometer](https://github.com/RemiFabre/ludometer)
 (`ludometer/azul/engine.py`). Where this document and that file disagree, this document is a bug
-unless it says otherwise explicitly — the two places it deliberately diverges are the random
-number generator ([E1-46]) and the language-level API shape.
+unless it says otherwise explicitly. It deliberately diverges in three places: the random
+number generator ([E1-46]), the language-level API shape, and the injectable shuffle seam with
+its `shufflesUsed` counter ([E1-61]) — a data-model field the Python engine has no analogue for,
+added so conformance replays are possible at all.
 
 ## Definitions
 
@@ -114,8 +116,9 @@ interface AzulState {
 
   *Direct editing plus `recount()` is a convenience for exploratory work and for the UI. Anything
   that must be reproducible — conformance fixtures above all — should go through `fromCanonical`
-  ([E1-62]) instead; that is guidance for callers, which is why the enforceable version of it
-  lives in [0002 V2-3] rather than here.*
+  ([E1-62]) instead; that is guidance for callers, which is why the enforceable versions live in
+  [0002 V2-3] and [0002 V2-36] rather than here — and note that for a game vector the
+  enforceable rule is the opposite one, `newGame`.*
 
 - **[E1-65]** `newGame(seed)` MUST produce exactly this opening state, before anything else:
   a bag holding 20 tiles of each colour and shuffled once ([E1-61]); an empty lid; empty walls,
@@ -245,8 +248,9 @@ Runs for both players, player 0 first, when the board empties.
   wall row. The check runs after tiling and before the next refill.
 - **[E1-66]** The marker handoff ([E1-30], [E1-31]) runs **before** that check, not after. A
   terminal state therefore has `markerInCenter` true, `floorMarker` false for both players, and
-  `firstPlayer` and `currentPlayer` both set to whoever last held the marker — even though no
-  further round will be played. All four are compared per ply ([0002 V2-5]), so a port that ends
+  `firstPlayer` and `currentPlayer` both set as [E1-30] and [E1-31] direct — the last marker
+  holder, or, when nobody took from the centre all round, the player who did not move last —
+  even though no further round will be played. All four are compared per ply ([0002 V2-5]), so a port that ends
   the game the moment a row completes diverges on the final ply of every game vector.
 - **[E1-37]** The game also ends if a refill deals nothing at all (bag and lid both empty). Such
   a state MUST set `exhausted` so callers can tell it apart from an ordinary finish.
@@ -255,7 +259,8 @@ Runs for both players, player 0 first, when the board empties.
   any refill the board is empty and floors have just been dumped, so all 100 tiles are in bag,
   lid, walls, or partial pattern lines. With no completed row (or the game would have ended) the
   walls hold at most 40, and partial lines at most 20, leaving **at least 40 in bag + lid** where
-  20 are needed. Measured across 982 refills of random play, the minimum was 62. The reference
+  20 are needed. The analytic floor is 40; measured
+  minima across a few thousand refills run around 60. The reference
   implements this path anyway, so the port must match it — but it can only be *tested* from an
   artificially posed short-census position ([E1-40]), never from a played game. The same applies
   to [E1-34].
@@ -287,8 +292,9 @@ Assertable after every ply, and checked by the property tests in *0002*.
 - **[E1-45]** Scores are never negative.
 - **[E1-64]** `shufflesUsed` never decreases, and rises by exactly one per shuffle call ([E1-61]).
   This is what makes the index meaningful: a state's `shufflesUsed` is the index the next shuffle
-  will be given. (It equals the number of shuffles behind it only when the counter started at
-  zero, which a rebased fixture deliberately does not — see [0002 V2-33].)
+  will be given. It equals the number of shuffles actually behind it only when the counter has
+  run from the start of a game; a rebased fixture resets it to zero mid-game ([0002 V2-33]), so
+  for those the two differ and only the index reading holds.
 
 ## Determinism
 
@@ -356,7 +362,8 @@ function floorPenalty(s: AzulState, p: Player): number;
 function completedRows(s: AzulState, p: Player): number;
 function completedCols(s: AzulState, p: Player): number;
 function completedColors(s: AzulState, p: Player): number;
-function tileCensus(s: AzulState): number[];          // always [20,20,20,20,20]
+function tileCensus(s: AzulState): number[];          // per-colour census; [20,20,20,20,20]
+                                                      // when reachable from newGame, [E1-40]
 function recount(s: AzulState): void;
 
 // serialisation and display
@@ -392,7 +399,7 @@ function encodeFor(                                   // same, from p's seat; se
 - **[E1-62]** `toCanonical` MUST return a lossless, structurally-cloneable snapshot: **every**
   field of the data model and nothing else, with the bag as an ordered colour array, and object
   keys emitted in the order the data-model listing above declares them, which is what makes
-  [0002 V2-11]’s byte-identical regeneration possible across two languages. "Every field" includes the two bookkeeping counters
+  [0002 V2-11]'s byte-identical regeneration possible across two languages. "Every field" includes the two bookkeeping counters
   — `tilesLeft`, which the board could imply, and `shufflesUsed`, which nothing could — because
   comparing them catches a port whose bookkeeping has drifted at the ply it drifts, rather than
   several plies later when the drift finally changes a deal. "Nothing else" excludes derived
@@ -410,8 +417,9 @@ function encodeFor(                                   // same, from p's seat; se
 
 ## Observation encoding
 
-`encode()` produces a fixed-length `Float32Array` from the **current player's** point of view:
-"me" is `currentPlayer`, "them" is the other player. The bot depends on this layout; it is a
+`encode()` produces a fixed-length `Float32Array` from one seat's point of view: "me" is the
+seat being encoded — `currentPlayer` for `encode`, the chosen `p` for `encodeFor` ([E1-67]) —
+and "them" is the other player. The bot depends on this layout; it is a
 contract, not an implementation detail.
 
 | Range | Length | Contents |

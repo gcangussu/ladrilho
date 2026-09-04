@@ -92,7 +92,8 @@ One JSON file per vector, under `packages/engine/test/vectors/`, named `game-NN.
 ```
 
 - **[V2-37]** Every field shown above is required except `note` (mandatory for handcrafted
-  positions only, [V2-17]) and `census` (only when short, [V2-35]). `kind` in particular is
+  positions only, [V2-17]), `census` (only when short, [V2-35]) and `generator.generatedAt`
+  (optional, [V2-11]). `kind` in particular is
   load-bearing rather than descriptive — [V2-36], [V2-33] and [V2-6] all branch on it — so a
   vector without it is not merely undocumented, it is unreplayable. `schema` is the version of
   this format; a harness MUST refuse a `schema` it does not know rather than guess.
@@ -205,8 +206,8 @@ its provenance fields matter as much as the vectors themselves.
   floors, contested colours, lopsided walls — not termination.
 - **[V2-15]** Every game vector ends by wall row completion ([0001 E1-36]) — there is no other
   lawful ending, since exhaustion is unreachable from a full census ([0001 E1-37]). Do not hunt
-  for a seed that exhausts the bag; there isn't one. `[0001 E1-34]` and `[0001 E1-37]` are
-  covered by the short-census position fixture in [V2-16] instead.
+  for a seed that exhausts the bag; there isn't one. [0001 E1-34] and [0001 E1-37] are covered by the
+  short-census position fixture in [V2-16] instead.
 
 ### Handcrafted positions
 
@@ -233,6 +234,12 @@ its provenance fields matter as much as the vectors themselves.
   correct engine could pass the suite. The flag narrows the check to invariance; it never
   disables it. A vector without the flag holding fewer than 100 tiles is a generator bug, and the
   harness MUST fail it as one rather than trusting the file.
+
+  Budget more than "a few plies" for this one. [0001 E1-34] (a partial deal) and [0001 E1-37] (no
+  deal at all, ending the game) cannot both happen at the same refill, so covering [0001 E1-33],
+  [0001 E1-34] and [0001 E1-37] in one fixture takes three round transitions: a recycle, then a
+  short deal, then an empty one. It is constructible — a short board stays playable — but it is
+  the longest of the seven positions by some margin.
 
 ### Properties, checked on every ply of every vector
 
@@ -264,8 +271,8 @@ its provenance fields matter as much as the vectors themselves.
 
   `encodeFor(s, 0)` and `encodeFor(s, 1)` MUST mirror each other across exactly the five paired
   regions — `[0,25)`↔`[25,50)`, `[50,80)`↔`[80,110)`, `[110,117)`↔`[117,124)`, `[124]`↔`[125]`,
-  `[176,179)`↔`[179,182)`. The shared regions (factories, centre, bag, lid, round) MUST be
-  identical between the two. Index `[174]` MUST NOT be included in either group: it is a
+  `[176,179)`↔`[179,182)`. The shared regions — factories, centre, bag, lid, tiles-left and
+  round, being indices 126-173 and 175 — MUST be identical between the two. Index `[174]` MUST NOT be included in either group: it is a
   disjunction with no opposite-seat counterpart ([0001 E1-63]), it is recomputed rather than
   mirrored, and a whole-vector swap assertion fails a correct engine on that index alone.
 - **[V2-29]** Its numeric range MUST be checked as [0001 E1-56] actually states it — every value
