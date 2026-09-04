@@ -97,12 +97,16 @@ interface AzulState {
 - **[E1-3]** The floor line MUST be stored as counts per colour, not as an ordered list. Order
   never affects scoring, and the marker is tracked by `floorMarker`, not as a tile.
 - **[E1-4]** A pattern line with `plCount[r] === 0` MUST have `plColor[r] === -1`.
-- **[E1-5]** Implementations MAY keep **derived caches** — meaning working state that is *not* a
-  field of the data model above, such as the per-colour placement masks of [E1-60] — as long as
-  [E1-13] and the invariants hold, and MUST expose a `recount()` that rebuilds them after a
-  caller edits state fields directly. `recount()` MUST also re-derive `tilesLeft` from the board,
-  since a caller who edits displays by hand invalidates it the same way. The engine keeps both
-  current on every `apply`.
+- **[E1-5]** Implementations MAY keep **derived caches** — meaning working state that is
+  derivable from the declared fields and is not itself one, such as the per-colour placement
+  masks of [E1-60]. The PRNG is not a cache by this definition: it is not derivable from
+  anything, `recount()` MUST NOT touch it, and a snapshot deliberately omits it ([E1-62]).
+
+  Caches MAY be kept as long as [E1-13] and the invariants hold, and an implementation that keeps
+  any MUST expose a `recount()` that rebuilds them after a caller edits state fields directly.
+  `recount()` MUST also re-derive `tilesLeft` from the board, since a caller who edits displays by
+  hand invalidates it the same way, and MUST leave `shufflesUsed` alone, which no board can imply.
+  The engine keeps all of this current on every `apply`.
 
   `tilesLeft` is deliberately *not* a cache by this definition. It is a declared field, it is
   maintained incrementally, and [E1-41] pins it to a value that must always agree with the board
@@ -250,6 +254,9 @@ Assertable after every ply, and checked by the property tests in *0002*.
 - **[E1-44]** No wall cell is set twice, and each colour appears at most once per row and per
   column.
 - **[E1-45]** Scores are never negative.
+- **[E1-64]** `shufflesUsed` never decreases, and rises by exactly one per shuffle call ([E1-61]).
+  This is what makes the index meaningful: a state's `shufflesUsed` is both the number of
+  shuffles behind it and the index the next one will be given.
 
 ## Determinism
 
@@ -288,6 +295,12 @@ Assertable after every ply, and checked by the property tests in *0002*.
   of its own, so the seam is a pure function of `(bag, index)` and carries nothing that `clone`
   would have to duplicate but cannot ([E1-48]). `shufflesUsed` counts calls actually made: a
   refill that finds bag and lid both empty makes none ([E1-33]).
+
+  The count is kept the same way on the **seeded** path — the default PRNG shuffle increments it
+  too. It is a property of the position, not of how the position was built, so two identical
+  positions compare equal under [0002 V2-5] whether they were seeded or replayed. It follows that
+  `newGame` returns a state with `shufflesUsed === 1` (the opening shuffle), and `fromCanonical`
+  returns whatever the snapshot carried.
 
 ## Interfaces
 

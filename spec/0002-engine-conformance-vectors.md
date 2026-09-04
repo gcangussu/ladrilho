@@ -103,6 +103,12 @@ One JSON file per vector, under `packages/engine/test/vectors/`, named `game-NN.
   the harness MUST fail on an `index` past the end of `shuffles`, and MUST fail at the end of a
   replay if the final `shufflesUsed` is less than `shuffles.length`. A vector whose shuffle count
   drifts is reporting a real divergence in when the engine consumes randomness.
+
+  Those two checks bound the count; they do not catch a *skipped* index — calling 0, incrementing
+  twice, then calling 2 lands on the same total. What catches that is `shufflesUsed` being a
+  canonical field ([V2-5]), compared at every ply, so the double increment fails at the ply it
+  happens rather than never. The end checks and the per-ply comparison are one guard in two
+  parts; neither is sufficient alone.
 - **[V2-7]** `plies[i].legal` is the legal action list in the position *before* the ply, in
   ascending order. Both engines produce ascending order natively ([0001 E1-13]), so the harness
   compares without sorting and a legality bug surfaces at the ply that first exposes it rather
@@ -124,12 +130,23 @@ its provenance fields matter as much as the vectors themselves.
   a wrong vector is a bug in the script or a real disagreement, and editing it by hand hides
   both.
 - **[V2-10]** The script MUST patch the oracle's shuffling to record the resulting bag order, and
-  MUST read every recorded value from the oracle — its accessors where they exist, its documented
-  state attributes otherwise. The oracle has no canonical-state accessor of its own (`to_json`
-  reports the bag as counts, which is exactly the information a vector needs in order), so
-  reading attributes directly is expected. What the script MUST NOT do is *compute* anything a
-  vector records — no re-deriving scores, legality, or tile totals in Python. A fixture must be
-  the oracle's opinion, or it proves nothing.
+  MUST read every other recorded value from the oracle — its accessors where they exist, its
+  documented state attributes otherwise. The oracle has no canonical-state accessor of its own
+  (`to_json` reports the bag as counts, which is exactly the information a vector needs in
+  order), so reading attributes directly is expected. What the script MUST NOT do is *compute*
+  anything a vector records — no re-deriving scores, legality, or tile totals in Python. A
+  fixture must be the oracle's opinion, or it proves nothing.
+- **[V2-32]** `shufflesUsed` is the one canonical field the oracle cannot supply — it has no
+  shuffle counter, so there is nothing to read. It MUST come from the same patch that records the
+  bag orders, counting the calls it intercepts. Counting the script's own interceptions is not
+  the kind of computing [V2-10] forbids; inventing the number some other way is.
+- **[V2-33]** A `kind: "position"` fixture MUST record `initial.shufflesUsed` as **0**, rebasing
+  the counter when the position is posed rather than carrying over the shuffles the oracle spent
+  building it. Every handcrafted position starts from a `new_game` that has already shuffled
+  once, so the un-rebased value is 1 — and a vector recording 1 makes a *correct* engine fail:
+  `fromCanonical` loads 1, the first lid recycle asks for `shuffles[1]`, and a one-entry
+  `shuffles` array has no such index ([V2-6]). For `kind: "game"` no rebasing applies: `newGame`
+  consumes index 0 ([0001 E1-61]), so the arithmetic already closes.
 - **[V2-11]** Regenerating MUST be reproducible: same ludometer commit, same seeds, byte-identical
   files. A diff in `git status` after a regeneration means something changed upstream, and that
   is worth reading.
@@ -174,8 +191,8 @@ its provenance fields matter as much as the vectors themselves.
 
 - **[V2-18]** Tile conservation ([0001 E1-40]) MUST be asserted after every ply of every replay,
   not only at the end.
-- **[V2-19]** The remaining invariants — [0001 E1-41], [0001 E1-42], [0001 E1-43], [0001 E1-44]
-  and [0001 E1-45] — MUST be asserted per ply.
+- **[V2-19]** The remaining invariants — [0001 E1-41], [0001 E1-42], [0001 E1-43], [0001 E1-44],
+  [0001 E1-45] and [0001 E1-64] — MUST be asserted per ply.
 - **[V2-20]** `legalActions()` MUST be cross-checked against brute force — `isLegal` over all 180
   encodings — on every ply of at least one full game per run.
 - **[V2-21]** Derived caches ([0001 E1-5]) MUST be checked fresh: after a ply, `recount()` on a
