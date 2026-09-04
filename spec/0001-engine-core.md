@@ -88,6 +88,7 @@ interface AzulState {
   firstPlayer: Player;     // marker holder; starts the current round
   roundIndex: number;      // 0-based
   tilesLeft: number;       // tiles on factories + centre; the round ends at 0
+  shufflesUsed: number;    // shuffles consumed so far; see [E1-61]
   isTerminal: boolean;
   exhausted: boolean;      // game stopped because no tiles could be dealt
 }
@@ -96,13 +97,21 @@ interface AzulState {
 - **[E1-3]** The floor line MUST be stored as counts per colour, not as an ordered list. Order
   never affects scoring, and the marker is tracked by `floorMarker`, not as a tile.
 - **[E1-4]** A pattern line with `plCount[r] === 0` MUST have `plColor[r] === -1`.
-- **[E1-5]** Implementations MAY keep derived caches (tile totals, per-colour placement masks)
-  as long as [E1-13] and the invariants hold, and MUST expose a `recount()` that rebuilds them
-  after a caller edits state fields directly. The engine itself keeps caches current on every
-  `apply`. Direct editing plus `recount()` is a convenience for exploratory work and for the UI;
-  anything that must be reproducible — conformance fixtures above all — MUST go through
-  `fromCanonical` ([E1-62]) instead, which is why [0002 V2-3] forbids field-poking in the
-  harness.
+- **[E1-5]** Implementations MAY keep **derived caches** — meaning working state that is *not* a
+  field of the data model above, such as the per-colour placement masks of [E1-60] — as long as
+  [E1-13] and the invariants hold, and MUST expose a `recount()` that rebuilds them after a
+  caller edits state fields directly. `recount()` MUST also re-derive `tilesLeft` from the board,
+  since a caller who edits displays by hand invalidates it the same way. The engine keeps both
+  current on every `apply`.
+
+  `tilesLeft` is deliberately *not* a cache by this definition. It is a declared field, it is
+  maintained incrementally, and [E1-41] pins it to a value that must always agree with the board
+  — which makes it exactly the kind of thing worth comparing rather than recomputing.
+
+  *Direct editing plus `recount()` is a convenience for exploratory work and for the UI. Anything
+  that must be reproducible — conformance fixtures above all — should go through `fromCanonical`
+  ([E1-62]) instead; that is guidance for callers, which is why the enforceable version of it
+  lives in [0002 V2-3] rather than here.*
 
 ## Action encoding
 
@@ -251,8 +260,12 @@ Assertable after every ply, and checked by the property tests in *0002*.
   shuffle direction are part of the contract: change either and every recorded game changes.
 - **[E1-47]** The generator MUST be consumed only by the shuffles in `newGame` and [E1-33].
   Nothing else may draw from it, or the same seed stops meaning the same game.
-- **[E1-48]** `clone()` MUST duplicate every mutable container and the generator's internal
-  state, so a clone continues the parent's stream exactly and neither can affect the other.
+- **[E1-48]** `clone()` MUST duplicate every mutable container, the generator's internal state,
+  and `shufflesUsed`, so a clone continues the parent's stream exactly and neither can affect the
+  other. This holds under an injected shuffle as well as under the seeded default — which is why
+  the seam is indexed rather than stateful ([E1-61]). A seam that kept its own cursor would be
+  shared between parent and clone, and [0002 V2-22] would be unsatisfiable on exactly the runs
+  where it is required.
 - **[E1-49]** The port does NOT reproduce ludometer's tile order for a given numeric seed —
   Python's Mersenne Twister is a different generator. Conformance is therefore replay-based, not
   seed-based; see *0002 — Engine conformance vectors*.
@@ -269,11 +282,19 @@ Assertable after every ply, and checked by the property tests in *0002*.
   shuffle function is supplied the seed is unused — both constructors still require one so that a
   state is never left without a randomness source, but the two are alternatives, not layers.
 
+  The seam MUST be **indexed, not stateful**: it is called as `shuffle(bag, index)` where `index`
+  is the state's `shufflesUsed` at the moment of the call, and `shufflesUsed` MUST increment
+  immediately after. A replaying harness reads `shuffles[index]` rather than advancing a cursor
+  of its own, so the seam is a pure function of `(bag, index)` and carries nothing that `clone`
+  would have to duplicate but cannot ([E1-48]). `shufflesUsed` counts calls actually made: a
+  refill that finds bag and lid both empty makes none ([E1-33]).
+
 ## Interfaces
 
 ```ts
 // construction
-type Shuffle = (bag: Color[]) => void;                // in place; see [E1-61]
+type Shuffle =                                        // in place, indexed; see [E1-61]
+  (bag: Color[], index: number) => void;
 function newGame(seed: number, shuffle?: Shuffle): AzulState;
 function clone(s: AzulState): AzulState;
 
@@ -319,9 +340,15 @@ function encode(s: AzulState): Float32Array;          // length ENCODED_SIZE
   *It follows that `toJSON` cannot distinguish two positions that will deal differently, so it is
   the wrong tool for comparing or restoring states — use [E1-62]. That is guidance for callers,
   not a rule the engine can enforce, which is why it is not phrased as a requirement.*
-- **[E1-62]** `toCanonical` MUST return a lossless, structurally-cloneable snapshot — every field
-  of the data model, with the bag as an ordered colour array — with object keys emitted in a
-  fixed, documented order, and MUST exclude derived caches ([E1-5]). `fromCanonical` MUST be a
+- **[E1-62]** `toCanonical` MUST return a lossless, structurally-cloneable snapshot: **every**
+  field of the data model and nothing else, with the bag as an ordered colour array, and object
+  keys emitted in a fixed, documented order. "Every field" includes `tilesLeft` and
+  `shufflesUsed` — the two fields that are also computable from elsewhere — because comparing
+  them catches a port whose bookkeeping has drifted at the ply it drifts, rather than several
+  plies later when the drift finally changes a deal. "Nothing else" excludes derived caches as
+  [E1-5] defines them: working state that is not a declared field. `fromCanonical` MUST rebuild
+  those caches, and MUST reject a snapshot whose `tilesLeft` disagrees with its own board
+  ([E1-41]) rather than loading a position the engine could never have reached. `fromCanonical` MUST be a
   **one-sided** inverse: `toCanonical(fromCanonical(c, …))` deep-equals `c` for every canonical
   `c`. The other direction does not hold, and MUST NOT be claimed: a snapshot deliberately omits
   the PRNG's internal state, so `fromCanonical` takes a seed of its own, and a restored state

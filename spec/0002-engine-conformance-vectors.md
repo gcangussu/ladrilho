@@ -85,19 +85,24 @@ One JSON file per vector, under `packages/engine/test/vectors/`, named `game-NN.
   digest or a diff. Fixtures are read by humans when a test fails; a mismatching hash tells you
   nothing.
 - **[V2-5]** The canonical state is exactly what `toCanonical` produces ([0001 E1-62]): every
-  field of the data model, `bag` as an ordered colour array, fixed key order, no derived caches.
+  field of the data model — `tilesLeft` and `shufflesUsed` included — with `bag` as an ordered
+  colour array, fixed key order, and no derived caches.
   It is deliberately *not* `toJSON`, which hides the bag's order ([0001 E1-52]) and so cannot
   distinguish two positions that will deal differently. Two states compare equal iff their
   canonical forms are deep-equal.
 - **[V2-6]** `shuffles[k]` is the bag contents *after* the k-th shuffle, as an array in storage
   order — tiles are drawn from the **end**, so the last element is dealt first ([0001 E1-32]).
   The seam is a `void` callback that reorders the array it is handed ([0001 E1-61]), so the
-  harness *writes* the next recorded order into the bag in place — it does not return it.
-  Shuffles happen at game creation and at
-  each lid recycle only ([0001 E1-61]), never on an ordinary refill, so the count is small and
-  exact: the harness MUST fail if the engine asks for more shuffles than the vector recorded, or
-  finishes with unused entries. A vector whose shuffle count drifts is reporting a real
-  divergence in when the engine consumes randomness.
+  harness *writes* a recorded order into the bag in place — it does not return it. It writes
+  `shuffles[index]`, using the `index` the engine passes, and MUST NOT keep a cursor of its own:
+  the engine owns the position, which is what keeps `clone` independent ([0001 E1-48]) and lets
+  the same vector be replayed from a cloned mid-game state. A `kind: "position"` vector has no
+  creation shuffle at all — `fromCanonical` does not shuffle — so its `shuffles[0]` is the first
+  lid recycle after the position loads. Otherwise shuffles happen at game creation and at each
+  lid recycle only ([0001 E1-61]), never on an ordinary refill, so the count is small and exact:
+  the harness MUST fail on an `index` past the end of `shuffles`, and MUST fail at the end of a
+  replay if the final `shufflesUsed` is less than `shuffles.length`. A vector whose shuffle count
+  drifts is reporting a real divergence in when the engine consumes randomness.
 - **[V2-7]** `plies[i].legal` is the legal action list in the position *before* the ply, in
   ascending order. Both engines produce ascending order natively ([0001 E1-13]), so the harness
   compares without sorting and a legality bug surfaces at the ply that first exposes it rather
@@ -193,12 +198,14 @@ its provenance fields matter as much as the vectors themselves.
   `<= 1`. Centre counts and scores legitimately exceed 1, so a blanket upper bound would fail a
   correct engine. A test asserting `<= 1` here is itself the bug.
 - **[V2-30]** The `[174, 175)` flag MUST have a dedicated test for its disjunction
-  ([0001 E1-63]). One fixture covers it, read at two plies: before the marker is taken, the
-  round's starter sees 1 and the other player sees 0 — the only configuration in which the flag
-  is 0. Then the non-starter takes from the centre, and from that ply *both* players see it set,
-  which is the only shape that discriminates. Encoding both perspectives at both plies catches a
-  port that implemented the field's misleading name instead of its formula: such a port reports 0
-  for the starter after the marker is gone.
+  ([0001 E1-63]). One fixture covers it, read at two plies. Before the marker is taken, the
+  round's starter sees 1 and the other player sees 0 — the flag is 0 exactly for a player who
+  neither started the round nor holds the marker, which is also what a non-starter sees once the
+  *starter* takes the marker; both routes produce the same pair, so one of them suffices. Then
+  the non-starter takes from the centre, and from that ply *both* players see it set — the only
+  shape that discriminates. Encoding both perspectives at both plies catches a port that
+  implemented the field's misleading name instead of its formula: such a port reports 0 for the
+  starter after the marker is gone.
 
 ## Traceability
 
@@ -213,9 +220,10 @@ its provenance fields matter as much as the vectors themselves.
   requirement gets rewritten into something testable and its stale excuse keeps it out of the
   suite forever.
 - **[V2-31]** Exemptions are for requirements a test *cannot* observe — process promises,
-  build-level constraints, non-gating budgets. Difficulty is not a reason, and a `MUST` about
-  engine behaviour MUST NOT be exempted. Adding a row to that table is a spec change and gets
-  read like one.
+  statements about other implementations, implementation-strategy directives, non-gating budgets.
+  Difficulty is not a reason, and a `MUST` about engine behaviour MUST NOT be exempted, however
+  build-shaped it looks: dependencies and forbidden globals are checkable from a test. Adding a
+  row to that table is a spec change and gets read like one.
 
 ## Running
 
