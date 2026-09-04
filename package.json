@@ -1,0 +1,12 @@
+{
+  "name": "azul",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "bench": "pnpm -r bench"
+  },
+  "packageManager": "pnpm@12.3.1"
+}
