@@ -14,7 +14,7 @@ pnpm monorepo:
 
 | Package | Status | Description |
 | --- | --- | --- |
-| `packages/engine` | planned | Azul rules engine + tests |
+| `packages/engine` | done | Azul rules engine + conformance suite |
 | `packages/ui` | planned | Solid.js v2 web client |
 | `packages/bot` | planned | AI agent |
 
@@ -31,7 +31,13 @@ from and test against, each linked to the intent it serves. See
 
 ```bash
 pnpm install
-pnpm test
+pnpm test                        # every package
+pnpm -F engine test              # the engine suite
+pnpm -F engine test vectors      # the oracle replays only
+pnpm -F engine bench             # the [E1-58] / [E1-59] budgets, non-gating
 ```
+
+The engine's conformance fixtures are committed, so the suite needs neither network nor Python.
+Regenerating them does — see [`tools/vectors/README.md`](tools/vectors/README.md).
 
 This is an early-stage project; the sections above expand as each roadmap step lands.

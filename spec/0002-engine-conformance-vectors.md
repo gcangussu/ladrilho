@@ -78,6 +78,7 @@ One JSON file per vector, under `packages/engine/test/vectors/`, named `game-NN.
     "commit": "<40-hex>",          // the oracle's exact revision
     "script": "tools/vectors/dump_vectors.py",
     "pythonSeed": 7,               // provenance only, see [V2-2]
+    "policy": "uniform",           // how moves were steered; games only, see [V2-14]
     "generatedAt": "2026-09-03"    // the commit's date, never the clock: [V2-11]
   },
   "note": "…",                     // required for handcrafted positions: what it exercises
@@ -92,8 +93,8 @@ One JSON file per vector, under `packages/engine/test/vectors/`, named `game-NN.
 ```
 
 - **[V2-37]** Every field shown above is required except `note` (mandatory for handcrafted
-  positions only, [V2-17]), `census` (only when short, [V2-35]) and `generator.generatedAt`
-  (optional, [V2-11]). `kind` in particular is
+  positions only, [V2-17]), `census` (only when short, [V2-35]), `generator.policy` (games only,
+  [V2-14]) and `generator.generatedAt` (optional, [V2-11]). `kind` in particular is
   load-bearing rather than descriptive — [V2-36], [V2-33] and [V2-6] all branch on it — so a
   vector without it is not merely undocumented, it is unreplayable. `schema` is the version of
   this format; a harness MUST refuse a `schema` it does not know rather than guess.
@@ -197,6 +198,11 @@ its provenance fields matter as much as the vectors themselves.
   forced. Each needs a uniform-random fallback for the plies where it has no opinion — the centre
   is empty at the start of every round, so a policy without one has nothing to pick.
 
+  Each game vector MUST record which policy drove it, in `generator.policy` ([V2-37]). Nothing
+  else in a vector says how it was steered, so without that field this requirement is one no
+  test can observe — and it is a rule about the fixtures, not a process promise, so it does not
+  belong among the exemptions.
+
   Two cautions, both measured. A strict *floor-preferring* policy never fills a pattern line, so
   no tile ever reaches a wall, no row ever completes, and — exhaustion being unreachable
   ([0001 E1-37]) — the game **never ends**: 10 of 10 such games were still running after 2 000
@@ -224,6 +230,11 @@ its provenance fields matter as much as the vectors themselves.
   | Bag and lid both empty at refill — **short census**, see [V2-35] | [0001 E1-33], [0001 E1-34], [0001 E1-37] |
   | A round where nobody takes from the centre | [0001 E1-31] |
   | Final position with a full column and a full colour | [0001 E1-38] |
+
+  The floor row needs care: overflow alone never pushes occupancy past seven, because [0001 E1-20]
+  sends the surplus straight to the lid. The only route to an eighth slot is taking the *marker*
+  onto a floor that already holds seven tiles, so a fixture built by spilling tiles alone
+  exercises the cap without ever crossing it.
 
 - **[V2-17]** Every handcrafted vector MUST carry a `note` saying what it is for. A fixture whose
   purpose nobody remembers is one nobody dares to change.
@@ -314,8 +325,11 @@ its provenance fields matter as much as the vectors themselves.
 ```bash
 pnpm -F engine test              # everything
 pnpm -F engine test vectors      # replays only
-pnpm -F engine test -t "[E1-24]" # every test citing one requirement
+pnpm -F engine test -t '\[E1-24\]'  # every test citing one requirement
 ```
+
+The brackets are escaped because `-t` takes a regular expression, not a substring: unescaped,
+`[E1-24]` is a character class and matches nearly every test in the suite.
 
 - **[V2-28]** The whole suite SHOULD finish in under 10 seconds on a laptop. It is the thing that
   runs on every save; slow enough to skip is the same as absent.
