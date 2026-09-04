@@ -355,13 +355,14 @@ function encode(s: AzulState): Float32Array;          // length ENCODED_SIZE
   not a rule the engine can enforce, which is why it is not phrased as a requirement.*
 - **[E1-62]** `toCanonical` MUST return a lossless, structurally-cloneable snapshot: **every**
   field of the data model and nothing else, with the bag as an ordered colour array, and object
-  keys emitted in a fixed, documented order. "Every field" includes `tilesLeft` and
-  `shufflesUsed` — the two fields that are also computable from elsewhere — because comparing
-  them catches a port whose bookkeeping has drifted at the ply it drifts, rather than several
-  plies later when the drift finally changes a deal. "Nothing else" excludes derived caches as
-  [E1-5] defines them: working state that is not a declared field. `fromCanonical` MUST rebuild
-  those caches, and MUST reject a snapshot whose `tilesLeft` disagrees with its own board
-  ([E1-41]) rather than loading a position the engine could never have reached. `fromCanonical` MUST be a
+  keys emitted in a fixed, documented order. "Every field" includes the two bookkeeping counters
+  — `tilesLeft`, which the board could imply, and `shufflesUsed`, which nothing could — because
+  comparing them catches a port whose bookkeeping has drifted at the ply it drifts, rather than
+  several plies later when the drift finally changes a deal. "Nothing else" excludes derived
+  caches as [E1-5] defines them. `fromCanonical` MUST rebuild those caches, and MUST reject a
+  snapshot whose `tilesLeft` disagrees with its own board ([E1-41]) rather than loading a
+  position the engine could never have reached; `shufflesUsed` admits no such check, which is
+  why [0002 V2-33] pins it at the fixture end instead. `fromCanonical` MUST be a
   **one-sided** inverse: `toCanonical(fromCanonical(c, …))` deep-equals `c` for every canonical
   `c`. The other direction does not hold, and MUST NOT be claimed: a snapshot deliberately omits
   the PRNG's internal state, so `fromCanonical` takes a seed of its own, and a restored state

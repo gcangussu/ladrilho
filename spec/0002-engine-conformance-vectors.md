@@ -141,12 +141,19 @@ its provenance fields matter as much as the vectors themselves.
   bag orders, counting the calls it intercepts. Counting the script's own interceptions is not
   the kind of computing [V2-10] forbids; inventing the number some other way is.
 - **[V2-33]** A `kind: "position"` fixture MUST record `initial.shufflesUsed` as **0**, rebasing
-  the counter when the position is posed rather than carrying over the shuffles the oracle spent
-  building it. Every handcrafted position starts from a `new_game` that has already shuffled
-  once, so the un-rebased value is 1 — and a vector recording 1 makes a *correct* engine fail:
+  the counter at the moment the position is posed rather than carrying over the shuffles the
+  oracle spent reaching it — however it was reached, whether posed by hand or played into from a
+  real game. A position is normally posed on top of a `new_game` that has already shuffled once,
+  so the un-rebased value is at least 1 — and a vector recording 1 makes a *correct* engine fail:
   `fromCanonical` loads 1, the first lid recycle asks for `shuffles[1]`, and a one-entry
   `shuffles` array has no such index ([V2-6]). For `kind: "game"` no rebasing applies: `newGame`
   consumes index 0 ([0001 E1-61]), so the arithmetic already closes.
+- **[V2-34]** A vector's `shuffles` array MUST hold exactly the shuffles consumed across the
+  plies it records — no more, no fewer — counted from its own `initial.shufflesUsed`. This is
+  what makes [V2-6]'s closing check ("fail if the final `shufflesUsed` is below
+  `shuffles.length`") meaningful for a vector that stops early, which every position fixture does
+  by design: a recorded order nothing reaches is either a truncation the generator failed to
+  trim, or a divergence.
 - **[V2-11]** Regenerating MUST be reproducible: same ludometer commit, same seeds, byte-identical
   files. A diff in `git status` after a regeneration means something changed upstream, and that
   is worth reading.
