@@ -16,5 +16,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "test", "bench"]
+  "include": ["src", "test", "bench", "vitest.bench.config.ts"]
 }

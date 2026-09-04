@@ -114,6 +114,9 @@ importers:
       '@types/node':
         specifier: ^26.4.1
         version: 26.4.1
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
