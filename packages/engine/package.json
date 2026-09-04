@@ -10,11 +10,11 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "bench": "vitest bench --run"
+    "bench": "vitest bench --run --reporter verbose"
   },
   "devDependencies": {
     "@types/node": "^26.4.1",
     "typescript": "^5.9.2",
-    "vitest": "^3.2.4"
+    "vitest": "^5.0.0"
   }
 }
