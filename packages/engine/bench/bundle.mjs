@@ -19,5 +19,5 @@ await build({
   bundle: true,
   format: 'esm',
   platform: 'neutral',
-  target: 'es2022',
+  target: 'es2025',
 });
