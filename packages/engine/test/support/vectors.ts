@@ -9,7 +9,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { CanonicalState, Color } from '../../src/index.js';
+import { ENCODED_SIZE, type CanonicalState, type Color } from '../../src/index.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -31,12 +31,25 @@ export interface Provenance {
   generatedAt?: string;
 }
 
+/**
+ * The oracle's observation vector from both seats — `[seat 0, seat 1]`, each
+ * `ENCODED_SIZE` long [0002 V2-38].
+ *
+ * The oracle computes these as float32; the generator widens each to the
+ * double that represents it exactly and emits the shortest decimal that reads
+ * back as that double, so a `Float32Array` element compares `===` against the
+ * parsed number and no tolerance is needed.
+ */
+export type EncodedPair = number[][];
+
 export interface Ply {
   action: number;
   /** Legal actions in the position *before* the ply, ascending [0002 V2-7]. */
   legal: number[];
   /** The complete canonical state after the ply [0002 V2-4]. */
   state: CanonicalState;
+  /** The oracle's encoding of `state`; handcrafted positions only [0002 V2-38]. */
+  encoded?: EncodedPair;
 }
 
 export interface Vector {
@@ -51,6 +64,8 @@ export interface Vector {
   /** Bag contents after each shuffle; the last element is dealt first [0002 V2-6]. */
   shuffles: Color[][];
   initial: CanonicalState;
+  /** The oracle's encoding of `initial`; handcrafted positions only [0002 V2-38]. */
+  initialEncoded?: EncodedPair;
   plies: Ply[];
   final: { scores: number[]; outcome: number | null; exhausted: boolean };
   /** File basename, for test titles. Added by the loader, not by the file. */
@@ -87,6 +102,28 @@ function requireCanonical(value: unknown, where: string): CanonicalState {
     throw new Error(`${where}: canonical keys are ${keys.join(',')}`);
   }
   return value as CanonicalState;
+}
+
+/**
+ * One recorded pair of observation vectors [0002 V2-38]: two seats, each
+ * `ENCODED_SIZE` finite numbers. A malformed pair is a generator bug and is
+ * refused here rather than silently compared against nothing.
+ */
+function requireEncoded(value: unknown, where: string): EncodedPair {
+  if (!Array.isArray(value) || value.length !== 2) {
+    throw new Error(`${where}: encoded must hold both seats [V2-38]`);
+  }
+  for (const seat of value as unknown[]) {
+    if (!Array.isArray(seat) || seat.length !== ENCODED_SIZE) {
+      throw new Error(`${where}: each seat must hold ${ENCODED_SIZE} values [V2-38]`);
+    }
+    for (const x of seat as unknown[]) {
+      if (typeof x !== 'number' || !Number.isFinite(x)) {
+        throw new Error(`${where}: encoded holds a non-finite value [V2-38]`);
+      }
+    }
+  }
+  return value as EncodedPair;
 }
 
 /**
@@ -131,14 +168,24 @@ export function parseVector(name: string, text: string): Vector {
   if (!final || !Array.isArray(final.scores) || typeof final.exhausted !== 'boolean') {
     throw new Error(`${name}: no final block`);
   }
+  // [0002 V2-38] the recorded encodings are a position's, and only a position's:
+  // games do not carry them, and a position missing them would compare nothing.
+  const wantsEncoded = kind === 'position';
+  if (!wantsEncoded && (raw['initialEncoded'] !== undefined || raw['plies'].some(
+    (p) => (p as Record<string, unknown>)['encoded'] !== undefined,
+  ))) {
+    throw new Error(`${name}: encoded vectors are recorded for positions only [V2-38]`);
+  }
   const plies = (raw['plies'] as Record<string, unknown>[]).map((p, i) => {
     if (typeof p['action'] !== 'number') throw new Error(`${name}: ply ${i} action`);
     if (!Array.isArray(p['legal'])) throw new Error(`${name}: ply ${i} legal`);
-    return {
+    const ply: Ply = {
       action: p['action'],
       legal: p['legal'] as number[],
       state: requireCanonical(p['state'], `${name}: ply ${i} state`),
     };
+    if (wantsEncoded) ply.encoded = requireEncoded(p['encoded'], `${name}: ply ${i}`);
+    return ply;
   });
   const vector: Vector = {
     schema: SCHEMA,
@@ -150,6 +197,9 @@ export function parseVector(name: string, text: string): Vector {
     final,
     name,
   };
+  if (wantsEncoded) {
+    vector.initialEncoded = requireEncoded(raw['initialEncoded'], `${name}: initial`);
+  }
   if (typeof raw['note'] === 'string') vector.note = raw['note'];
   if (typeof raw['census'] === 'string') vector.census = raw['census'];
   return vector;
@@ -170,4 +220,28 @@ export function loadVectors(): Vector[] {
 
 export function gameVectors(): Vector[] {
   return loadVectors().filter((v) => v.kind === 'game');
+}
+
+export function positionVectors(): Vector[] {
+  return loadVectors().filter((v) => v.kind === 'position');
+}
+
+/**
+ * Every state a handcrafted position fixture holds — its `initial` and each
+ * `plies[i].state` — paired with the oracle's own encoding of it from both
+ * seats [0002 V2-38].
+ */
+export function encodedStates(): {
+  where: string;
+  state: CanonicalState;
+  encoded: EncodedPair;
+}[] {
+  const out: { where: string; state: CanonicalState; encoded: EncodedPair }[] = [];
+  for (const v of positionVectors()) {
+    out.push({ where: `${v.name} initial`, state: v.initial, encoded: v.initialEncoded! });
+    v.plies.forEach((p, i) => {
+      out.push({ where: `${v.name} ply ${i}`, state: p.state, encoded: p.encoded! });
+    });
+  }
+  return out;
 }

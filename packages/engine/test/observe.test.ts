@@ -42,22 +42,58 @@ import {
   type CanonicalState,
   type Player,
 } from '../src/index.js';
-import { gameVectors, loadVectors } from './support/vectors.js';
+import { encodedStates, gameVectors, loadVectors } from './support/vectors.js';
 
-/** A late position where the two seats genuinely differ. */
-function contrastingPosition(): CanonicalState {
-  const v = gameVectors()[6];
-  const wanted = v.plies.find((p) => {
-    const s = p.state;
-    return (
-      !s.isTerminal &&
-      s.scores[0] !== s.scores[1] &&
-      s.walls[0].some((x, i) => x !== s.walls[1][i]) &&
-      s.plCount[0].some((n, r) => n !== s.plCount[1][r])
-    );
-  });
-  if (wanted === undefined) throw new Error('no contrasting position in the vectors');
-  return wanted.state;
+/** The five paired regions of the layout [V2-25]. */
+const PAIRS: { name: string; a: number; b: number; length: number }[] = [
+  { name: 'walls', a: OFF_MY_WALL, b: OFF_OP_WALL, length: 25 },
+  { name: 'pattern lines', a: OFF_MY_LINES, b: OFF_OP_LINES, length: 30 },
+  { name: 'floors', a: OFF_MY_FLOOR, b: OFF_OP_FLOOR, length: 7 },
+  { name: 'scores', a: OFF_SCORES, b: OFF_SCORES + 1, length: 1 },
+  { name: 'completed sets', a: OFF_MY_SETS, b: OFF_OP_SETS, length: 3 },
+];
+
+/** Every state the committed vectors hold, `initial` and each ply. */
+function allStates(): { where: string; state: CanonicalState }[] {
+  const out: { where: string; state: CanonicalState }[] = [];
+  for (const v of loadVectors()) {
+    out.push({ where: `${v.name} initial`, state: v.initial });
+    v.plies.forEach((p, i) => out.push({ where: `${v.name} ply ${i}`, state: p.state }));
+  }
+  return out;
+}
+
+/**
+ * For each paired region, the first recorded state whose two seats actually
+ * **differ** across it, with both seats' vectors [V2-25].
+ *
+ * There is no single position that discriminates all five: measured over every
+ * state in the vectors, the floor pair differs in 1 958 of them, the
+ * completed-set pair in 27, and none differs in all five at once. So each pair
+ * gets its own witness, and a pair with no witness at all is a failure rather
+ * than a silently vacuous assertion.
+ */
+function witnesses(): Map<string, { where: string; mine: Float32Array; theirs: Float32Array }> {
+  const found = new Map<string, { where: string; mine: Float32Array; theirs: Float32Array }>();
+  for (const { where, state } of allStates()) {
+    if (found.size === PAIRS.length) break;
+    let mine: Float32Array | null = null;
+    let theirs: Float32Array | null = null;
+    for (const pair of PAIRS) {
+      if (found.has(pair.name)) continue;
+      if (mine === null) {
+        const s = fromCanonical(state, 0);
+        mine = encodeFor(s, 0);
+        theirs = encodeFor(s, 1);
+      }
+      let differs = false;
+      for (let i = 0; i < pair.length && !differs; i++) {
+        if (mine[pair.a + i] !== mine[pair.b + i]) differs = true;
+      }
+      if (differs) found.set(pair.name, { where, mine, theirs: theirs! });
+    }
+  }
+  return found;
 }
 
 describe('the layout is a contract [E1-53]', () => {
@@ -136,41 +172,81 @@ describe('perspective [E1-67], [V2-25]', () => {
     }
   });
 
-  it('mirrors the five paired regions and shares the rest, on one fixed position', () => {
+  it('mirrors each paired region on a position where that pair actually differs', () => {
     // Read from both seats of the *same* position: an `apply` would also move
     // tiles, and nothing about that is a perspective swap.
-    const s = fromCanonical(contrastingPosition(), 0);
-    const mine = encodeFor(s, 0);
-    const theirs = encodeFor(s, 1);
+    //
+    // Non-vacuity is checked **per pair**, not in aggregate. A region that
+    // happens to be identical between the seats mirrors under any encoder at
+    // all, so one summed "something differed" counter leaves whole regions
+    // unasserted — which is how an encoder reading the *encoding* seat's floor
+    // marker for both players survives a test written to catch it.
+    const found = witnesses();
+    expect(
+      PAIRS.map((p) => p.name).filter((name) => !found.has(name)),
+      'no recorded state distinguishes the seats across these regions',
+    ).toEqual([]);
 
-    const pairs: [number, number, number][] = [
-      [0, 25, 25], // walls
-      [50, 80, 30], // pattern lines
-      [110, 117, 7], // floors
-      [124, 125, 1], // scores
-      [176, 179, 3], // completed rows / columns / colours
-    ];
-    let swapped = 0;
-    for (const [a, b, length] of pairs) {
-      for (let i = 0; i < length; i++) {
-        expect(theirs[b + i], `mirror ${a}+${i}`).toBe(mine[a + i]);
-        expect(theirs[a + i], `mirror ${b}+${i}`).toBe(mine[b + i]);
-        if (mine[a + i] !== mine[b + i]) swapped++;
+    for (const pair of PAIRS) {
+      const { where, mine, theirs } = found.get(pair.name)!;
+      let swapped = 0;
+      for (let i = 0; i < pair.length; i++) {
+        expect(theirs[pair.b + i], `${pair.name} at ${where}: mirror ${pair.a}+${i}`).toBe(
+          mine[pair.a + i],
+        );
+        expect(theirs[pair.a + i], `${pair.name} at ${where}: mirror ${pair.b}+${i}`).toBe(
+          mine[pair.b + i],
+        );
+        if (mine[pair.a + i] !== mine[pair.b + i]) swapped++;
       }
-    }
-    // The position must actually differ between the seats, or the assertion
-    // above would pass on any encoder at all.
-    expect(swapped).toBeGreaterThan(0);
+      // This pair, on this position, is a real swap rather than a tautology.
+      expect(swapped, `${pair.name} at ${where} does not distinguish the seats`).toBeGreaterThan(0);
 
-    // Factories, centre, bag, lid, tiles-left and the round are seat-neutral.
-    const shared = [...Array.from({ length: 174 - 126 }, (_, i) => 126 + i), 175];
-    for (const i of shared) expect(theirs[i], `shared ${i}`).toBe(mine[i]);
+      // Factories, centre, bag, lid, tiles-left and the round are seat-neutral.
+      const shared = [...Array.from({ length: 174 - 126 }, (_, i) => 126 + i), 175];
+      for (const i of shared) expect(theirs[i], `shared ${i} at ${where}`).toBe(mine[i]);
+    }
 
     // Index 174 is deliberately in neither group: it is a disjunction with no
     // opposite-seat counterpart, and a whole-vector swap assertion would fail
     // a correct engine on that index alone [E1-63].
+    const shared = [...Array.from({ length: 174 - 126 }, (_, i) => 126 + i), 175];
     expect(shared).not.toContain(OFF_I_START);
-    expect(pairs.some(([a, b]) => a === OFF_I_START || b === OFF_I_START)).toBe(false);
+    expect(PAIRS.some((p) => p.a === OFF_I_START || p.b === OFF_I_START)).toBe(false);
+  });
+});
+
+describe('the contents match the oracle value for value [V2-38], [E1-53], [E1-67]', () => {
+  it('agrees with the recorded oracle encoding, both seats, on every handcrafted position state', () => {
+    // [V2-25], [V2-29] and [V2-30] pin the length, the dtype, the two clamped
+    // fields, the excluded bag order and the [174] disjunction — and leave most
+    // of the 182 slots unpinned, so a wrong divisor, a field reading the other
+    // player's board, or an inverted flag passes all of them. The oracle
+    // computes the same 182 floats from the same position; this compares them.
+    //
+    // The comparison is exact, not approximate. The oracle's values are
+    // float32; the generator widens each to the double that represents it
+    // exactly and writes the shortest decimal that reads back as that double,
+    // so a `Float32Array` element equals the parsed number identically.
+    const states = encodedStates();
+    const faults: string[] = [];
+    let compared = 0;
+    for (const { where, state, encoded } of states) {
+      const s = fromCanonical(state, 0);
+      for (const p of [0, 1] as Player[]) {
+        const got = encodeFor(s, p);
+        for (let i = 0; i < ENCODED_SIZE; i++) {
+          if (got[i] !== encoded[p][i]) {
+            faults.push(`${where} seat ${p} index ${i}: ${got[i]} != oracle ${encoded[p][i]}`);
+          }
+          compared++;
+        }
+      }
+    }
+    expect(faults.slice(0, 8)).toEqual([]);
+    // All seven fixtures, every state each holds, both seats.
+    expect(states.length).toBeGreaterThanOrEqual(90);
+    expect(compared).toBe(states.length * 2 * ENCODED_SIZE);
   });
 });
 

@@ -102,6 +102,39 @@ def canonical(s: Any, shuffle_base: int) -> dict[str, Any]:
     }
 
 
+def encoded_pair(s: Any) -> list[list[float]]:
+    """The oracle's 182-float observation from **both** seats [V2-38].
+
+    The oracle only exposes `encode()`, and only from `current_player`'s
+    perspective — there is no `encode_for(p)`. The seat is the *only* thing
+    `encode` reads `current_player` for, so the other seat's vector is the
+    oracle's own `encode` run on a `clone()` whose `current_player` is the
+    other seat. The live state is never touched: cloning is the oracle's own
+    documented copy, and the value recorded is still entirely the oracle's
+    opinion [V2-10] — nothing here recomputes a field.
+
+    The port must *not* reach the second seat that way ([V2-3], [0001 E1-67]);
+    it has `encodeFor`. This is the Python side, which has no such seam.
+
+    Floats round-trip exactly. Each value is a `numpy.float32`; `float()`
+    widens it to the float64 that represents it exactly, and `json.dumps`
+    emits `repr`, which is the shortest decimal that reads back as that same
+    float64. `JSON.parse` is correctly rounded, so the harness gets bit-for-bit
+    the number the oracle computed, and comparison can be `!==` rather than a
+    tolerance.
+    """
+    out: list[list[float]] = []
+    for p in range(2):
+        view = s.clone()
+        view.current_player = p
+        vector = view.encode()
+        if p == s.current_player and list(vector) != list(s.encode()):
+            # The clone route must be indistinguishable from the accessor.
+            raise AssertionError("clone-and-reseat disagrees with encode()")
+        out.append([float(x) for x in vector])
+    return out
+
+
 def final_block(s: Any) -> dict[str, Any]:
     """`scores`, `outcome` and `exhausted`, all read from the oracle."""
     result = s.outcome()
@@ -180,9 +213,15 @@ def record_plies(
     shuffle_base: int,
     choose: Callable[[Any, list[int]], int],
     limit: int,
+    encode_states: bool = False,
 ) -> list[dict[str, Any]]:
     """Play up to `limit` plies, recording the legal list, the action and the
-    resulting state [V2-1], [V2-7]."""
+    resulting state [V2-1], [V2-7].
+
+    `encode_states` adds the observation vector from both seats [V2-38]; it is
+    set for handcrafted positions only, which is where the extreme states are
+    and where the repository can afford the bytes.
+    """
     plies: list[dict[str, Any]] = []
     while not s.is_terminal and len(plies) < limit:
         legal = s.legal_actions()
@@ -190,9 +229,14 @@ def record_plies(
         if action not in legal:
             raise AssertionError(f"scripted action {action} is not legal")
         s.apply(action)
-        plies.append(
-            {"action": action, "legal": legal, "state": canonical(s, shuffle_base)}
-        )
+        ply: dict[str, Any] = {
+            "action": action,
+            "legal": legal,
+            "state": canonical(s, shuffle_base),
+        }
+        if encode_states:
+            ply["encoded"] = encoded_pair(s)
+        plies.append(ply)
     return plies
 
 
@@ -205,6 +249,7 @@ def build_vector(
     s: Any,
     note: str | None = None,
     census: str | None = None,
+    initial_encoded: list[list[float]] | None = None,
 ) -> dict[str, Any]:
     out: dict[str, Any] = {"schema": SCHEMA, "kind": kind, "generator": generator}
     if note is not None:
@@ -213,6 +258,12 @@ def build_vector(
         out["census"] = census
     out["shuffles"] = [x[:] for x in SHUFFLE_LOG[shuffle_base:]]
     out["initial"] = initial
+    if initial_encoded is not None:
+        # [V2-38] wants "every state a fixture holds", and `initial` is one of
+        # them; the sketch in [V2-37] only shows the per-ply field, which
+        # requires these fields without forbidding others. A sibling of
+        # `initial` keeps the pairing obvious.
+        out["initialEncoded"] = initial_encoded
     out["plies"] = plies
     out["final"] = final_block(s)
     return out
@@ -362,8 +413,11 @@ def make_position(
     s = build()
     base = len(SHUFFLE_LOG)  # the pose's own shuffle is not the fixture's [V2-33]
     initial = canonical(s, base)
+    initial_encoded = encoded_pair(s)  # [V2-38]
     pick = random.Random(play_seed)
-    plies = record_plies(s, base, scripted(actions, then, pick), len(actions) + extra)
+    plies = record_plies(
+        s, base, scripted(actions, then, pick), len(actions) + extra, encode_states=True
+    )
     return name, build_vector(
         "position",
         provenance(commit, date, POSE_SEED),
@@ -373,6 +427,7 @@ def make_position(
         s,
         note=note,
         census=census,
+        initial_encoded=initial_encoded,
     )
 
 
@@ -589,7 +644,9 @@ def write_vector(path: Path, vec: dict[str, Any]) -> None:
     Top-level fields go one per line and each shuffle and each ply gets its own
     line; everything is otherwise compact, because a pretty-printed full state
     per ply would multiply the repository by ten. Emission is deterministic:
-    dictionary order is insertion order, and no value here is a float.
+    dictionary order is insertion order, and the only floats — the observation
+    vectors of [V2-38] — are emitted by `repr`, which is the shortest decimal
+    that reads back as the same double and does not vary by platform.
     """
     items = list(vec.items())
     out: list[str] = ["{"]

@@ -345,4 +345,62 @@ describe('derived state', () => {
       expect(s.shufflesUsed).toBe(before.shufflesUsed);
     }
   });
+
+  it('heals a board a caller edited by hand, which is why it exists [E1-5]', () => {
+    // The one place the harness writes state fields directly. [0002 V2-3]
+    // forbids *assembling positions* that way and carves this out explicitly:
+    // `recount` repairs hand-edited state, and everything the engine keeps
+    // current by itself is consistent by construction — so a recount test that
+    // only ever sees consistent states asserts nothing at all. Handed only
+    // those, an empty `recount` body passes.
+    // Any position still holding tiles on a display — the hand edit below needs
+    // somewhere to move them from, and a display empties partway through a round.
+    const v = gameVectors()[0];
+    const ply = v.plies.findIndex((p) =>
+      p.state.factories.some((f) => f.some((n) => n > 0)),
+    );
+    expect(ply, 'no recorded ply holds tiles on a display').toBeGreaterThanOrEqual(0);
+    const s = fromCanonical(v.plies[ply].state, 0);
+    const board = s.tilesLeft;
+    expect(board).toBeGreaterThan(0);
+
+    // A caller corrupts the derived field itself: the recount overwrites it
+    // from the board rather than trusting what is there.
+    s.tilesLeft = board + 17;
+    recount(s);
+    expect(s.tilesLeft).toBe(board);
+
+    // A caller edits the board the field is derived *from*. Nothing notices
+    // until the recount — that is the point of the call — and then `tilesLeft`
+    // follows the tiles.
+    const display = s.factories.findIndex((f) => f.some((n) => n > 0));
+    const moved = s.factories[display].reduce((a, b) => a + b, 0);
+    for (let c = 0; c < NUM_COLORS; c++) {
+      s.center[c] += s.factories[display][c];
+      s.factories[display][c] = 0;
+    }
+    expect(s.tilesLeft, 'a hand edit does not maintain the cache').toBe(board);
+    recount(s);
+    expect(s.tilesLeft, 'tiles moved within the board, so the total holds').toBe(board);
+
+    // And now an edit that changes the total: the tiles leave the board.
+    const centre = s.center.reduce((a, b) => a + b, 0);
+    expect(centre).toBeGreaterThanOrEqual(moved);
+    expect(moved).toBeGreaterThan(0);
+    for (let c = 0; c < NUM_COLORS; c++) s.center[c] = 0;
+    recount(s);
+    expect(s.tilesLeft).toBe(board - centre);
+
+    // What no board implies, `recount` must leave alone: the shuffle counter
+    // and the generator's position in its stream.
+    const shuffles = s.shufflesUsed;
+    const probe = s.rng.copy();
+    s.tilesLeft = -1;
+    recount(s);
+    expect(s.shufflesUsed, 'no board implies a shuffle count').toBe(shuffles);
+    expect(
+      [s.rng.next(), s.rng.next(), s.rng.next()],
+      'recount consumed randomness',
+    ).toEqual([probe.next(), probe.next(), probe.next()]);
+  });
 });

@@ -1,4 +1,4 @@
-import { boardTiles, recount } from './inspect.js';
+import { recount } from './inspect.js';
 import { Rng } from './rng.js';
 import type { AzulState, CanonicalState, Shuffle } from './types.js';
 
@@ -68,17 +68,20 @@ export function fromCanonical(
     currentPlayer: c.currentPlayer,
     firstPlayer: c.firstPlayer,
     roundIndex: c.roundIndex,
-    tilesLeft: c.tilesLeft,
+    tilesLeft: 0, // derived from the board by the recount below
     shufflesUsed: c.shufflesUsed,
     isTerminal: c.isTerminal,
     exhausted: c.exhausted,
     rng: new Rng(seed),
     shuffle: shuffle ?? null,
   };
-  const board = boardTiles(s);
-  if (c.tilesLeft !== board) {
-    throw new Error(`canonical tilesLeft ${c.tilesLeft} disagrees with board ${board}`);
+  // Derive rather than copy, so this is also the one place a future cache gets
+  // rebuilt [E1-62], and then hold the snapshot to what the board actually says.
+  recount(s);
+  if (s.tilesLeft !== c.tilesLeft) {
+    throw new Error(
+      `canonical tilesLeft ${c.tilesLeft} disagrees with board ${s.tilesLeft}`,
+    );
   }
-  recount(s); // rebuild whatever the engine derives from the board [E1-62]
   return s;
 }

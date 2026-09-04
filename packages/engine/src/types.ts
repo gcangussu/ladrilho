@@ -12,13 +12,12 @@ export type Player = 0 | 1;
 export type Shuffle = (bag: Color[], index: number) => void;
 
 /**
- * The whole game position [E1-3]..[E1-5]. Mutable by design: the bot clones a
- * position per search node, and a persistent structure would cost more than it
- * saves. Callers that want immutability clone first.
+ * The data model [E1-3]..[E1-5]. These fields, in this order, are exactly what
+ * `toCanonical` emits [E1-62] — {@link AzulState} adds the engine's working
+ * state on top, so declaring membership here is what keeps a snapshot from
+ * silently losing a field when the model grows.
  */
-export interface AzulState {
-  // --- data model. These fields, in this order, are what `toCanonical`
-  // emits [E1-62]; nothing below the divider appears in a snapshot.
+export interface CanonicalState {
   /** `[5][5]` tile counts per colour per display. */
   factories: number[][];
   /** `[5]` tile counts per colour. */
@@ -51,38 +50,22 @@ export interface AzulState {
   isTerminal: boolean;
   /** Game stopped because no tiles could be dealt [E1-37]. */
   exhausted: boolean;
+}
 
-  // --- engine-internal. Not part of the data model, deliberately absent from
-  // a snapshot [E1-62], and untouched by `recount` [E1-5].
+/**
+ * A whole game position: the data model plus the engine's own working state.
+ * Mutable by design — the bot clones a position per search node, and a
+ * persistent structure would cost more than it saves. Callers that want
+ * immutability clone first.
+ *
+ * The two fields below the model are deliberately absent from a snapshot
+ * [E1-62] and untouched by `recount` [E1-5].
+ */
+export interface AzulState extends CanonicalState {
   /** The seeded generator. Duplicated by `clone` [E1-48]. */
   rng: Rng;
   /** Injected shuffle, or `null` to use the seeded default [E1-61]. */
   shuffle: Shuffle | null;
-}
-
-/**
- * The lossless snapshot [E1-62]: every data-model field and nothing else, with
- * keys in the order the interface above declares them.
- */
-export interface CanonicalState {
-  factories: number[][];
-  center: number[];
-  markerInCenter: boolean;
-  bag: Color[];
-  lid: number[];
-  walls: number[][];
-  plColor: number[][];
-  plCount: number[][];
-  floor: number[][];
-  floorMarker: boolean[];
-  scores: number[];
-  currentPlayer: Player;
-  firstPlayer: Player;
-  roundIndex: number;
-  tilesLeft: number;
-  shufflesUsed: number;
-  isTerminal: boolean;
-  exhausted: boolean;
 }
 
 /** One player's board in {@link AzulJSON}. */

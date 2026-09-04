@@ -51,6 +51,13 @@ means two different bags.
   MUST NOT edit state fields directly, even though [0001 E1-5] permits that elsewhere: a fixture
   assembled by poking fields tests the poking, and anything the harness can only reach that way
   is a gap in the engine's own surface.
+
+  The prohibition is on *assembling positions*. It does not reach a test whose subject is
+  `recount` itself ([0001 E1-5]), which has to edit a field and assert the recount heals it:
+  that exercises the engine's repair path rather than using it to reach a position, and there
+  is no other way to observe the requirement at all. Everything the engine keeps current by
+  itself is consistent by construction, so a recount test that only ever sees consistent states
+  asserts nothing.
 - **[V2-36]** How a replay *starts* depends on the vector kind, and the two are not
   interchangeable — the shuffle indices differ:
   - `kind: "game"` MUST start with `newGame(seed, shuffle)`. The creation shuffle is index 0, so
@@ -85,8 +92,10 @@ One JSON file per vector, under `packages/engine/test/vectors/`, named `game-NN.
   "census": "short",               // only when the fixture holds under 100 tiles, see [V2-35]
   "shuffles": [[0, 3, 4, 1, …], …],// bag contents after each shuffle; last element drawn first
   "initial": { /* canonical state, see below */ },
+  "initialEncoded": [[…182 floats…], […]],  // both seats; positions only, see [V2-38]
   "plies": [
-    { "action": 47, "legal": [3, 9, 47, …], "state": { /* canonical state after */ } }
+    { "action": 47, "legal": [3, 9, 47, …], "state": { /* canonical state after */ },
+      "encoded": [[…182 floats…], […]] }  // both seats; positions only, see [V2-38]
   ],
   "final": { "scores": [52, 48], "outcome": 1, "exhausted": false }
 }
@@ -94,7 +103,8 @@ One JSON file per vector, under `packages/engine/test/vectors/`, named `game-NN.
 
 - **[V2-37]** Every field shown above is required except `note` (mandatory for handcrafted
   positions only, [V2-17]), `census` (only when short, [V2-35]), `generator.policy` (games only,
-  [V2-14]) and `generator.generatedAt` (optional, [V2-11]). `kind` in particular is
+  [V2-14]), `encoded` and `initialEncoded` (positions only, [V2-38]) and
+  `generator.generatedAt` (optional, [V2-11]). `kind` in particular is
   load-bearing rather than descriptive — [V2-36], [V2-33] and [V2-6] all branch on it — so a
   vector without it is not merely undocumented, it is unreplayable. `schema` is the version of
   this format; a harness MUST refuse a `schema` it does not know rather than guess.
@@ -275,7 +285,7 @@ its provenance fields matter as much as the vectors themselves.
   coverage, not oracle coverage: it catches crashes and invariant breaks in positions the
   vectors never reach.
 - **[V2-25]** The observation vector MUST be checked for length, dtype, and current-player
-  relativity. Relativity is tested with `encodeFor` ([0001 E1-67]) on **one fixed position**, not
+  relativity. Relativity is tested with `encodeFor` ([0001 E1-67]) on **fixed positions**, not
   by playing a ply — an `apply` also changes the board, so the two vectors differ in the
   factories, the centre, `tilesLeft` and the mover's own pattern lines, and nothing about that is
   a perspective swap.
@@ -286,6 +296,30 @@ its provenance fields matter as much as the vectors themselves.
   round, being indices 126-173 and 175 — MUST be identical between the two. Index `[174]` MUST NOT be included in either group: it is a
   disjunction with no opposite-seat counterpart ([0001 E1-63]), it is recomputed rather than
   mirrored, and a whole-vector swap assertion fails a correct engine on that index alone.
+
+  Each of the five pairs MUST be asserted on a position where that pair actually **differs**
+  between the seats, and non-vacuity MUST be checked per pair rather than in aggregate. A pair
+  that happens to be identical between the seats mirrors under any encoder whatsoever, so an
+  aggregate "something differed" guard leaves whole regions unasserted — which is exactly how an
+  encoder reading the *encoding* seat's floor marker for both players survives a test written to
+  catch it. It cannot be one position: measured across all 2 441 states of the committed vectors,
+  the floor pair differs between the seats in 1 958 of them and the completed-set pair in 27, and
+  **no state differs in all five at once**.
+- **[V2-38]** The observation vector's *contents* MUST be compared against the oracle, not only
+  its shape, range and symmetry. [V2-25], [V2-29] and [V2-30] between them pin the length, the
+  dtype, the two clamped fields, the excluded bag order and the `[174]` disjunction — and leave
+  most of the 182 slots unpinned, so a wrong divisor, a field reading the other player's board,
+  or an inverted flag passes all of them. The oracle computes the same 182 floats from the same
+  position, so the generator MUST record `encodeFor` from **both seats** for every state a
+  handcrafted position fixture holds — its `initial` and each `plies[i].state` — and the harness
+  MUST compare value for value.
+
+  The handcrafted positions rather than the games, for two reasons: they are the extreme states
+  ([V2-16]) — overfull floors, near-complete walls, short censuses — where a wrong field is most
+  likely to be distinguishable at all, and recording every ply of thirty games would cost more in
+  repository size than it buys. This is the only part of the engine with a free exact oracle and
+  no check against it, and it is the part the bot consumes whole ([0001 E1-57]).
+
 - **[V2-29]** Its numeric range MUST be checked as [0001 E1-56] actually states it — every value
   finite and `>= 0`, the two clamped fields within `[0, 1]` — and **not** as a blanket
   `<= 1`. Centre counts and scores legitimately exceed 1, so a blanket upper bound would fail a
