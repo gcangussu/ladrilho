@@ -197,11 +197,16 @@ Runs for both players, player 0 first, when the board empties.
 - **[E1-32]** Refill deals `FACTORY_SIZE` tiles to each display in order `0..4`, drawing from the
   end of the bag.
 - **[E1-33]** When a draw finds the bag empty, all lid tiles move to the bag, the lid is emptied,
-  and the bag is shuffled ([E1-46]). Dealing then continues. The recycle is triggered by a draw
-  finding the bag empty, **not** by the bag reaching zero: a deal that consumes the last tile
-  exactly ends with an empty bag and no shuffle, and the recycle happens at the next refill's
-  first draw. The distinction is observable — an eager implementation shuffles once more, at a
-  different point, and deals a different game from that moment on.
+  and the bag is shuffled ([E1-46]). Dealing then continues. Two details are observable and
+  therefore contractual:
+  - The recycle is triggered by a draw finding the bag empty, **not** by the bag reaching zero.
+    A deal that consumes the last tile exactly ends with an empty bag and no shuffle; the recycle
+    happens at the next refill's first draw. An eager implementation shuffles once more, at a
+    different point, and deals a different game from that moment on.
+  - If the lid is also empty, the bag stays empty and **nothing is shuffled** — dealing stops
+    ([E1-34]) without the shuffle being reached at all. An implementation that shuffles the empty
+    bag anyway consumes a recorded entry from the conformance seam ([E1-61]) and fails a correct
+    vector ([0002 V2-6]).
 - **[E1-34]** When bag *and* lid are both empty, dealing stops early and the remaining displays
   stay short. This is a legal position, not an error.
 - **[E1-35]** `roundIndex` counts *round transitions*, not deals. A new game deals the first
@@ -260,7 +265,9 @@ Assertable after every ply, and checked by the property tests in *0002*.
   it zero times, and a state restored by `fromCanonical` may never call it at all. This is the
   seam the conformance harness uses to replay a recorded bag order ([0002 V2-6]), which is why
   the call count is part of the contract and not an implementation detail; it is the only
-  supported way to influence the engine's randomness, and production callers pass a seed.
+  supported way to influence the engine's randomness, and production callers pass a seed. When a
+  shuffle function is supplied the seed is unused — both constructors still require one so that a
+  state is never left without a randomness source, but the two are alternatives, not layers.
 
 ## Interfaces
 

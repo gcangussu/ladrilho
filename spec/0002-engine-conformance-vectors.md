@@ -193,12 +193,12 @@ its provenance fields matter as much as the vectors themselves.
   `<= 1`. Centre counts and scores legitimately exceed 1, so a blanket upper bound would fail a
   correct engine. A test asserting `<= 1` here is itself the bug.
 - **[V2-30]** The `[174, 175)` flag MUST have a dedicated test for its disjunction
-  ([0001 E1-63]). One position suffices, and there is only one shape that discriminates: the
-  round's starter is not the player who took the marker, so *both* players see the flag set.
-  Encoding that position from both perspectives catches a port that implemented the field's
-  misleading name instead of its formula — such a port reports 0 for the starter. The test MUST
-  also cover the only case where the flag is 0: a player who neither started the round nor holds
-  the marker.
+  ([0001 E1-63]). One fixture covers it, read at two plies: before the marker is taken, the
+  round's starter sees 1 and the other player sees 0 — the only configuration in which the flag
+  is 0. Then the non-starter takes from the centre, and from that ply *both* players see it set,
+  which is the only shape that discriminates. Encoding both perspectives at both plies catches a
+  port that implemented the field's misleading name instead of its formula: such a port reports 0
+  for the starter after the marker is gone.
 
 ## Traceability
 
