@@ -48,12 +48,21 @@ means two different bags.
 - **[V2-2]** Vectors MUST therefore carry the tile order itself, not the seed that produced it.
   The recorded seed is provenance only, never an input to the replay.
 - **[V2-3]** The harness MUST feed that order in through the shuffle seam ([0001 E1-61]), and
-  MUST build starting positions with `fromCanonical` ([0001 E1-62]), passing the seam to it in
-  the same call. Both vector kinds need it: a handcrafted position is usually one with a nearly
-  empty bag, so a lid recycle within its few plies is the common case. The harness MUST NOT edit
-  state fields directly, even though [0001 E1-5] permits that elsewhere: a fixture assembled by
-  poking fields tests the poking, and anything the harness can only reach that way is a gap in
-  the engine's own surface.
+  MUST NOT edit state fields directly, even though [0001 E1-5] permits that elsewhere: a fixture
+  assembled by poking fields tests the poking, and anything the harness can only reach that way
+  is a gap in the engine's own surface.
+- **[V2-36]** How a replay *starts* depends on the vector kind, and the two are not
+  interchangeable — the shuffle indices differ:
+  - `kind: "game"` MUST start with `newGame(seed, shuffle)`. The creation shuffle is index 0, so
+    `shuffles[0]` is the opening bag order and `initial` is **compared** against the state
+    `newGame` returns, not loaded into it. That comparison is itself the test of [0001 E1-65].
+  - `kind: "position"` MUST start with `fromCanonical(initial, seed, shuffle)`, which does not
+    shuffle ([0001 E1-61]), so `shuffles[0]` is the first lid recycle after the load and
+    `initial` is loaded rather than compared.
+
+  Both pass the seam in the constructing call. Getting this backwards is not a subtle failure: a
+  game vector loaded with `fromCanonical` never consumes index 0, so its first recycle asks for
+  an index one past where the file put it.
 
 ## Vector format
 
@@ -69,9 +78,10 @@ One JSON file per vector, under `packages/engine/test/vectors/`, named `game-NN.
     "commit": "<40-hex>",          // the oracle's exact revision
     "script": "tools/vectors/dump_vectors.py",
     "pythonSeed": 7,               // provenance only, see [V2-2]
-    "generatedAt": "2026-09-03"
+    "generatedAt": "2026-09-03"    // the commit's date, never the clock: [V2-11]
   },
   "note": "…",                     // required for handcrafted positions: what it exercises
+  "census": "short",               // only when the fixture holds under 100 tiles, see [V2-35]
   "shuffles": [[0, 3, 4, 1, …], …],// bag contents after each shuffle; last element drawn first
   "initial": { /* canonical state, see below */ },
   "plies": [
@@ -81,6 +91,11 @@ One JSON file per vector, under `packages/engine/test/vectors/`, named `game-NN.
 }
 ```
 
+- **[V2-37]** Every field shown above is required except `note` (mandatory for handcrafted
+  positions only, [V2-17]) and `census` (only when short, [V2-35]). `kind` in particular is
+  load-bearing rather than descriptive — [V2-36], [V2-33] and [V2-6] all branch on it — so a
+  vector without it is not merely undocumented, it is unreplayable. `schema` is the version of
+  this format; a harness MUST refuse a `schema` it does not know rather than guess.
 - **[V2-4]** `initial` and every `plies[i].state` MUST be a *complete* canonical state, not a
   digest or a diff. Fixtures are read by humans when a test fails; a mismatching hash tells you
   nothing.
@@ -119,8 +134,8 @@ One JSON file per vector, under `packages/engine/test/vectors/`, named `game-NN.
 ## Generating vectors
 
 These recordings do not exist upstream and cannot be copied from it. ludometer validates its
-engine with roughly forty-five hand-written unit tests plus a fuzz run of self-played games; it
-ships no move-by-move fixtures. Every vector in this repository is therefore *produced* by us,
+engine with 50 hand-written test functions (57 cases once two are expanded over their seed
+parameters) plus self-play fuzz runs; it ships no move-by-move fixtures. Every vector in this repository is therefore *produced* by us,
 by driving the oracle and writing down what it does — which is also why the generator script and
 its provenance fields matter as much as the vectors themselves.
 
@@ -140,23 +155,29 @@ its provenance fields matter as much as the vectors themselves.
   shuffle counter, so there is nothing to read. It MUST come from the same patch that records the
   bag orders, counting the calls it intercepts. Counting the script's own interceptions is not
   the kind of computing [V2-10] forbids; inventing the number some other way is.
-- **[V2-33]** A `kind: "position"` fixture MUST record `initial.shufflesUsed` as **0**, rebasing
-  the counter at the moment the position is posed rather than carrying over the shuffles the
-  oracle spent reaching it — however it was reached, whether posed by hand or played into from a
-  real game. A position is normally posed on top of a `new_game` that has already shuffled once,
-  so the un-rebased value is at least 1 — and a vector recording 1 makes a *correct* engine fail:
-  `fromCanonical` loads 1, the first lid recycle asks for `shuffles[1]`, and a one-entry
-  `shuffles` array has no such index ([V2-6]). For `kind: "game"` no rebasing applies: `newGame`
-  consumes index 0 ([0001 E1-61]), so the arithmetic already closes.
+- **[V2-33]** A `kind: "position"` fixture MUST record `shufflesUsed` as **0** in `initial` and
+  rebased by the same offset in every `plies[i].state`, rather than carrying over the shuffles
+  the oracle spent reaching the position — however it was reached, whether posed by hand or
+  played into from a real game. Rebasing `initial` alone is not enough: `shufflesUsed` is
+  compared at every ply ([V2-5]), so an unrebased later ply fails a correct engine just as surely
+  as an unrebased first one. A position is normally posed on top of a `new_game` that has already
+  shuffled once, so the un-rebased value is at least 1 — and a vector recording 1 makes a
+  *correct* engine fail: `fromCanonical` loads 1, the first lid recycle asks for `shuffles[1]`,
+  and a one-entry `shuffles` array has no such index ([V2-6]). For `kind: "game"` no rebasing
+  applies: `newGame` consumes index 0 ([V2-36]), so the arithmetic already closes.
 - **[V2-34]** A vector's `shuffles` array MUST hold exactly the shuffles consumed across the
-  plies it records — no more, no fewer — counted from its own `initial.shufflesUsed`. This is
-  what makes [V2-6]'s closing check ("fail if the final `shufflesUsed` is below
-  `shuffles.length`") meaningful for a vector that stops early, which every position fixture does
-  by design: a recorded order nothing reaches is either a truncation the generator failed to
+  plies it records — no more, no fewer. Precisely: `shuffles.length` equals the final
+  `shufflesUsed` of the last recorded ply, which for a game vector counts the creation shuffle
+  ([V2-36]) and for a rebased position vector starts from zero ([V2-33]). This is what makes
+  [V2-6]'s closing check meaningful for a vector that stops early, which every position fixture
+  does by design: a recorded order nothing reaches is either a truncation the generator failed to
   trim, or a divergence.
 - **[V2-11]** Regenerating MUST be reproducible: same ludometer commit, same seeds, byte-identical
   files. A diff in `git status` after a regeneration means something changed upstream, and that
-  is worth reading.
+  is worth reading. Nothing in a vector may therefore depend on *when* it was generated —
+  `generator.generatedAt` is the one field that would, so it MUST record the date of the
+  ludometer commit rather than the clock, or be omitted. A wall-clock timestamp destroys the very
+  signal this requirement exists to produce.
 - **[V2-12]** `generator.commit` MUST be recorded. When vectors disagree across ludometer
   revisions, we need to know which revision we agreed with.
 
@@ -165,15 +186,27 @@ its provenance fields matter as much as the vectors themselves.
 ### Full games
 
 - **[V2-13]** At least 30 complete games, each from a distinct seed, replayed end to end. The
-  number is set by the runtime budget in [V2-28], not inherited from anything upstream: 30 games
-  of roughly 150–200 plies is around 5 000 compared states, which stays well inside a
-  ten-second suite. Raise it if the budget allows; the figure is a floor, not a ritual.
+  number is set by the runtime budget in [V2-28], not inherited from anything upstream: a
+  two-player game runs about 70 plies (measured mean 69.9 over 150 random games, min 48, max
+  127), so 30 games is roughly 2 100 compared states — comfortably inside a ten-second suite.
+  Raise it if the budget allows; the figure is a floor, not a ritual.
 - **[V2-14]** Move choice during generation MUST NOT be uniformly random in every game. At least
-  a third SHOULD use policies that steer into awkward territory — prefer the floor line, always
-  take the largest pile, always take from the centre, never take the marker — because uniform
-  random play almost never fills a wall row or empties the bag.
-- **[V2-15]** The set MUST include at least one game that ends by wall row completion
-  ([0001 E1-36]) and at least one that ends exhausted ([0001 E1-37]).
+  a third SHOULD use policies that steer somewhere uniform play rarely goes: always take the
+  largest pile, always take from the centre when it is non-empty, never take the marker until
+  forced. Each needs a uniform-random fallback for the plies where it has no opinion — the centre
+  is empty at the start of every round, so a policy without one has nothing to pick.
+
+  Two cautions, both measured. A strict *floor-preferring* policy never fills a pattern line, so
+  no tile ever reaches a wall, no row ever completes, and — exhaustion being unreachable
+  ([0001 E1-37]) — the game **never ends**: 10 of 10 such games were still running after 2 000
+  plies. Use it only with a cap, and only for a position fixture. And uniform play is not the
+  weak case it looks: 150 of 150 uniform games ended by row completion in about 70 plies, so
+  [V2-15] needs no steering at all. What the steered games buy is unusual *shapes* — heavy
+  floors, contested colours, lopsided walls — not termination.
+- **[V2-15]** Every game vector ends by wall row completion ([0001 E1-36]) — there is no other
+  lawful ending, since exhaustion is unreachable from a full census ([0001 E1-37]). Do not hunt
+  for a seed that exhausts the bag; there isn't one. `[0001 E1-34]` and `[0001 E1-37]` are
+  covered by the short-census position fixture in [V2-16] instead.
 
 ### Handcrafted positions
 
@@ -187,17 +220,26 @@ its provenance fields matter as much as the vectors themselves.
   | Multiple lines resolving top-down, later scoring off earlier | [0001 E1-25] |
   | Floor overfilled past seven slots with the marker held | [0001 E1-20], [0001 E1-26], [0001 E1-27] |
   | Big penalty against a small score | [0001 E1-28] clamping |
-  | Bag and lid both empty at refill | [0001 E1-33], [0001 E1-34] |
+  | Bag and lid both empty at refill — **short census**, see [V2-35] | [0001 E1-33], [0001 E1-34], [0001 E1-37] |
   | A round where nobody takes from the centre | [0001 E1-31] |
   | Final position with a full column and a full colour | [0001 E1-38] |
 
 - **[V2-17]** Every handcrafted vector MUST carry a `note` saying what it is for. A fixture whose
   purpose nobody remembers is one nobody dares to change.
+- **[V2-35]** A fixture holding fewer than 100 tiles MUST declare `"census": "short"` and say in
+  its `note` why. Only the bag-and-lid-empty position needs it today, and it needs it
+  unavoidably: reaching a refill with both empty *requires* a census below 100 ([0001 E1-37]), so
+  without the flag the fixture [V2-16] mandates would fail the assertion [V2-18] mandates, and no
+  correct engine could pass the suite. The flag narrows the check to invariance; it never
+  disables it. A vector without the flag holding fewer than 100 tiles is a generator bug, and the
+  harness MUST fail it as one rather than trusting the file.
 
 ### Properties, checked on every ply of every vector
 
 - **[V2-18]** Tile conservation ([0001 E1-40]) MUST be asserted after every ply of every replay,
-  not only at the end.
+  not only at the end — as *invariance*: the census after a ply equals the census before it. For
+  every vector but a short-census one ([V2-35]) that census MUST also be `[20,20,20,20,20]`, and
+  the harness MUST assert both.
 - **[V2-19]** The remaining invariants — [0001 E1-41], [0001 E1-42], [0001 E1-43], [0001 E1-44],
   [0001 E1-45] and [0001 E1-64] — MUST be asserted per ply.
 - **[V2-20]** `legalActions()` MUST be cross-checked against brute force — `isLegal` over all 180
@@ -215,14 +257,25 @@ its provenance fields matter as much as the vectors themselves.
   coverage, not oracle coverage: it catches crashes and invariant breaks in positions the
   vectors never reach.
 - **[V2-25]** The observation vector MUST be checked for length, dtype, and current-player
-  relativity: encoding a position and encoding it again after the turn passes MUST swap the
-  "me"/"them" halves.
+  relativity. Relativity is tested with `encodeFor` ([0001 E1-67]) on **one fixed position**, not
+  by playing a ply — an `apply` also changes the board, so the two vectors differ in the
+  factories, the centre, `tilesLeft` and the mover's own pattern lines, and nothing about that is
+  a perspective swap.
+
+  `encodeFor(s, 0)` and `encodeFor(s, 1)` MUST mirror each other across exactly the five paired
+  regions — `[0,25)`↔`[25,50)`, `[50,80)`↔`[80,110)`, `[110,117)`↔`[117,124)`, `[124]`↔`[125]`,
+  `[176,179)`↔`[179,182)`. The shared regions (factories, centre, bag, lid, round) MUST be
+  identical between the two. Index `[174]` MUST NOT be included in either group: it is a
+  disjunction with no opposite-seat counterpart ([0001 E1-63]), it is recomputed rather than
+  mirrored, and a whole-vector swap assertion fails a correct engine on that index alone.
 - **[V2-29]** Its numeric range MUST be checked as [0001 E1-56] actually states it — every value
   finite and `>= 0`, the two clamped fields within `[0, 1]` — and **not** as a blanket
   `<= 1`. Centre counts and scores legitimately exceed 1, so a blanket upper bound would fail a
   correct engine. A test asserting `<= 1` here is itself the bug.
 - **[V2-30]** The `[174, 175)` flag MUST have a dedicated test for its disjunction
-  ([0001 E1-63]). One fixture covers it, read at two plies. Before the marker is taken, the
+  ([0001 E1-63]), read through `encodeFor` ([0001 E1-67]) — the harness may not set
+  `currentPlayer` to get the other seat ([V2-3]), and does not need to. One fixture covers it,
+  read from both seats at two plies. Before the marker is taken, the
   round's starter sees 1 and the other player sees 0 — the flag is 0 exactly for a player who
   neither started the round nor holds the marker, which is also what a non-starter sees once the
   *starter* takes the marker; both routes produce the same pair, so one of them suffices. Then

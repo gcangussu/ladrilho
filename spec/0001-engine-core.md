@@ -102,11 +102,11 @@ interface AzulState {
   masks of [E1-60]. The PRNG is not a cache by this definition: it is not derivable from
   anything, `recount()` MUST NOT touch it, and a snapshot deliberately omits it ([E1-62]).
 
-  Caches MAY be kept as long as [E1-13] and the invariants hold, and an implementation that keeps
-  any MUST expose a `recount()` that rebuilds them after a caller edits state fields directly.
-  `recount()` MUST also re-derive `tilesLeft` from the board, since a caller who edits displays by
-  hand invalidates it the same way, and MUST leave `shufflesUsed` alone, which no board can imply.
-  The engine keeps all of this current on every `apply`.
+  Caches MAY be kept as long as [E1-13] and the invariants hold. `recount()` is a declared
+  interface either way, and rebuilds whatever a caller's direct edits invalidated: every cache,
+  plus `tilesLeft`, which a hand-edited display falsifies the same way. It MUST leave the PRNG
+  and `shufflesUsed` alone — no board implies either. The engine keeps all of it current on every
+  `apply`, so `recount()` is for callers, not for the engine.
 
   `tilesLeft` is deliberately *not* a cache by this definition. It is a declared field, it is
   maintained incrementally, and [E1-41] pins it to a value that must always agree with the board
@@ -116,6 +116,17 @@ interface AzulState {
   that must be reproducible — conformance fixtures above all — should go through `fromCanonical`
   ([E1-62]) instead; that is guidance for callers, which is why the enforceable version of it
   lives in [0002 V2-3] rather than here.*
+
+- **[E1-65]** `newGame(seed)` MUST produce exactly this opening state, before anything else:
+  a bag holding 20 tiles of each colour and shuffled once ([E1-61]); an empty lid; empty walls,
+  pattern lines and floor lines for both players; `floorMarker` false for both and
+  `markerInCenter` true; `scores` `[0, 0]`; `currentPlayer` **0**; `firstPlayer` **0**;
+  `roundIndex` 0; `isTerminal` and `exhausted` false; then the first refill ([E1-32]), which
+  leaves `tilesLeft` at 20.
+
+  Spelled out because none of it is implied by the rules above: a port that opens with
+  `currentPlayer` 1 satisfies every other requirement in this document and diverges from the
+  reference on ply 0 of every conformance vector.
 
 ## Action encoding
 
@@ -232,8 +243,22 @@ Runs for both players, player 0 first, when the board empties.
 
 - **[E1-36]** After a round resolves, the game ends if either player has at least one complete
   wall row. The check runs after tiling and before the next refill.
+- **[E1-66]** The marker handoff ([E1-30], [E1-31]) runs **before** that check, not after. A
+  terminal state therefore has `markerInCenter` true, `floorMarker` false for both players, and
+  `firstPlayer` and `currentPlayer` both set to whoever last held the marker — even though no
+  further round will be played. All four are compared per ply ([0002 V2-5]), so a port that ends
+  the game the moment a row completes diverges on the final ply of every game vector.
 - **[E1-37]** The game also ends if a refill deals nothing at all (bag and lid both empty). Such
   a state MUST set `exhausted` so callers can tell it apart from an ordinary finish.
+
+  **This path is unreachable in a lawfully dealt game, and that is not a reason to omit it.** At
+  any refill the board is empty and floors have just been dumped, so all 100 tiles are in bag,
+  lid, walls, or partial pattern lines. With no completed row (or the game would have ended) the
+  walls hold at most 40, and partial lines at most 20, leaving **at least 40 in bag + lid** where
+  20 are needed. Measured across 982 refills of random play, the minimum was 62. The reference
+  implements this path anyway, so the port must match it — but it can only be *tested* from an
+  artificially posed short-census position ([E1-40]), never from a played game. The same applies
+  to [E1-34].
 - **[E1-38]** On ending, each player scores `2` per complete row, `7` per complete column, and
   `10` per colour placed all five times, added to the running score. End bonuses are NOT clamped
   by [E1-28] — clamping applies to round scoring only.
@@ -246,7 +271,13 @@ Runs for both players, player 0 first, when the board empties.
 Assertable after every ply, and checked by the property tests in *0002*.
 
 - **[E1-40]** **Conservation.** Counting the bag, lid, centre, every display, both floor lines,
-  both sets of pattern lines, and both walls yields exactly 20 tiles of each colour, always.
+  both sets of pattern lines, and both walls yields the same census after every ply as before it:
+  no tile is created or destroyed. For any state reachable from `newGame` that census is exactly
+  20 of each colour — and `tileCensus` is the way to check it.
+
+  Stated as invariance rather than as the constant `[20,20,20,20,20]` on purpose. An artificially
+  posed position may hold fewer tiles (see [E1-37]), and the property that matters there is the
+  same one: whatever it starts with, it neither gains nor loses.
 - **[E1-41]** `tilesLeft` equals the sum of all display and centre counts.
 - **[E1-42]** The marker is in exactly one place: the centre, or one player's floor.
 - **[E1-43]** No pattern line exceeds its capacity, holds two colours, or holds a colour already
@@ -255,8 +286,9 @@ Assertable after every ply, and checked by the property tests in *0002*.
   column.
 - **[E1-45]** Scores are never negative.
 - **[E1-64]** `shufflesUsed` never decreases, and rises by exactly one per shuffle call ([E1-61]).
-  This is what makes the index meaningful: a state's `shufflesUsed` is both the number of
-  shuffles behind it and the index the next one will be given.
+  This is what makes the index meaningful: a state's `shufflesUsed` is the index the next shuffle
+  will be given. (It equals the number of shuffles behind it only when the counter started at
+  zero, which a rebased fixture deliberately does not — see [0002 V2-33].)
 
 ## Determinism
 
@@ -337,6 +369,10 @@ function fromCanonical(                               // one-sided inverse: see 
 ): AzulState;
 function renderText(s: AzulState): string;            // debugging aid
 function encode(s: AzulState): Float32Array;          // length ENCODED_SIZE
+function encodeFor(                                   // same, from p's seat; see [E1-67]
+  s: AzulState,
+  p: Player,
+): Float32Array;
 ```
 
 - **[E1-50]** The package MUST have no runtime dependencies and MUST NOT touch the DOM, the
@@ -355,7 +391,8 @@ function encode(s: AzulState): Float32Array;          // length ENCODED_SIZE
   not a rule the engine can enforce, which is why it is not phrased as a requirement.*
 - **[E1-62]** `toCanonical` MUST return a lossless, structurally-cloneable snapshot: **every**
   field of the data model and nothing else, with the bag as an ordered colour array, and object
-  keys emitted in a fixed, documented order. "Every field" includes the two bookkeeping counters
+  keys emitted in the order the data-model listing above declares them, which is what makes
+  [0002 V2-11]’s byte-identical regeneration possible across two languages. "Every field" includes the two bookkeeping counters
   — `tilesLeft`, which the board could imply, and `shufflesUsed`, which nothing could — because
   comparing them catches a port whose bookkeeping has drifted at the ply it drifts, rather than
   several plies later when the drift finally changes a deal. "Nothing else" excludes derived
@@ -400,7 +437,7 @@ contract, not an implementation detail.
 | `[179, 182)` | 3 | Theirs, same three |
 
 - **[E1-53]** `ENCODED_SIZE` is 182, and every field offset in the table above MUST be exported
-  as a named constant with that value. *(Using those constants instead of bare literals at call
+  as a named constant holding the value shown for it there. *(Using those constants instead of bare literals at call
   sites is a lint concern, not something a test can observe — hence not part of the
   requirement.)*
 - **[E1-54]** An empty pattern line contributes all zeros — no colour bit, zero fill.
@@ -414,6 +451,11 @@ contract, not an implementation detail.
   finished game can score well past that. Neither MUST be clamped — clamping would silently
   diverge from the reference encoder and corrupt every vector. Tests MUST assert the real bound
   (finite, `>= 0`) plus the two clamped fields, not a blanket `<= 1`.
+- **[E1-67]** `encodeFor(s, p)` MUST produce the vector `p` would see, and `encode(s)` MUST equal
+  `encodeFor(s, s.currentPlayer)`. Neither mutates the state ([E1-51]), so the opponent's view is
+  reachable without setting `currentPlayer` and re-encoding — which callers must not do, and
+  which the conformance harness is forbidden from doing at all ([0002 V2-3]). Without this the
+  perspective tests in [0002 V2-25] and [0002 V2-30] cannot be written.
 - **[E1-63]** The `[174, 175)` flag is exactly `floorMarker[me] || firstPlayer === me`. It is a
   **disjunction**, and both halves matter: it is set for the player currently holding the marker
   *and* for the player who started the current round. It is therefore not "I start the next
@@ -457,7 +499,7 @@ here or the suite fails:
 | Requirement | Why it is not testable |
 | --- | --- |
 | [E1-8], [E1-57] | Process constraints on changing the encoding and the observation layout. A test cannot observe a promise about future specs. |
-| [E1-49] | A statement about the reference implementation, not about this engine's behaviour. |
+| [E1-49] | Testing it would need the oracle to hand, which [0002 V2-8] forbids the suite from having. |
 | [E1-58], [E1-59] | `SHOULD` budgets, explicitly declared above to be non-gating. The benchmark suite measures them; it does not fail the build. |
 | [E1-60] | An implementation-strategy `SHOULD`. No behavioural test can see how `legalActions` builds its result — [E1-58] measures whether the strategy worked. |
 
