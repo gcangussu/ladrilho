@@ -24,6 +24,13 @@ Does not cover the rules of Azul (*0001 — Engine core*), how the engine is pro
 (*0002 — Engine conformance vectors*), or evaluating a position (*intent 0003 — Computer
 opponent*). The interface displays, selects, and submits; it decides nothing.
 
+It also does not settle how a move arrives from something that has to think about it first.
+[U3-18] applies and publishes synchronously and [U3-20] propagates a synchronous throw; across the
+worker boundary intent 0003 wants, both become asynchronous, and a "thinking…" state needs
+somewhere to live that is neither the old view model nor the new one. [U3-31] keeps the seam
+narrow enough to widen — `submit` takes an action and learns nothing about who chose it — and the
+spec that serves *intent 0003* changes its signature, and this document with it.
+
 ### The three open questions, answered
 
 Intent 0002 leaves three questions open. This spec answers all three, at the minimal end:
@@ -52,8 +59,7 @@ not what each tile earned, and when three pattern lines resolve together the ari
 recoverable from what is shown. Producing a per-tile figure means re-deriving [0001 E1-24] in the
 interface, because `apply` resolves a round atomically and reports no breakdown
 ([0001 E1-22] through [0001 E1-29]). This is a **deliberate narrowing of a stated criterion**, not
-an open question being answered, and reversing it is an engine change first and a UI change
-second.
+an open question being answered.
 
 **End-of-game bonuses.** "At the end of the game the bonuses are shown and a winner is declared."
 [U3-44] declares the winner and [U3-46] shows each player's completed row, column and colour
@@ -61,10 +67,13 @@ second.
 [0001 E1-38]. The score delta of [U3-43] cannot stand in: on the terminal ply `endRound` clamps
 the round score at zero ([0001 E1-28]) and `finishGame` then adds unclamped bonuses, so a single
 observed delta is `max(0, score + tiling + penalty) − score + bonus` and the clamp destroys the
-split irrecoverably. Closing this costs three numbers per player from the engine and is the first
-item under *Open questions*.
+split irrecoverably.
 
-Both are recorded here rather than quietly narrowed, because a frozen intent cannot argue back.
+Both are recorded rather than quietly narrowed, because a frozen intent cannot argue back — and
+both are now *intent 0004 — Scoring explained*, which asks for the workings rather than the total.
+Neither is a UI change: the points exist only inside the engine's round resolution, so closing
+either gap starts with the engine reporting how it scored, not only how much. Until that lands,
+[U3-43] and [U3-46] are what this interface can honestly show.
 
 ## Definitions
 
@@ -308,7 +317,7 @@ type Selection = { source: number; color: Color } | null;
   from an ordinary finish.
 - **[U3-46]** The end of a game MUST show each player's completed row, column and colour counts,
   and MUST NOT compute the bonus arithmetic of [0001 E1-38] from them. See *Two places this
-  knowingly falls short of intent 0002*, and the first *Open question*.
+  knowingly falls short of intent 0002*, and *intent 0004 — Scoring explained*.
 - **[U3-47]** A terminal position has no legal actions ([0001 E1-11]), so every move control MUST
   be unavailable, and the only offer MUST be a new game. That new game MUST take a freshly
   generated seed per [U3-13], never the one in the URL.
@@ -531,29 +540,12 @@ is the wrong shape here. The differences that reach this spec, from
 This section is a pointer, not a tutorial. When it and the v2 documentation disagree, the
 documentation is right and this section is stale.
 
-## Open questions
-
-- **The bonus gap.** [U3-46] shows counts where intent 0002 asked for bonuses, because the points
-  are [0001 E1-38] and `finishGame` adds them to the score without reporting them. Three numbers
-  per player from the engine — an `endBonus(s, p)` in `inspect.ts`, or a field on `AzulJSON` —
-  would close it, and `finishGame` already computes them. Is that worth a change to *0001*?
-- **The per-tile gap.** The same shape, one requirement earlier: a round-resolution report from
-  `apply` would let [U3-43] say what each tile earned, which is what intent 0002 asked for. It is
-  a larger change than the bonus one and buys a criterion rather than a sentence. Together or
-  separately?
-- **`submit` and a thinking opponent.** [U3-18] applies and publishes synchronously, and [U3-20]
-  propagates a synchronous throw. Across the worker boundary intent 0003 wants, both become
-  asynchronous, and a "thinking…" state needs somewhere to live that is neither the old view model
-  nor the new one. Does `submit` return a promise now, or does *0003* change its signature and
-  this document with it?
-- **Does the seed earn a control?** [U3-14] displays a seed and only the URL reads one back, and
-  [U3-47] makes a new game generate a fresh one. Is a "play this deal again" affordance worth the
-  one control it costs?
-
 ## References
 
 - Intent [0002 — Web interface](../intent/0002-web-interface.md)
 - Intent [0003 — Computer opponent](../intent/0003-computer-opponent.md)
+- Intent [0004 — Scoring explained](../intent/0004-scoring-explained.md) — the two shortfalls
+  above, handed on
 - Spec [0001 — Engine core](0001-engine-core.md)
 - Spec [0002 — Engine conformance vectors](0002-engine-conformance-vectors.md) — the traceability
   doctrine [U3-76] mirrors, and [0002 V2-31]'s exemption categories
