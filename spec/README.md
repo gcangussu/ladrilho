@@ -119,3 +119,4 @@ Required fields: `title`, `author`, `date`, `status`, `intent`, `prefix`, `summa
 | --- | --- | --- | --- |
 | [0001 — Engine core](0001-engine-core.md) | draft | 0001 — Rules engine | State, action encoding, rules, scoring, determinism, observation vector |
 | [0002 — Engine conformance vectors](0002-engine-conformance-vectors.md) | draft | 0001 — Rules engine | How the engine is proven correct against the reference implementation |
+| [0003 — Web interface](0003-web-interface.md) | draft | 0002 — Web interface | The hot-seat client: turn interaction, board presentation, the engine seam, accessibility |

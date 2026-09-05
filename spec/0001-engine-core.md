@@ -519,9 +519,11 @@ be excused.
 
 ## Open questions
 
-- **History.** The engine keeps only the current position. Does undo belong here as a move
-  stack, in the UI as replay-from-start, or nowhere? *(Intent 0001 asks the same question; the
-  answer decides whether `apply` returns an undo record.)*
+- ~~**History.** The engine keeps only the current position. Does undo belong here as a move
+  stack, in the UI as replay-from-start, or nowhere?~~ **Answered: nowhere.** *0003 — Web
+  interface* has no undo ([0003 U3-17]) and retains no earlier position as a move, so `apply`
+  returns no undo record and the engine keeps only the current position. Reopening this is a
+  change to that spec first.
 - **Storage.** Plain `number[]` arrays follow the reference implementation and clone cheaply at
   this size. Would flat `Uint8Array` state measurably beat them under [E1-58], and is it worth
   the loss of readability?

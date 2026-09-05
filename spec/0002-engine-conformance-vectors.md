@@ -370,8 +370,10 @@ The brackets are escaped because `-t` takes a regular expression, not a substrin
 
 ## Open questions
 
-- Should vectors also be replayed *backwards* — reconstructing each prior state from the next —
-  once the undo question in *0001* is settled?
+- ~~Should vectors also be replayed *backwards* — reconstructing each prior state from the next —
+  once the undo question in *0001* is settled?~~ **Answered: no.** That question was settled the
+  other way — nothing reconstructs a prior state, in the engine or above it (*0001 — Engine core*,
+  *Open questions*), so a backwards replay would exist only to be tested.
 - Once the suite exists and [V2-28] can be measured rather than guessed at, does the game count
   in [V2-13] go up? The floor is set by the budget, so the honest answer needs a stopwatch.
 - Do we vendor a pinned copy of the ludometer engine into `tools/` so vectors can be regenerated
