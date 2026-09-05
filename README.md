@@ -15,7 +15,7 @@ pnpm monorepo:
 | Package | Status | Description |
 | --- | --- | --- |
 | `packages/engine` | done | Azul rules engine + conformance suite |
-| `packages/ui` | planned | Solid.js v2 web client |
+| `packages/ui` | done | Solid.js v2 hot-seat web client |
 | `packages/bot` | planned | AI agent |
 
 ## Intent and spec
@@ -35,9 +35,15 @@ pnpm test                        # every package
 pnpm -F engine test              # the engine suite
 pnpm -F engine test vectors      # the oracle replays only
 pnpm -F engine bench             # the [E1-58] / [E1-59] budgets, non-gating
+pnpm -F ui dev                   # the client, on a local dev server
+pnpm -F ui test                  # the fast suite: jsdom, under 30s
+pnpm -F ui test:browser          # the [U3-73] lane: layout and reload, in chromium
 ```
 
 The engine's conformance fixtures are committed, so the suite needs neither network nor Python.
 Regenerating them does — see [`tools/vectors/README.md`](tools/vectors/README.md).
 
-This is an early-stage project; the sections above expand as each roadmap step lands.
+The browser lane needs a browser: `pnpm -F ui exec playwright install chromium`, once.
+
+The client is a two-player hot seat with no server, no accounts and no storage. A reload deals a
+fresh game; `?seed=` in the URL reproduces a deal, not a position.

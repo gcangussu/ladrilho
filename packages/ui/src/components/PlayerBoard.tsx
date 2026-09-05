@@ -1,0 +1,112 @@
+import type { JSX } from '@solidjs/web';
+import type { AzulJSONPlayer } from 'engine';
+import { Show } from 'solid-js';
+import { Destinations, FloorSummary } from './Destinations.jsx';
+import { FloorLine } from './FloorLine.jsx';
+import { PatternLines } from './PatternLines.jsx';
+import { Wall } from './Wall.jsx';
+
+/** How a destination control answers and what it does when chosen [U3-24], [U3-25]. */
+export interface DestinationApi {
+  available: (dest: number) => boolean;
+  onChoose: (dest: number) => void;
+}
+
+/** A signed delta, so `+7` reads as a gain and `-3` as a loss [U3-43]. */
+function signed(n: number): string {
+  return n > 0 ? `+${n}` : `${n}`;
+}
+
+/**
+ * One player's board: score, wall, pattern lines, floor line, and how far they
+ * are from finishing a row, a column or a colour [U3-35] — all four numbers
+ * read off the engine's own view, none of them counted here.
+ *
+ * Whose turn it is is said in words and marked with `aria-current`, never by
+ * colour alone [U3-33].
+ *
+ * The six destination controls of [U3-79] live on the board of the player to
+ * move, and only there: `dest` is a destination on the mover's own board
+ * [0001 E1-6], so a second set under the opponent would be six controls that
+ * can never be legal. The waiting player's lines are shown, not offered.
+ */
+export function PlayerBoard(props: {
+  name: string;
+  player: AzulJSONPlayer;
+  /** From the view model's `floorOccupied[p]` [U3-4]. */
+  floorOccupied: number;
+  /** `transition.newlyPlaced[p]`, or `null` on a ply that was not a transition. */
+  placed: number[] | null;
+  /** `transition.scoreDelta[p]`, or `null` [U3-43]. */
+  scoreDelta: number | null;
+  toMove: boolean;
+  names: string[];
+  /** Non-null on the board of the player to move. */
+  destinations: DestinationApi | null;
+}): JSX.Element {
+  return (
+    <section
+      class={['player-board', { 'to-move': props.toMove }]}
+      aria-label={props.name}
+      aria-current={props.toMove ? 'true' : undefined}
+    >
+      <header class="player-header">
+        <h2>{props.name}</h2>
+        <p class="score">
+          Score {props.player.score}
+          <Show when={props.scoreDelta !== null}>
+            <span class="score-delta"> ({signed(props.scoreDelta as number)} this round)</span>
+          </Show>
+        </p>
+        <p class="turn-marker">{props.toMove ? 'To move' : 'Waiting'}</p>
+      </header>
+
+      <Wall
+        wall={props.player.wall}
+        placed={props.placed}
+        names={props.names}
+        label={`${props.name} wall`}
+      />
+
+      <Show
+        when={props.destinations}
+        fallback={
+          <>
+            <PatternLines
+              lines={props.player.patternLines}
+              names={props.names}
+              label={`${props.name} pattern lines`}
+            />
+            <FloorLine
+              floor={props.player.floor}
+              marker={props.player.floorMarker}
+              occupied={props.floorOccupied}
+              penalty={props.player.floorPenalty}
+              names={props.names}
+              label={`${props.name} floor line`}
+            />
+          </>
+        }
+      >
+        {(api) => (
+          <>
+            <Destinations
+              player={props.player}
+              floorOccupied={props.floorOccupied}
+              names={props.names}
+              label={`${props.name} pattern lines and floor`}
+              available={(dest) => api().available(dest)}
+              onChoose={(dest) => api().onChoose(dest)}
+            />
+            <FloorSummary occupied={props.floorOccupied} penalty={props.player.floorPenalty} />
+          </>
+        )}
+      </Show>
+
+      <p class="completed">
+        Completed: {props.player.completedRows} rows, {props.player.completedCols} columns,{' '}
+        {props.player.completedColors} colours
+      </p>
+    </section>
+  );
+}
