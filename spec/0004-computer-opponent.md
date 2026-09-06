@@ -191,9 +191,10 @@ wouldn't have", made decidable.
 
 - **[B4-8]** The bot MUST obtain every rule outcome from the engine: which actions are legal
   (`legalActions`), what a ply does (`apply`), what a floor line costs (`floorPenalty`), what a
-  wall has completed (`completedRows`, `completedCols`, `completedColors`), what a finished game
-  came to (`outcome`), and what a placed tile scores ([B4-9]). It MUST NOT compute any of these
-  itself.
+  wall has completed (`wallCompletedRows`, `wallCompletedCols`, `wallCompletedColors` for the
+  speculative wall of [B4-14]; `completedRows`, `completedCols`, `completedColors` for a state),
+  what a finished game came to (`outcome`), and what a placed tile scores ([B4-9]). It MUST NOT
+  compute any of these itself.
 
   *The line is [0003 U3-3]'s, and it falls in the same place: reading the engine's answer is
   allowed, computing your own is not. Deciding that a five-point placement is worth more than a

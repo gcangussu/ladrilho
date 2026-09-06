@@ -53,7 +53,13 @@ export {
   tileCensus,
 } from './inspect.js';
 export { fromCanonical, toCanonical } from './canonical.js';
-export { toJSON } from './json.js';
+export { fromJSON, toJSON } from './json.js';
+export {
+  placementValue,
+  wallCompletedColors,
+  wallCompletedCols,
+  wallCompletedRows,
+} from './score.js';
 export { renderText } from './render.js';
 export {
   ENCODED_SIZE,

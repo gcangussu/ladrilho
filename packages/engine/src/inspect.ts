@@ -4,10 +4,9 @@ import {
   NUM_COLORS,
   NUM_ROWS,
   PLAYERS,
-  ROW_BASES,
-  WALL_IDX,
   wallColorAt,
 } from './constants.js';
+import { wallCompletedColors, wallCompletedCols, wallCompletedRows } from './score.js';
 import type { AzulState, Player } from './types.js';
 
 /** Floor slots in use, marker included [E1-26]. May exceed the 7 that score. */
@@ -23,34 +22,22 @@ export function floorPenalty(s: AzulState, p: Player): number {
   return CUM_PENALTY[Math.min(FLOOR_SLOTS, floorOccupied(s, p))];
 }
 
+/**
+ * The three below are `p`'s wall asked of the wall-shaped functions in
+ * `score.ts` [E1-70]. They delegate rather than count, so each rule has one
+ * implementation and the bot — which asks about a speculative wall the engine
+ * does not hold — gets the same answer this does [0004 B4-14].
+ */
 export function completedRows(s: AzulState, p: Player): number {
-  const wall = s.walls[p];
-  let n = 0;
-  for (const base of ROW_BASES) {
-    if (wall[base] && wall[base + 1] && wall[base + 2] && wall[base + 3] && wall[base + 4]) n++;
-  }
-  return n;
+  return wallCompletedRows(s.walls[p]);
 }
 
 export function completedCols(s: AzulState, p: Player): number {
-  const wall = s.walls[p];
-  let n = 0;
-  for (let col = 0; col < 5; col++) {
-    if (wall[col] && wall[col + 5] && wall[col + 10] && wall[col + 15] && wall[col + 20]) n++;
-  }
-  return n;
+  return wallCompletedCols(s.walls[p]);
 }
 
 export function completedColors(s: AzulState, p: Player): number {
-  const wall = s.walls[p];
-  let n = 0;
-  for (let c = 0; c < NUM_COLORS; c++) {
-    const base = c * NUM_ROWS;
-    let placed = 0;
-    for (let r = 0; r < NUM_ROWS; r++) placed += wall[WALL_IDX[base + r]];
-    if (placed === NUM_ROWS) n++;
-  }
-  return n;
+  return wallCompletedColors(s.walls[p]);
 }
 
 /** True when either player has a complete wall row — the game's end condition [E1-36]. */

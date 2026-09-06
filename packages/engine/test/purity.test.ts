@@ -25,14 +25,19 @@ import {
   floorOccupied,
   floorPenalty,
   fromCanonical,
+  fromJSON,
   isLegal,
   legalActions,
   newGame,
   outcome,
+  placementValue,
   renderText,
   tileCensus,
   toCanonical,
   toJSON,
+  wallCompletedColors,
+  wallCompletedCols,
+  wallCompletedRows,
 } from '../src/index.js';
 import { gameVectors } from './support/vectors.js';
 
@@ -60,6 +65,39 @@ describe('the package is self-contained [E1-50]', () => {
         expect(match[1], `${file} imports ${match[1]}`).toMatch(/^\.\.?\//);
       }
       expect(source, `${file} uses require()`).not.toMatch(/\brequire\s*\(/);
+    }
+  });
+
+  /**
+   * [E1-68] and [E1-70] are not only "these functions exist" — each says the
+   * state-shaped caller **computes its answer by calling** the wall-shaped one,
+   * so the rule has one implementation.
+   *
+   * Nothing else in the suite can see that. Paste a run-counting loop back into
+   * `round.ts`, drop the import, and every other test still passes — corpus
+   * replay included — because a second copy that is *correct* is invisible to a
+   * behavioural test. So this clause reads the source.
+   *
+   * It asserts the delegation and nothing else. An earlier version also tried
+   * to ban run-scanning loops outside `score.ts` by pattern, which was both
+   * under-inclusive (a `while`, or an unrolled `&&` chain like
+   * `wallCompletedRows`'s own, walks straight past it) and a landmine (it
+   * matched any ordinary reverse loop, and would one day fail a gating build
+   * for a reason unrelated to [E1-24]). Delegation is the half with teeth: a
+   * second implementation that nothing calls is dead code, not a second rule.
+   */
+  it('[E1-68] [E1-70] keeps one implementation of each wall rule', () => {
+    const read = (file: string): string =>
+      readFileSync(join(PACKAGE_ROOT, 'src', file), 'utf8');
+
+    expect(read('round.ts'), 'round.ts scores without placementValue [E1-68]').toMatch(
+      /placementValue\s*\(/,
+    );
+    const inspect = read('inspect.ts');
+    for (const fn of ['wallCompletedRows', 'wallCompletedCols', 'wallCompletedColors']) {
+      expect(inspect, `inspect.ts does not delegate to ${fn} [E1-70]`).toMatch(
+        new RegExp(`return\\s+${fn}\\s*\\(`),
+      );
     }
   });
 
@@ -103,6 +141,11 @@ describe('everything but apply and recount leaves its arguments alone [E1-51]', 
     const v = gameVectors()[0];
     const s = fromCanonical(v.plies[30].state, 0);
     const before = toCanonical(s);
+    // `fromJSON` takes an `AzulJSON`, not a state, so the state snapshot above
+    // says nothing about whether it leaves its own argument alone. Hold the
+    // view and a deep copy of it, and compare both after the roster runs.
+    const json = toJSON(s);
+    const jsonBefore = structuredClone(json);
     const results = [
       legalActions(s),
       isLegal(s, 0),
@@ -119,9 +162,15 @@ describe('everything but apply and recount leaves its arguments alone [E1-51]', 
       encode(s),
       encodeFor(s, 1),
       clone(s),
+      placementValue(s.walls[0], 0, 0),
+      wallCompletedRows(s.walls[0]),
+      wallCompletedCols(s.walls[0]),
+      wallCompletedColors(s.walls[1]),
+      fromJSON(json, 0),
     ];
-    expect(results.length).toBe(15);
+    expect(results.length).toBe(20);
     expect(toCanonical(s)).toEqual(before);
+    expect(json, 'fromJSON mutated the view it was given').toEqual(jsonBefore);
   });
 
   it('keeps no module-level state that two games could share', () => {

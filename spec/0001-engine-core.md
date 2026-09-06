@@ -198,6 +198,31 @@ Runs for both players, player 0 first, when the board empties.
   `(h > 1 ? h : 0) + (v > 1 ? v : 0)`; otherwise score 1.
 - **[E1-25]** Tiles placed earlier in the same resolution are visible to later ones, so a lower
   row can score against a tile that row 0 just placed. Row order is therefore load-bearing.
+- **[E1-68]** [E1-24] MUST be exported as a pure function of a wall and a cell, and MUST have
+  exactly one implementation — round scoring computes its per-tile gain by calling it:
+
+  ```ts
+  function placementValue(wall: readonly number[], row: number, col: number): number;
+  ```
+
+  `wall` is the flat `[25]` row-major wall of [E1-2]. The function MUST NOT allocate and MUST
+  NOT read any state ([E1-51]) — only `wall` and this document's constants.
+
+  It MUST NOT read the cell at `(row, col)` itself, so the answer does not depend on whether
+  the caller has placed the tile yet. That is what licenses round scoring to ask *before* it
+  places. Callers SHOULD still ask about an unset cell, because that is the only reading under
+  which the name means anything — but a precondition with no consequence would only earn a
+  defensive write in the hottest loop in the project, so the normative form is the one above.
+
+  *Exported for the bot, which cannot value a pattern line without knowing what the tile it will
+  place is worth ([0004 B4-9]), and which calls this a few million times a move. It takes a wall
+  rather than a state because the wall it asks about is one it has advanced speculatively through
+  a round's worth of pattern lines — not a position the engine holds — and a state-shaped
+  signature would force a clone per call.*
+
+  *This is also the primitive* intent 0004 — Scoring explained *needs to report a per-tile figure.
+  Exporting it here means the eventual report is built on the arithmetic that actually scores the
+  game rather than beside it, which is that intent's stated constraint.*
 
 ### Floor penalties
 
@@ -267,6 +292,23 @@ Runs for both players, player 0 first, when the board empties.
 - **[E1-38]** On ending, each player scores `2` per complete row, `7` per complete column, and
   `10` per colour placed all five times, added to the running score. End bonuses are NOT clamped
   by [E1-28] — clamping applies to round scoring only.
+- **[E1-70]** What a wall has completed MUST be exported as pure, allocation-free functions of a
+  wall, and `completedRows`, `completedCols` and `completedColors` MUST compute their answers by
+  calling them, so each count has exactly one implementation:
+
+  ```ts
+  function wallCompletedRows(wall: readonly number[]): number;
+  function wallCompletedCols(wall: readonly number[]): number;
+  function wallCompletedColors(wall: readonly number[]): number;
+  ```
+
+  `wall` is the flat `[25]` row-major wall of [E1-2]. None of the three reads any state.
+
+  *Wall-shaped for the same reason [E1-68] is, and added at the same time by the same caller. The
+  bot's evaluation values the wall as the current round will leave it — pattern lines tiled, which
+  is a wall no state holds — and it needs to know what that speculative wall has completed in order
+  to weigh [E1-38]'s bonuses ([0004 B4-14]). Counting the cells itself would be a second
+  implementation of this rule sitting in a package whose whole premise is that it contains none.*
 - **[E1-39]** `outcome()` returns `+1` if player 0 wins, `-1` if player 1 wins, `0` for a draw,
   and `null` while the game is unfinished. Ties on score are broken by the number of complete
   rows; still tied is a draw.
@@ -365,9 +407,22 @@ function completedColors(s: AzulState, p: Player): number;
 function tileCensus(s: AzulState): number[];          // per-colour census; [20,20,20,20,20]
                                                       // when reachable from newGame, [E1-40]
 function recount(s: AzulState): void;
+function placementValue(                              // one tile's points; see [E1-68]
+  wall: readonly number[],
+  row: number,
+  col: number,
+): number;
+function wallCompletedRows(wall: readonly number[]): number;   // see [E1-70]
+function wallCompletedCols(wall: readonly number[]): number;   // see [E1-70]
+function wallCompletedColors(wall: readonly number[]): number; // see [E1-70]
 
 // serialisation and display
 function toJSON(s: AzulState): AzulJSON;              // lossy view for the UI, see [E1-52]
+function fromJSON(                                    // from the lossy view; see [E1-69]
+  json: AzulJSON,
+  seed: number,
+  shuffle?: Shuffle,
+): AzulState;
 function toCanonical(s: AzulState): CanonicalState;   // lossless, see [E1-62]
 function fromCanonical(                               // one-sided inverse: see [E1-62]
   c: CanonicalState,
@@ -392,6 +447,28 @@ function encodeFor(                                   // same, from p's seat; se
 - **[E1-52]** `toJSON` MUST return structurally-cloneable plain data (no class instances, no
   functions) so a state can cross a worker boundary. It MUST report the bag as per-colour counts
   and MUST NOT expose its order, which is hidden information no player may see.
+- **[E1-69]** `fromJSON(json, seed, shuffle?)` MUST construct a state from a lossy view, filling
+  the bag with `json.bag[c]` tiles of each colour `c` in ascending colour order, and MUST
+  otherwise behave as `fromCanonical` ([E1-62]) — including its `tilesLeft` check. It MUST set
+  `shufflesUsed` to 0, which `AzulJSON` does not carry. For any `j` produced by `toJSON` the
+  result MUST satisfy `legalActions(fromJSON(j, …))` deep-equals `j.legalActions` — the
+  qualification matters, since a hand-written `j` may carry a `legalActions` that its own board
+  does not imply, and nothing here can reconcile that.
+
+  *The bag order it produces is arbitrary and is fixed only so that this is a function rather than
+  a family of them. A caller that deals from such a state deals a fiction — and the bot does
+  deal one, every time it applies a round-ending ply, because `endRound` refills inside the
+  same ply that scores ([E1-21]). What saves it is that it never looks: [0004 B4-6] stops the
+  search *past* the boundary and [0004 B4-7] stops the evaluation reading what was dealt.*
+
+  *`shufflesUsed` restarting at 0 is a trap worth naming, because it is the shuffle seam's own
+  index ([E1-61]): a caller that passes a recorded `shuffle` to `fromJSON` will be handed
+  index 0 at the first lid recycle and replay the wrong entry. Use `fromCanonical` for
+  anything that replays.*
+
+  *Its reason for existing is that it makes an information barrier out of a type: a caller holding
+  only an `AzulJSON` has no bag order to leak, because `toJSON` never gave it one ([E1-52]). That
+  is [0004 B4-10], and it is why the bot is handed a view rather than a state.*
 
   *It follows that `toJSON` cannot distinguish two positions that will deal differently, so it is
   the wrong tool for comparing or restoring states — use [E1-62]. That is guidance for callers,

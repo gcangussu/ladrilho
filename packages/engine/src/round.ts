@@ -18,6 +18,7 @@ import {
   floorOccupied,
 } from './inspect.js';
 import { shuffleInPlace } from './rng.js';
+import { placementValue } from './score.js';
 import type { AzulState, Color, Player } from './types.js';
 
 /**
@@ -62,23 +63,6 @@ export function refill(s: AzulState): void {
   s.tilesLeft = dealt;
 }
 
-/** Length of the horizontal run through `(row, col)`, the new tile included. */
-function horizontalRun(wall: number[], row: number, col: number): number {
-  const base = row * 5;
-  let run = 1;
-  for (let i = col - 1; i >= 0 && wall[base + i]; i--) run++;
-  for (let i = col + 1; i < 5 && wall[base + i]; i++) run++;
-  return run;
-}
-
-/** Length of the vertical run through `(row, col)`, the new tile included. */
-function verticalRun(wall: number[], row: number, col: number): number {
-  let run = 1;
-  for (let i = row - 1; i >= 0 && wall[i * 5 + col]; i--) run++;
-  for (let i = row + 1; i < 5 && wall[i * 5 + col]; i++) run++;
-  return run;
-}
-
 /**
  * Wall-tiling and scoring for one player. Rows resolve in order `0..4` and a
  * tile placed by an earlier row is visible to a later one [E1-22], [E1-25].
@@ -94,11 +78,8 @@ function tileWall(s: AzulState, p: Player): number {
     if (plCount[r] !== r + 1) continue; // a partial line waits for next round
     const c = plColor[r];
     const idx = WALL_IDX[c * NUM_ROWS + r];
+    gain += placementValue(wall, r, idx - r * 5); // [E1-68]: scored before placed
     wall[idx] = 1;
-    const col = idx - r * 5;
-    const h = horizontalRun(wall, r, col);
-    const v = verticalRun(wall, r, col);
-    gain += h > 1 || v > 1 ? (h > 1 ? h : 0) + (v > 1 ? v : 0) : 1;
     lid[c] += r; // the r tiles of the line that did not go on the wall
     plColor[r] = -1;
     plCount[r] = 0;
