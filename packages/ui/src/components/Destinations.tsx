@@ -1,7 +1,7 @@
 import type { JSX } from '@solidjs/web';
 import type { AzulJSONPlayer } from 'engine';
 import { FLOOR, NUM_ROWS } from 'engine';
-import { Show } from 'solid-js';
+import { For, Show } from 'solid-js';
 import { FloorTiles, floorLineName, floorOverflow } from './FloorLine.jsx';
 import { PatternLineTiles, patternLineName } from './PatternLines.jsx';
 import { RovingGroup } from './RovingGroup.jsx';
@@ -33,36 +33,45 @@ export function Destinations(props: {
       : patternLineName(props.player.patternLines[dest], dest, props.names);
 
   return (
-    <RovingGroup label={props.label} group="destinations" items={rows()}>
-      {(dest, _index, tabIndex) => (
-        <button
-          type="button"
-          data-roving="true"
-          class={['destination', { floor: dest() === FLOOR }]}
-          aria-label={name(dest())}
-          // Present, focusable and inert rather than `disabled`, so a keyboard
-          // player can still reach the row they are wondering about [U3-29].
-          aria-disabled={props.available(dest()) ? 'false' : 'true'}
-          tabindex={tabIndex()}
-          onClick={() => props.onChoose(dest())}
-        >
-          <Show
-            when={dest() === FLOOR}
-            fallback={
-              <span class="pattern-line">
-                <PatternLineTiles line={props.player.patternLines[dest()]} names={props.names} />
-              </span>
-            }
-          >
-            <span class="floor-line">
-              <FloorTiles
-                floor={props.player.floor}
-                marker={props.player.floorMarker}
-                names={props.names}
-              />
-            </span>
-          </Show>
-        </button>
+    <RovingGroup label={props.label} group="destinations" count={rows().length}>
+      {(tabIndex) => (
+        // `<For keyed={false}>` hands its callback an accessor in Solid v2, read
+        // inside the JSX below and never in the callback body.
+        <For each={rows()} keyed={false}>
+          {(dest, index) => (
+            <button
+              type="button"
+              data-roving="true"
+              class={['destination', { floor: dest() === FLOOR }]}
+              aria-label={name(dest())}
+              // Present, focusable and inert rather than `disabled`, so a keyboard
+              // player can still reach the row they are wondering about [U3-29].
+              aria-disabled={props.available(dest()) ? 'false' : 'true'}
+              tabindex={tabIndex(index)}
+              onClick={() => props.onChoose(dest())}
+            >
+              <Show
+                when={dest() === FLOOR}
+                fallback={
+                  <span class="pattern-line">
+                    <PatternLineTiles
+                      line={props.player.patternLines[dest()]}
+                      names={props.names}
+                    />
+                  </span>
+                }
+              >
+                <span class="floor-line">
+                  <FloorTiles
+                    floor={props.player.floor}
+                    marker={props.player.floorMarker}
+                    names={props.names}
+                  />
+                </span>
+              </Show>
+            </button>
+          )}
+        </For>
       )}
     </RovingGroup>
   );

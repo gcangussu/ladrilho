@@ -18,7 +18,7 @@ import { CENTER, FLOOR, NUM_COLORS, NUM_FACTORIES, NUM_ROWS, decodeAction, encod
 import type { AzulJSON } from 'engine';
 import { flush } from 'solid-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { pickName, picksIn } from '../src/components/Displays.jsx';
+import { factoryName, pickName, picksIn } from '../src/components/Displays.jsx';
 import { floorLineName } from '../src/components/FloorLine.jsx';
 import { patternLineName } from '../src/components/PatternLines.jsx';
 
@@ -104,6 +104,48 @@ describe('what is offered', () => {
     for (const pick of expected) {
       expect(pickButton(screen, game(), pick.source, pick.color)).toBeInTheDocument();
     }
+  });
+
+  it('[U3-81] gives each display its own numbered group, holding only its own controls', async () => {
+    const { screen, game } = await mount();
+    for (let source = 0; source < NUM_FACTORIES; source++) {
+      const plate = screen.getByRole('group', { name: factoryName(source) });
+      // The number is on screen, not only in the accessible name of the group.
+      expect(plate.textContent).toContain(factoryName(source));
+      const mine = picksIn(game().factories[source], source);
+      const controls = within(plate).queryAllByRole('button');
+      expect(controls, `factory ${source}`).toHaveLength(mine.length);
+      for (const pick of mine) {
+        expect(
+          within(plate).getByRole('button', { name: pickName(pick, game().colorNames) }),
+        ).toBeInTheDocument();
+      }
+    }
+  });
+
+  it('[U3-81] keeps an emptied display in the running order, still named', async () => {
+    const { screen, game } = await mount();
+    const [source, color, dest] = decodeAction(game().legalActions[0]);
+    expect(source, 'the opening deals every tile to a factory').not.toBe(CENTER);
+
+    await user.click(pickButton(screen, game(), source, color));
+    flush();
+    await user.click(destButton(screen, game(), dest));
+    flush();
+
+    // Taking from a display empties it ([0001 E1-16]). What survives here is the
+    // order and the naming; that the plate holds its position and its footprint
+    // is a fact about layout, and jsdom reports every box as zero — the [U3-73]
+    // lane asserts that half.
+    expect(game().factories[source].every((n) => n === 0)).toBe(true);
+    const plate = screen.getByRole('group', { name: factoryName(source) });
+    expect(within(plate).queryAllByRole('button')).toHaveLength(0);
+    const plates = screen
+      .getAllByRole('group')
+      .filter((group) => /^Factory \d+$/.test(group.getAttribute('aria-label') ?? ''));
+    expect(plates.map((group) => group.getAttribute('aria-label'))).toEqual(
+      [...Array(NUM_FACTORIES).keys()].map(factoryName),
+    );
   });
 
   it('[U3-79] renders all six destinations for the player to move', async () => {

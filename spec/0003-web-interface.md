@@ -263,6 +263,20 @@ type Selection = { source: number; color: Color } | null;
 - **[U3-32]** The interface MUST show, at all times: the five factory displays with their tiles by
   colour, the centre pool, where the first-player marker is, both players' walls, pattern lines
   and floor lines, both scores, the round index, and the tiles remaining on the board this round.
+- **[U3-81]** Each factory display MUST be rendered as a group of its own, holding that display's
+  controls and no others, and showing its number where it can be seen and not only in the
+  accessible name of the controls inside it. A display MUST NOT move on screen because of a ply:
+  once emptied it MUST keep the position and the footprint it had while it held tiles, for the
+  rest of the round.
+
+  *[U3-32] and [U3-54] are both satisfied by a single flat row of source controls, and such a row
+  is unreadable: nothing on screen says where one display ends and the next begins, so which
+  display a player is taking from is a fact only a screen reader is told. The second sentence is
+  the one with teeth, and it is about position rather than order: a display sized to what it holds
+  collapses when it is taken from, and every display beside it slides — out from under a pointer
+  that was already aiming at one of them, and away from where a player learnt it was. Only the
+  [U3-73] lane can see this; jsdom reports every box as zero.*
+
 - **[U3-33]** Whose turn it is MUST be unmistakable, and MUST NOT be conveyed by colour alone.
 - **[U3-34]** The interface MAY show bag and lid contents as per-colour counts. *(There is nothing
   to forbid: `toJSON` reports the bag as counts and never its order, which is hidden information
@@ -449,10 +463,11 @@ budget.
   `sessionStorage`, `indexedDB`, `document.cookie`, `fetch`, `XMLHttpRequest`, `WebSocket` and
   `navigator.sendBeacon` replaced by throwing stubs — the way [0002 V2-31] treats [0001 E1-50].
   "No persistence" and "no network" are behaviour, and behaviour is testable.
-- **[U3-73]** The suite MUST check [U3-58], [U3-59] and [U3-16] under Vitest browser mode with the
-  Playwright provider, which the testing guide names for real-browser needs. Layout requirements
-  need a layout engine and a reload requirement needs a reload; excusing them because jsdom has
-  neither would excuse three requirements that came straight from the intent.
+- **[U3-73]** The suite MUST check [U3-58], [U3-59], [U3-16] and the positional half of [U3-81]
+  under Vitest browser mode with the Playwright provider, which the testing guide names for
+  real-browser needs. Layout requirements need a layout engine and a reload requirement needs a
+  reload; excusing them because jsdom has neither would excuse four requirements that came
+  straight from the intent.
 - **[U3-74]** The suite MUST assert that `packages/ui`'s `dependencies` are exactly `engine` plus
   the Solid v2 runtime [U3-10], and that the declared `vitest` range satisfies [U3-11]. An allowlist, not
   a judgement about which packages "carry the rules" — adding one is a spec change to [U3-7].

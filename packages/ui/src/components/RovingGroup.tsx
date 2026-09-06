@@ -1,5 +1,5 @@
 import type { JSX } from '@solidjs/web';
-import { For, createSignal } from 'solid-js';
+import { createEffect, createSignal } from 'solid-js';
 
 /**
  * A group of controls that is a single tab stop, with the arrow keys moving
@@ -9,19 +9,23 @@ import { For, createSignal } from 'solid-js';
  * `-1`; the arrow keys move that one and take focus with it. Unavailable
  * controls are part of the rotation, because [U3-29] keeps them focusable so a
  * keyboard player can reach the cell they are wondering about.
+ *
+ * The children render the controls and are free to arrange them — the factory
+ * displays nest theirs one plate per display [U3-81] — because everything here
+ * reads the DOM inside the container rather than a list of items. All the group
+ * asks is that the control at position `i` carries `tabIndex(i)`, and that the
+ * positions run `0 .. count - 1` in the order the controls appear.
  */
-export function RovingGroup<T>(props: {
+export function RovingGroup(props: {
   label: string;
   /** Stable across renders; how [U3-57] finds this group again after a ply. */
   group: string;
-  items: T[];
   /**
-   * Children receive an **accessor**, not a value. `<For keyed={false}>` hands
-   * its callback an accessor in Solid v2, and calling it here — outside any
-   * tracking scope — would freeze every control at the value it had when the
-   * group was first built. Read it inside JSX instead.
+   * How many controls the children render. Checked against the DOM below,
+   * because unlike the list this replaced it is a promise rather than a fact.
    */
-  children: (item: () => T, index: number, tabIndex: () => number) => JSX.Element;
+  count: number;
+  children: (tabIndex: (index: number) => number) => JSX.Element;
 }): JSX.Element {
   const [active, setActive] = createSignal(0);
   let container!: HTMLDivElement;
@@ -55,7 +59,32 @@ export function RovingGroup<T>(props: {
    * control in the group would carry `-1` and Tab would skip the group whole,
    * which is [U3-52] and [U3-53] silently broken.
    */
-  const stop = (): number => Math.min(active(), Math.max(0, props.items.length - 1));
+  const stop = (): number => Math.min(active(), Math.max(0, props.count - 1));
+
+  /**
+   * The children's half of the bargain, kept.
+   *
+   * `count` and the DOM are two statements of the same number, and when they
+   * disagree the group fails in the way nobody notices: an overshoot puts the
+   * tab stop on a control that does not exist, every control carries `-1`, and
+   * Tab skips the group whole — [U3-52] and [U3-53] broken in silence, on
+   * whichever board state the miscount happened to need. So it is checked,
+   * after the render that would have caused it, and loudly. Development only:
+   * a wrong tab order is not worth taking the game down over in front of a
+   * player.
+   */
+  createEffect(
+    () => props.count,
+    (count) => {
+      if (!import.meta.env.DEV) return;
+      const rendered = controls().length;
+      if (rendered !== count) {
+        throw new Error(
+          `roving group "${props.group}" declares ${count} controls but rendered ${rendered}`,
+        );
+      }
+    },
+  );
 
   const onKeyDown = (event: KeyboardEvent): void => {
     const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
@@ -85,9 +114,7 @@ export function RovingGroup<T>(props: {
         if (index >= 0) setActive(index);
       }}
     >
-      <For each={props.items} keyed={false}>
-        {(item, index) => props.children(item, index, () => (stop() === index ? 0 : -1))}
-      </For>
+      {props.children((index) => (stop() === index ? 0 : -1))}
     </div>
   );
 }

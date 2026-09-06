@@ -7,6 +7,7 @@
  * can be reloaded without taking the test runner down with it.
  */
 
+import { NUM_FACTORIES } from 'engine';
 import { afterEach, describe, expect, it } from 'vitest';
 
 /** A laptop, and a phone held sideways [U3-58]. */
@@ -65,6 +66,28 @@ function reload(el: HTMLIFrameElement): Promise<Document> {
   return loaded.then(() => settled(el));
 }
 
+/**
+ * Play one ply in `doc`, by clicking a source and then a legal destination.
+ *
+ * Each click is given a turn of the event loop: the interface renders on Solid's
+ * own schedule, and the destinations only become available once the selection
+ * has been published.
+ */
+async function playAPly(doc: Document): Promise<void> {
+  const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 20));
+  const source = doc.querySelector<HTMLElement>('[aria-label="Factory displays"] button');
+  expect(source, 'no source control to click').not.toBeNull();
+  source!.click();
+  await tick();
+
+  const dest = [
+    ...doc.querySelectorAll<HTMLElement>('[data-group="destinations"] button'),
+  ].find((control) => control.getAttribute('aria-disabled') === 'false');
+  expect(dest, 'the selection made no destination available').toBeDefined();
+  dest!.click();
+  await tick();
+}
+
 describe('the board at a real size', () => {
   it.each(VIEWPORTS)('[U3-58] fits $name with no horizontal page scroll', async (viewport) => {
     const doc = await load(viewport.width, viewport.height);
@@ -87,6 +110,51 @@ describe('the board at a real size', () => {
       .map(({ name, box }) => `${name}: ${Math.round(box.width)}x${Math.round(box.height)}`);
     expect(small).toEqual([]);
   });
+
+  it.each(VIEWPORTS)('[U3-81] leaves every display where it was at $name', async (viewport) => {
+    const doc = await load(viewport.width, viewport.height);
+    /** Where each display is, and how much room it takes — to the pixel. */
+    const places = (): string[] =>
+      [...doc.querySelectorAll<HTMLElement>('[data-group="factories"] [role="group"]')].map(
+        (plate) => {
+          const box = plate.getBoundingClientRect();
+          return [
+            plate.getAttribute('aria-label'),
+            `at ${Math.round(box.x)},${Math.round(box.y)}`,
+            `${Math.round(box.width)}x${Math.round(box.height)}`,
+          ].join(' ');
+        },
+      );
+
+    const before = places();
+    expect(before).toHaveLength(NUM_FACTORIES);
+
+    await playAPly(doc);
+
+    // The ply emptied the display it took from — which is the whole hazard: a
+    // plate sized to what it holds collapses, and the rest slide along.
+    const emptied = [
+      ...doc.querySelectorAll<HTMLElement>('[data-group="factories"] [role="group"]'),
+    ].filter((plate) => plate.querySelectorAll('button').length === 0);
+    expect(emptied, 'no display was emptied, so nothing was tested').toHaveLength(1);
+    expect(places()).toEqual(before);
+
+    // Every number is on screen, not merely in the markup — checked after the
+    // ply, so it covers the display that has just emptied as well. `textContent`
+    // in the fast lane cannot tell a caption from a hidden one, and a caption
+    // nobody can see is the defect [U3-81] was written about.
+    const captions = [...doc.querySelectorAll<HTMLElement>('.display-name')];
+    expect(captions.length).toBeGreaterThanOrEqual(NUM_FACTORIES);
+    const unseen = captions
+      .filter((caption) => {
+        const box = caption.getBoundingClientRect();
+        return (
+          box.width === 0 || box.height === 0 || getComputedStyle(caption).visibility !== 'visible'
+        );
+      })
+      .map((caption) => caption.textContent);
+    expect(unseen, 'display captions that are in the markup but not on screen').toEqual([]);
+  });
 });
 
 describe('a reload', () => {
@@ -97,22 +165,8 @@ describe('a reload', () => {
     const opening = status(doc);
     expect(opening).toContain(String(SEED));
 
-    // Play a ply, so there is a position for a reload to fail to restore. Each
-    // click is given a turn of the event loop: the interface renders on Solid's
-    // own schedule, and the destinations only become available once the
-    // selection has been published.
-    const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 20));
-    const source = doc.querySelector<HTMLElement>('[aria-label="Factory displays"] button');
-    expect(source, 'no source control to click').not.toBeNull();
-    source!.click();
-    await tick();
-
-    const dest = [
-      ...doc.querySelectorAll<HTMLElement>('[data-group="destinations"] button'),
-    ].find((control) => control.getAttribute('aria-disabled') === 'false');
-    expect(dest, 'the selection made no destination available').toBeDefined();
-    dest!.click();
-    await tick();
+    // Play a ply, so there is a position for a reload to fail to restore.
+    await playAPly(doc);
     expect(status(doc), 'the ply did not land').not.toBe(opening);
 
     const reloaded = await reload(frame!);

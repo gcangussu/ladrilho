@@ -265,6 +265,91 @@ h2 {
   outline-offset: 2px;
 }
 
+/*
+ * Each display is a plate of its own: named, outlined, and holding only its own
+ * controls, so which display a control came from is legible from where it sits
+ * and not only from the name assistive technology reads [U3-81].
+ */
+
+/*
+ * A grid rather than a wrapping row, because a plate must keep the place it
+ * had while it held tiles [U3-81]. As flex items the plates shrink to fit, so
+ * emptying one pulled every plate to its right along the row — under a pointer
+ * already aiming at one of them. Equal columns, sized by the viewport and not
+ * by what the displays happen to hold, do not move for anything a ply does.
+ */
+.roving-group[data-group='factories'] {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 0.6rem;
+}
+
+.display {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.4rem 0.45rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+}
+
+.display-name {
+  color: var(--dim);
+  font-size: 0.7rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.display-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/*
+ * Exactly the height of a control, so an emptied factory plate keeps the
+ * footprint it had while it held tiles [U3-81]. The centre pool is under no
+ * such rule — it grows all round — and reserving the space there would cost a
+ * band of nothing on a page [U3-60] already wants shorter.
+ */
+[data-group='factories'] .display-tiles {
+  min-height: 3rem;
+}
+
+/*
+ * The centre is one display across the width it is given, not a plate in a row
+ * of them, and its name sits beside its tiles rather than above them: it is on
+ * screen from the opening, when it holds nothing, and a band of nothing is
+ * what [U3-60] can least afford.
+ */
+.centre .display {
+  width: 100%;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.display-empty {
+  padding: 0 0.35rem;
+  color: var(--dim);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+/*
+ * Tiles in a source control are a size down from the ones on a board, which
+ * buys height rather than width: the column count is the grid's to decide, and
+ * five stand side by side at either size. What changes is how soon four picks
+ * wrap inside a plate — at 2.75rem they wrap at a laptop's column width and
+ * every plate in the row grows from 83 to 153 pixels, which is 69 more on a
+ * page [U3-60] wants shorter. The control around them keeps its 44 [U3-59].
+ */
+.pick .tile {
+  width: 2.25rem;
+  height: 2.25rem;
+}
+
 .centre {
   display: grid;
   gap: 0.3rem;

@@ -85,6 +85,14 @@ for (const { file, text } of sources) {
   }
 }
 
+/**
+ * Every identifier the spec declares, in order and with repeats — which is what
+ * `declared` cannot show, being a set.
+ */
+function declarations(text: string): string[] {
+  return [...text.matchAll(DECLARATION)].map((match) => `${PREFIX}-${match[1]}`);
+}
+
 describe('traceability against spec 0003', () => {
   it('reads a spec that actually declares requirements', () => {
     expect(declared.size).toBeGreaterThan(50);
@@ -112,6 +120,29 @@ describe('traceability against spec 0003', () => {
     expect(stale.sort(), 'the exemptions table names requirements that no longer exist').toEqual(
       [],
     );
+  });
+
+  /**
+   * Identifiers are append-only, so a number reused for a second requirement is
+   * two requirements wearing one name — and this file collapses them into a
+   * single set key, after which either one's citation covers both and deleting
+   * either test still reports full coverage. The hole is invisible to every
+   * check above precisely because they all work in identifiers.
+   */
+  it('declares each requirement once', () => {
+    const seen = new Set<string>();
+    // `Set.add` returns the set, which is truthy for a first sighting and for a
+    // repeat alike; `has` before `add` is the distinction being drawn.
+    const repeated = declarations(spec).filter((id) => {
+      const again = seen.has(id);
+      seen.add(id);
+      return again;
+    });
+    expect(
+      [...new Set(repeated)].sort(),
+      'a requirement identifier is declared twice; identifiers are append-only, so the second ' +
+        'one takes the next free number',
+    ).toEqual([]);
   });
 
   it('gives every exemption a written reason', () => {
