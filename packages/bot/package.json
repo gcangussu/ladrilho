@@ -10,7 +10,9 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "bench": "node bench/bundle.mjs && vitest bench --run --reporter verbose --config vitest.bench.config.ts"
+    "bench": "node bench/bundle.mjs && vitest bench --run --reporter verbose --config vitest.bench.config.ts",
+    "ladder": "node ladder/bundle.mjs && vitest run --config vitest.ladder.config.ts",
+    "corpus": "node arena/generate-corpus.mjs"
   },
   "dependencies": {
     "engine": "workspace:*"

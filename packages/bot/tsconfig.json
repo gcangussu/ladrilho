@@ -25,6 +25,8 @@
     "test",
     "arena",
     "bench",
-    "vitest.bench.config.ts"
+    "ladder",
+    "vitest.bench.config.ts",
+    "vitest.ladder.config.ts"
   ]
 }

@@ -64,18 +64,20 @@ record:
 | depth 6 vs depth 4 | 40 | **72.5%** | 40.9 – 31.7 |
 
 The ladder is monotone and each rung is worth about the same: every doubling of lookahead buys
-roughly 72–76% against the rung below. That is the evidence for [0004 B4-32]'s claim that a
-horizon is a real difference in kind, and it is why [M5-13]'s thresholds are set at 60% and 80% —
-comfortably under what was measured, so a threshold failure means a regression rather than noise.
+roughly 72–76% against the rung below. That is the evidence for [0004 B4-32]'s claim that a horizon
+is a real difference in kind.
 
-These are **prototype numbers and are not a baseline**. The committed baseline of [M5-15] is
-produced by the shipped bot.
+These are **prototype numbers and are not a baseline**, and they are not what [M5-13]'s thresholds
+are set from either — those come from the shipped bot measured against each match's *null*, which
+is the table in [M5-13] itself. The prototype figures are kept because they are why this design was
+believed worth building before any of it existed. The committed baseline of [M5-15] is produced by
+the shipped bot.
 
 ## Definitions
 
 | Term | Meaning |
 | --- | --- |
-| **Chooser** | Anything satisfying `(position: AzulJSON) => number`, returning a legal action. A tier of [0004 B4-32] wrapped with its options is one; so is a reference opponent. |
+| **Chooser** | Anything satisfying `(position: AzulJSON) => Play`, returning a legal action and what it cost. A tier of [0004 B4-32] wrapped with its options is one; so is a reference opponent. |
 | **Match** | `n` games between two choosers over a recorded seed list, seats alternated ([M5-3]). |
 | **Result** | What a match reports ([M5-6]). |
 | **Winrate** | `(wins + draws / 2) / n`, from the first chooser's side. Draws count half because [0001 E1-39] makes them a real outcome rather than an error. |
@@ -85,7 +87,25 @@ produced by the shipped bot.
 ## Data model
 
 ```ts
-type Chooser = (position: AzulJSON) => number;
+/**
+ * What a chooser reports. Richer than an action because [M5-8] and `Result`
+ * need it: a bare `=> number` cannot say whether the search was curtailed or
+ * how much work it did, and both are things a match must refuse to average
+ * over silently.
+ */
+interface Play {
+  action: number;
+  /** Nodes expanded. `0` for a reference opponent that does not search. */
+  nodes: number;
+  /** [0004 B4-29]. A match containing one fails [M5-8]. */
+  curtailed: boolean;
+  depth: number;
+  /** [0004 B4-20]. Without it nothing downstream can tell a search that ran
+      out of round from one that ran out of budget. */
+  complete: boolean;
+}
+
+type Chooser = (position: AzulJSON) => Play;
 
 interface MatchSpec {
   a: Chooser;  b: Chooser;
@@ -129,7 +149,11 @@ interface Result {
   within one. A `Result` MUST report the winrate for each seat separately.
 
   *Azul is not seat-symmetric — player 0 opens and player 1 holds the reply — so a match played
-  from one seat measures the seat as much as the player.*
+  from one seat measures the seat as much as the player. Measured, and larger than it sounds: a
+  match between two **identical** deterministic players can come out at 62.5% rather than 50%, with
+  seat 0 taking about 70% of those games — `easy` and `greedy` both do, while `steady` against
+  itself measures 45%, so how large it is depends on the player as well as on the seat. Either way
+  a winrate between two copies of one player says nothing about the player.*
 
 - **[M5-4]** The seed list MUST be recorded in the repository, not generated. Any randomness a
   reference opponent needs MUST come from a seeded `Rng` ([0001 E1-46]) whose seed is part of the
@@ -138,11 +162,21 @@ interface Result {
   roughly six times the mean game length.
 - **[M5-6]** A match MUST report every field of `Result`, and MUST report the seed of every game
   its first chooser lost. A strength number nobody can drill into is a number nobody can act on.
-- **[M5-7]** The arena MUST be deterministic: the same `MatchSpec` MUST produce a byte-identical
-  `Result` on any machine and any run. A test MUST assert this by running one match twice.
+- **[M5-7]** The arena MUST be deterministic: the same `MatchSpec` MUST produce an identical
+  `Result` on any machine and any run, **excluding `work[].ms`**, which is a wall-clock reading and
+  can never repeat. A test MUST assert this by running one match twice, with the choosers rebuilt
+  for each — a reference opponent carries a generator stream ([M5-9]), so reusing one would have
+  the second run continue where the first stopped rather than replay it.
 - **[M5-8]** A match in which any search reported `curtailed` ([0004 B4-29]) MUST fail. A curtailed
   search is the one case where [0004 B4-30] does not hold, so a match containing one is not
   reproducible and its number means nothing.
+
+  It follows that a measuring lane MUST push the wall-clock fail-safe out of reach rather than rely
+  on it not firing. With the shipped 4000 ms in place this requirement turns the lane into a load
+  sensor: on a machine busy with anything else, `sharp` exceeds it, the match throws, and a gate
+  fails for a reason that has nothing to do with the bot. Measured — three of the seven gates
+  failed exactly that way when the lane shared a machine with the fast suite. The node budget is
+  the bound that carries meaning here, and it is the one [M5-13]'s numbers were measured against.
 
 ### The reference opponents
 
@@ -163,20 +197,29 @@ interface Result {
   is [0004 B4-36] made into a number.
 - **[M5-13]** The **gating** lane MUST assert, over 40 recorded seeds each:
 
-  | Match | Threshold |
-  | --- | --- |
-  | `easy` vs uniform random | ≥ 95% |
-  | `steady` vs `easy` | ≥ 60% |
-  | `sharp` vs `steady` | ≥ 60% |
-  | `sharp` vs `easy` | ≥ 80% |
+  | Match | Null (self-play) | Measured | Threshold |
+  | --- | --- | --- | --- |
+  | `easy` vs uniform random | ~50% | 100.0% | ≥ 95% |
+  | `steady` vs `easy` | 62.5% | 88.8% | ≥ 70% |
+  | `sharp` vs `steady` | 40.0% | 66.3% | ≥ 55% |
+  | `sharp` vs `easy` | 62.5% | 92.5% | ≥ 80% |
 
-  Every threshold sits well under what the prototype measured, so a failure is a regression and
-  not a close call.
+  Each threshold is set against the match's **null** — the same player against itself over the same
+  seeds — because a threshold below its null gates nothing. The `steady` row is why the nulls are
+  here: at ≥ 60% it was cleared by substituting `easy` for `steady`, since two identical players
+  split 62.5% on seat advantage alone ([M5-3]). The lane MUST print each match's null beside its
+  result, so the number a gate has to beat is on screen next to the number it produced.
 
 - **[M5-17]** The gating lane MUST run the tiers at **reduced node budgets**, declared in the lane
   and overridden through `Options.nodes` ([0004 B4-26]), chosen so the whole lane finishes within
-  [M5-20]'s budget. It MUST assert the ordering, and it MUST NOT be reported as a measurement of
-  the shipped opponent.
+  [M5-20]'s budget. It MUST assert the ordering **on the recorded seeds**, and it MUST NOT be
+  reported as a measurement of the shipped opponent, nor as establishing the ordering as a fact
+  about Azul — that is [M5-16]'s wide lane.
+
+  The distinction is not pedantry. `sharp` over `steady` measures 66.3% with a one-sided 95% lower
+  bound near 50%, which does not exclude the two being equal. What the lane pins is that this bot,
+  on these forty deals, is ordered; the 40.0% self-play null beside it is the evidence that the
+  horizon buys *something*.
 
   *An honest proxy, and the reason it needs saying: `sharp` at its shipped 400 000 nodes is about
   1.2 seconds a move ([0004 B4-47]) and a game is about 70 plies, so forty games is roughly an
@@ -213,8 +256,13 @@ opponent without ever making a mistake worth pointing at.
 
 - **[M5-18]** The arena MUST provide an audit that, over recorded positions, compares the move a
   tier played against the best move found by a **reference search** — `sharp` at ten times its
-  node budget — and reports the regret distribution: mean, 95th percentile, maximum, and the
-  positions producing the worst ones.
+  node budget, that budget being for valuing the whole position and split across its legal moves —
+  and reports the regret distribution: mean, 95th percentile, maximum, and the positions producing
+  the worst ones.
+
+  *The split matters and is easy to read the other way: a per-move budget of four million would
+  make a twenty-move position cost eighty million nodes, four minutes rather than twelve seconds,
+  and would put [M5-31]'s generator out of reach of anyone willing to run it.*
 - **[M5-31]** The reference search's per-action values MUST be computed once and **committed
   beside the audit corpus**, and the gating lane MUST read them rather than recompute them. The
   file MUST record the budget and the bot commit that produced it, and a test MUST fail when the
@@ -229,8 +277,31 @@ opponent without ever making a mistake worth pointing at.
   reference regenerated whenever the bot changes measures the bot against itself and would call
   every regression a tie. Regenerating it is a deliberate act with a commit message, like
   [M5-15]'s baseline.*
-- **[M5-19]** In the gating lane, `sharp` MUST have a maximum regret of no more than 5 points and a
-  mean regret of no more than 0.5 over the audit corpus.
+- **[M5-19]** In the gating lane, `sharp` at its **shipped** budget MUST commit no **decisive
+  blunder** — no position where the reference found a certain win and the played move gave it up —
+  and over the *scored* positions MUST have a mean regret of no more than 1.5 points. There is
+  deliberately **no threshold on the maximum**.
+
+  *Two measures because there are two kinds of mistake and one unit cannot hold both. A terminal
+  value carries `WIN` ([0004 B4-13]), so giving up a won game scores about two million; averaged in
+  with the rest it drowns every point-sized mistake, and measured that way the mean came out near
+  200 000 — a statement about results wearing the units of points.*
+
+  *The numbers were written before the audit existed (5 and 0.5) and are now set from it. Measured
+  over the committed corpus: shipped `sharp` 0 decisive / 1.076 mean / 13.66 max; `steady` 1 /
+  0.985 / 8.94; `easy` 1 / 1.728 / 8.94; uniform random 2 / 6.588 / 17.33. So 1.5 discriminates
+  against a one-ply player where 2 would not. The maximum clause is **dropped** rather than
+  loosened: any bar admitting the shipped opponent's 13.66 also admits a player choosing uniformly
+  at random, which would be a decoration and not a gate.*
+
+  *One limit on what "no decisive blunder" establishes, and one thing that is **not** a limit. It
+  rests on **three positions** — the corpus holds exactly three where any move is valued as a
+  certain win. But those three are fully reliable: every action at each was searched to completion
+  (22/22, 16/16 and 4/4), and every winning move in them comes from a completed search, so "the
+  reference found a certain win" is a fact there rather than an artifact of a truncated one. The
+  caveat is sample size alone. And neither the mean nor the maximum tracks strength: `steady` scores better than
+  shipped `sharp` on both. The decisive count is the only clause with power, on a sample that
+  small.*
 - **[M5-21]** The audit corpus MUST include positions from the last two rounds of recorded games,
   and MUST be recorded rather than sampled at run time.
 
@@ -288,6 +359,15 @@ opponent without ever making a mistake worth pointing at.
 | [M5-20] | A `SHOULD` about the lane's own runtime. |
 | [M5-22], [M5-23] | Statements about what may be claimed, and a procedure involving a human. The suite has no human and no claims. |
 
+### What is not checked here
+
+The arena's own source is scanned by nothing. [0004 B4-51]'s source check reads `packages/bot/src`
+only, so `arena/` could grow a re-implemented rule — a penalty ladder, a wall stride, a second
+reading of [0001 E1-38] — without tripping anything. That is accepted rather than fixed: this is
+measurement code, it ships nowhere, and a second scanner over it would cost more than the risk. It
+is written down so the next person to add strength arithmetic here knows the tripwire they are
+used to is absent.
+
 ## Open questions
 
 - **Is a winrate the right unit at all?** An Elo-style rating over the whole ladder would make
@@ -299,6 +379,43 @@ opponent without ever making a mistake worth pointing at.
   against a deeper version of the same evaluation, so a systematic error in the evaluation is
   invisible to it — both searches share the blind spot. A second, independently-weighted evaluation
   would catch that, and nothing else here would.
+- **The audit cannot rank a terminal fact against a heuristic guess, and roughly 40% of the corpus
+  is such a pair.** A move that ends the game carries `±WIN`; a move that merely postpones it
+  carries a guess. Comparing them says nothing, and comparing them anyway was the audit's most
+  misleading output: at one recorded position the reference rates its best move at −1 and a
+  game-ending move at −1 000 002, which reads as every tier throwing the game away — the shipped
+  `sharp` included.
+
+  It is **not** the round-boundary horizon. That was the first explanation and it is wrong: the
+  reference calls the same search, so [0004 B4-6] applies to both sides and cancels in the
+  difference. It is the reference's *depth*. Across the three positions, none of the alternatives
+  valued as still-a-game had a completed search (0 of 23, 0 of 12, 0 of 7) while some of the moves
+  condemned as losses did (1 of 9, 3 of 28, 0 of 24), and the two groups sat about a ply apart. The
+  guess-valued alternatives are simply shallower searches that had not reached the terminal yet.
+
+  Those pairs are counted apart — `hopeless` (every move already a certain loss), `heldOn` (the
+  played move won too), and `condemned` (the reference rated the played move a loss and did not
+  finish searching the alternatives) — and nothing gates on any of them. Honest, but it leaves the
+  endgame, the thing intent 0003 names, measured on barely half the corpus. Closing it needs a
+  reference deep enough that its guesses are worth something at a wide root, which is the next
+  question below.
+- **The reference is weakest exactly where the corpus's regret lives.** At the wide roots that
+  produce every non-zero regret it gets 74 000–129 000 nodes per move and completes almost nothing;
+  at the narrow late-round positions it completes easily and regret is 0.00. Overall it finishes
+  261 of 743 searches. An oracle sharpest where nothing is at stake is a real limit on [M5-18], and
+  it is the same limit as the 13.66 below. The corpus records per action whether the reference
+  finished ([M5-31]) — recorded, and not yet used to filter anything, which is the cheapest
+  available improvement to this instrument.
+- **Regret tracks the branching factor, not the endgame, and the 13.66 outlier is unexplained.**
+  Over the scored positions: eight with 30 or more legal moves average 2.357 and hold the 13.66
+  maximum; eleven with fewer average 0.144 and top out at 1.36. Eleven of nineteen score exactly
+  zero. The horizon does **not** explain it — the reference calls the same search, so [0004 B4-6]
+  applies to both sides and cancels in the difference. What does not cancel is depth: at a 46-move
+  root the reference gets about 87 000 nodes per move against `sharp`'s 400 000 spread across all
+  of them, roughly ten times deeper into the same tree. So the maximum is measuring the *player*,
+  and whether 13.66 is an evaluation weakness or just "400 000 is not 4 000 000 at a wide root" is
+  open. It is not a tail of the distribution — the 95th percentile is 2.02 — it is a different
+  animal, and it should be opened before any threshold is written around it.
 - **How many recorded seeds is enough for [M5-15]'s baseline to be a useful memory?** 200 puts the
   95% bound roughly ±6 points around a 75% winrate, which is wide enough that a genuine 4-point
   improvement is invisible. The answer is probably "more, run overnight", and the question is

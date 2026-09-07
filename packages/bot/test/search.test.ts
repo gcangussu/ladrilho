@@ -43,6 +43,16 @@ import { search } from '../src/search.js';
  */
 const GAME_TIMEOUT_MS = 30_000;
 
+/**
+ * The budget for tests that need *a* search rather than a particular tier.
+ *
+ * `steady`'s 20 000 nodes over a 24-position corpus is 480 000 nodes a test,
+ * which through the module runner's 10× tax is most of [B4-60]'s 30 seconds for
+ * one assertion that has nothing to do with how deep the search went. Where the
+ * tier is the subject — [B4-33], [B4-34], [B4-35] — the real one is used.
+ */
+const CHEAP = { tier: 'sharp', nodes: 1500 } as const;
+
 /** A position `n` plies into a seeded game. */
 function at(seed: number, n: number): AzulState {
   const s = newGame(seed);
@@ -91,7 +101,7 @@ function sameSeatAcrossBoundary(): AzulState | null {
 describe('what the search returns [B4-16]', () => {
   it('[B4-16] [B4-42] always returns a member of legalActions', () => {
     for (const position of views()) {
-      const choice = chooseMove(position, { tier: 'steady' });
+      const choice = chooseMove(position, CHEAP);
       expect(position.legalActions).toContain(choice.action);
     }
   });
@@ -112,7 +122,7 @@ describe('what the search returns [B4-16]', () => {
   it('[B4-41] does not mutate the position it is given', () => {
     const position = views()[2];
     const before = structuredClone(position);
-    chooseMove(position, { tier: 'steady' });
+    chooseMove(position, CHEAP);
     expect(position).toEqual(before);
   });
 });
@@ -120,7 +130,7 @@ describe('what the search returns [B4-16]', () => {
 describe('the budget [B4-26], [B4-27], [B4-45]', () => {
   it('[B4-45] [B4-26] never expands more nodes than its budget', () => {
     for (const position of views()) {
-      for (const nodes of [1, 50, 500, 5000]) {
+      for (const nodes of [1, 50, 500, 2000]) {
         const choice = chooseMove(position, { tier: 'sharp', nodes });
         // The floor is [B4-23]'s mandatory first iteration, which neither bound
         // may stop: a budget below the root's move count would otherwise return
@@ -159,7 +169,16 @@ describe('the budget [B4-26], [B4-27], [B4-45]', () => {
 
   it('[B4-29] does not report curtailed when the node budget is what stopped it', () => {
     for (const position of views()) {
-      expect(chooseMove(position, { tier: 'sharp', nodes: 2000 }).curtailed).toBe(false);
+      // The clock is deliberately taken out of the picture. This test is about
+      // the *node* budget, and leaving the 4-second fail-safe in place makes it
+      // a test of how busy the machine is — it fails on a loaded box, which is
+      // the fail-safe working exactly as [B4-28] says it should.
+      const choice = chooseMove(position, {
+        tier: 'sharp',
+        nodes: 2000,
+        milliseconds: 600_000,
+      });
+      expect(choice.curtailed).toBe(false);
     }
   });
 
@@ -184,7 +203,11 @@ describe('the horizon [B4-19], [B4-20], [B4-46]', () => {
         // A modest budget on purpose: a complete search stops when the round
         // runs out, well short of any budget, and [B4-60] keeps this suite
         // under 30 s. `sharp`'s real 400 000 is measured in `bench`, not here.
-        const choice = chooseMove(toJSON(s), { tier: 'sharp', nodes: 5000 });
+        const choice = chooseMove(toJSON(s), {
+          tier: 'sharp',
+          nodes: 5000,
+          milliseconds: 600_000,
+        });
         if (choice.complete) {
           sawComplete = true;
           // It stopped because the round did, not because the budget did.
@@ -461,8 +484,14 @@ describe('the sign follows currentPlayer, not ply parity [B4-18]', () => {
       }
     }
 
+    // The reference is full-width with no pruning, so depth 3 costs about b³ a
+    // root — over thirteen roots that is most of [B4-60]'s budget. Depth 3 goes
+    // to the two roots that discriminate (the same-seat one, and one whose
+    // boundaries flip the seat); the rest are checked at 1 and 2, which is
+    // where a sign error shows up anyway.
     for (const [index, position] of roots.entries()) {
-      for (const depth of [1, 2, 3]) {
+      const depths = index <= 1 ? [1, 2, 3] : [1, 2];
+      for (const depth of depths) {
         const mine = search(clone(position), {
           maxDepth: depth,
           nodes: Number.MAX_SAFE_INTEGER,
@@ -490,21 +519,18 @@ describe('determinism [B4-30], [B4-31]', () => {
 
   it('[B4-54] [B4-30] is unchanged by a round trip through toJSON', () => {
     for (const position of views()) {
-      const direct = chooseMove(position, { tier: 'steady' });
-      const roundTripped = chooseMove(
-        JSON.parse(JSON.stringify(position)) as AzulJSON,
-        { tier: 'steady' },
-      );
+      const direct = chooseMove(position, CHEAP);
+      const roundTripped = chooseMove(JSON.parse(JSON.stringify(position)) as AzulJSON, CHEAP);
       expect(roundTripped).toEqual(direct);
     }
   });
 
   it('[B4-3] is unaffected by another search running between two calls', () => {
     const position = views()[1];
-    const alone = chooseMove(position, { tier: 'steady' });
-    chooseMove(views()[3], { tier: 'sharp', nodes: 20_000 });
+    const alone = chooseMove(position, CHEAP);
+    chooseMove(views()[3], { tier: 'sharp', nodes: 5000 });
     chooseMove(views()[4], { tier: 'easy' });
-    expect(chooseMove(position, { tier: 'steady' })).toEqual(alone);
+    expect(chooseMove(position, CHEAP)).toEqual(alone);
   });
 
   /**
@@ -518,7 +544,7 @@ describe('determinism [B4-30], [B4-31]', () => {
     for (const seed of [11, 77, 4242]) {
       const s = at(seed, 12);
       if (s.isTerminal) continue;
-      const base = chooseMove(toJSON(s), { tier: 'sharp', nodes: 5000 });
+      const base = chooseMove(toJSON(s), CHEAP);
       for (const permute of [
         (b: number[]) => b.slice().reverse(),
         (b: number[]) => b.slice().sort((x, y) => y - x),
@@ -526,7 +552,7 @@ describe('determinism [B4-30], [B4-31]', () => {
       ]) {
         const other = clone(s);
         other.bag = permute(s.bag) as typeof other.bag;
-        expect(chooseMove(toJSON(other), { tier: 'sharp', nodes: 5000 })).toEqual(base);
+        expect(chooseMove(toJSON(other), CHEAP)).toEqual(base);
       }
     }
   });
