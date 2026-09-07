@@ -1,0 +1,24 @@
+{
+  "name": "bot",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Azul move chooser: evaluation, search and difficulty tiers (spec 0004).",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "bench": "node bench/bundle.mjs && vitest bench --run --reporter verbose --config vitest.bench.config.ts"
+  },
+  "dependencies": {
+    "engine": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0",
+    "esbuild": "^0.28.2"
+  }
+}

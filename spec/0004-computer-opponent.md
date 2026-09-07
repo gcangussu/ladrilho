@@ -104,7 +104,7 @@ Constants this document fixes:
 | `TIERS` | `'easy' \| 'steady' \| 'sharp'` | [B4-32] |
 | `WIN` | `1_000_000` | [B4-13] |
 | Node budgets | `ACTION_SPACE` (180), `20_000`, `400_000` | [B4-33], [B4-34], [B4-35] |
-| Fail-safe cap | 4000 ms | [B4-28] |
+| `FAIL_SAFE_MS` | 4000 ms | [B4-28] |
 
 ## Data model
 
@@ -414,7 +414,13 @@ function evaluate(s: AzulState, p: Player): number;                  // [B4-11],
 
 const BUDGETS: Readonly<Record<Tier, number>>;                       // [B4-33]..[B4-35]
 const TIERS: readonly Tier[];                                        // in strength order [B4-36]
+const FAIL_SAFE_MS: number;                                          // 4000; see [B4-28]
 ```
+
+- **[B4-62]** The search itself MUST NOT be exported from the package. It takes an `AzulState`, and
+  a state carries the bag in order — exporting it would put a public door through the barrier
+  [B4-5] describes as structural. `chooseMove` cannot leak a bag order because it was never handed
+  one, and that argument holds only while it is the only way in.
 
 - **[B4-39]** `chooseMove` MUST throw a `TypeError` on an unknown tier and on a `nodes` or
   `milliseconds` override that is not a positive integer, rather than silently substituting a
@@ -437,10 +443,20 @@ All hold of every call, and all are asserted directly by the tests in *Verificat
   barrier: the day someone widens the seam to hand the bot a state, this is the test that fails,
   and it fails for the right reason.*
 
-- **[B4-45]** `nodes <= options.nodes ?? BUDGETS[tier]`, unless `curtailed`.
-- **[B4-46]** No state reachable from the root during a search has a `roundIndex` greater than the
-  root's, and none is reached after a boundary ply. This is [B4-6] and [B4-19] as a property of the
-  search tree.
+- **[B4-45]** `nodes <= max(options.nodes ?? BUDGETS[tier], ACTION_SPACE)`, unless `curtailed`.
+
+  *The `ACTION_SPACE` floor is [B4-23]'s first iteration, which neither bound may stop. A budget
+  smaller than the root's legal move count would otherwise return an action nothing looked at
+  carrying a value nothing computed — and depth 1 costs exactly one node per legal action, so the
+  overshoot can never exceed the action space [0001 E1-6]. It is the same bound [B4-33] already
+  gives `easy`.*
+- **[B4-46]** No state is **expanded** after a boundary ply: a boundary node is created, valued and
+  left alone. This is [B4-6] and [B4-19] as a property of the search tree.
+
+  *Stated as "expanded" rather than "reached", because reached is false of any conforming
+  implementation and always was: a boundary child necessarily carries `roundIndex + 1`, and
+  [B4-19] **requires** it to be created so it can be valued. What must not happen is a ply played
+  from it.*
 
 ## Performance
 
@@ -527,6 +543,17 @@ A regression is a bug to file. The measurements live in `packages/bot/bench`.
 - **[B4-58]** The suite MUST assert the engine additions it depends on: that `placementValue`
   ([B4-9]) agrees with the round scoring of *0002*'s whole vector corpus, and that `fromJSON`
   ([B4-10]) reproduces `legalActions` and `tilesLeft` for every position in it.
+- **[B4-61]** The suite MAY wrap the engine's `apply` **and `clone`** to observe the shape of the
+  search tree, and MUST use it only for [B4-46] and [B4-22]. Sanctioned explicitly, for the reason
+  [0003 U3-80] sanctions spying on `newGame`: both are properties of a *history*, and no state the
+  search returns can show whether a node past a boundary was expanded, or which move an iteration
+  opened with.
+
+  *`clone` is named because wrapping `apply` alone does not work, and looks like it does. A search
+  expands a node as `clone` then `apply`, so a state marked when a boundary ply produced it is
+  never itself passed to `apply` again — its clone is, and a clone is a different object. A test
+  built that way passes with the horizon removed entirely. The mark has to cross the copy.*
+
 - **[B4-59]** Every requirement in this document — every `MUST` and `SHOULD`, and every `MAY` the
   implementation exercises — MUST be either cited by at least one test, by identifier, in a test
   name or an adjacent comment, or listed with a reason in the *Traceability exemptions* table. A
@@ -546,6 +573,8 @@ reason, and a `MUST` about observable behaviour MUST NOT be exempted.
 | --- | --- |
 | [B4-8], [B4-14] | Implementation-strategy directives about where a value comes from and what it weighs. [B4-51] checks the decidable part; the residue is a judgement, and no behaviour distinguishes a conforming eval from one that reaches the same numbers the wrong way. |
 | [B4-32] | A statement about the shape of the tier set, realised by [B4-33] through [B4-36], each of which is asserted. Nothing is left for it to assert on its own. |
+| [B4-25] | A `MAY` the implementation does not exercise — there is no transposition table. [B4-59] requires a citing test only for a `MAY` that is actually taken; if one is added, the test it names becomes mandatory with it. |
+| [B4-36] | A statement about *measured* strength, which is [0005 M5-12] and [0005 M5-13]'s to assert. A winrate needs a match and a match needs many games, which is why 0005 owns a lane of its own and why this suite's 30 seconds ([B4-60]) cannot hold one. |
 | [B4-47], [B4-48], [B4-49], [B4-50] | `SHOULD` budgets, declared non-gating above, and two of them are about hardware the suite does not run on. |
 | [B4-60] | A `SHOULD` about the suite's own runtime. |
 
