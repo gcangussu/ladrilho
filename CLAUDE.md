@@ -18,6 +18,24 @@ present.
 Determinism matters: the only randomness is bag shuffling, which must be seedable so games replay
 exactly.
 
+## When a change adds a caller
+
+Two user-visible bugs shipped into review here, and neither was in the new code. Both were in the
+*interaction* between new code and an old requirement: [0003 U3-42] published one view model per
+ply until something else started publishing too, and [0003 U3-7]'s one-request guard held because
+nothing had ever asked twice. Both were invisible to a suite of 142 tests, because every existing
+test of the old requirement predated the new caller — `transition` was only ever exercised hot-seat,
+and nothing provoked the race.
+
+So: **when a change adds a caller to an existing seam, the existing seam's own tests need a case in
+the new configuration.** That is a question to ask of a diff, not a habit to remember.
+
+The related one, learned the same way: a test that claims to catch something specific is worth
+nothing until it has been seen to fail. Three tests here asserted nothing and all three had been
+reasoned about correctly in prose — a horizon check that passed with the horizon deleted, an
+anytime check that passed under the bug it named, a sign check standing on the one position where
+its subject is invisible. Mutate the code, watch the test fail, then keep it.
+
 ## Intent and spec
 
 - `intent/` — plain-language documents saying what we want and why, written before the code. Never
