@@ -98,9 +98,11 @@ reference is *stale by design*, because one regenerated alongside the bot measur
 itself and reports every regression as a tie. It records the commit that produced it, marked dirty
 if the tree was.
 
-**`wide.mjs`** is the 200-seed run at shipped budgets that produces the committed baseline. It
-takes hours and is the only lane whose numbers may be quoted as a measurement of the opponent that
-ships — `ladder` runs reduced budgets and pins the ordering on its recorded seeds, nothing more.
+**`wide.mjs`** is the 200-seed run at shipped budgets that *would* produce the committed baseline.
+It takes hours and is the only lane whose numbers may be quoted as a measurement of the opponent
+that ships — `ladder` runs reduced budgets and pins the ordering on its recorded seeds, nothing
+more. **No baseline is committed yet**: nobody has run it, so nothing in this repository cites a
+number from it.
 
 The search runs in a worker, so the page never blocks. It is handed the board as counts, never the
 bag's order, so it plays with no information a person does not have.

@@ -2,7 +2,7 @@
 title: Engine core
 author: Gabriel Cangussu
 date: 2026-09-03
-status: draft
+status: implemented
 intent: 0001 — Rules engine
 prefix: E1
 summary: >

@@ -2,7 +2,7 @@
 title: Web interface
 author: Gabriel Cangussu
 date: 2026-09-05
-status: draft
+status: implemented
 intent: 0002 — Web interface
 prefix: U3
 depends-on: 0001 — Engine core, 0002 — Engine conformance vectors
@@ -522,6 +522,12 @@ budget.
 - **[U3-77]** The fast suite SHOULD finish in under 30 seconds on a laptop. Slower than that and
   it stops running on save; the allowance over [0002 V2-28]'s ten is for rendering. The browser
   lane of [U3-73] is excluded.
+
+  *This is a wall-clock budget, so it is only meaningful on an idle machine — and a per-test
+  timeout inside it reports contention as failure, which reads as a flaky test rather than as a
+  busy box. Both were mistaken for defects here, once in this suite and once in
+  [0005 M5-8]'s lane. A whole-game test wants generous headroom for that reason, and a timing
+  measurement wants `uptime` read before it is called a finding.*
 
 ### Traceability exemptions
 

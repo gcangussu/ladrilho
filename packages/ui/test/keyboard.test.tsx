@@ -107,7 +107,13 @@ describe('[U3-71] a whole game from the keyboard', () => {
     expect(said.filter((s) => s.includes('Player 2 to move.')).length).toBeGreaterThan(0);
     expect(said.filter((s) => /Round \d+ scored\./.test(s)).length).toBeGreaterThan(0);
     expect(said[said.length - 1]).toMatch(/Game over\./);
-  });
+    // Headroom, not a fix. A whole game driven through the DOM one keypress at
+    // a time is the slowest test in the package — about 9 seconds of work — so
+    // the default 20 s left barely 2.3x, and on a machine running anything else
+    // it times out. That is contention rather than a defect, but a per-test
+    // wall-clock limit with that little room reports contention as failure, and
+    // a failing test is read as a broken one.
+  }, 60_000);
 });
 
 /** `floorOccupied` for the oracle state, which is the engine's own arithmetic. */

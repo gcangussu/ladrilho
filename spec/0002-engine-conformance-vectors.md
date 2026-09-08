@@ -2,7 +2,7 @@
 title: Engine conformance vectors
 author: Gabriel Cangussu
 date: 2026-09-03
-status: draft
+status: implemented
 intent: 0001 — Rules engine
 prefix: V2
 depends-on: 0001 — Engine core

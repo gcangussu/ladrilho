@@ -210,6 +210,36 @@ describe('the turn loop [W6-6], [W6-7], [W6-8]', () => {
     expect(harness.pending).toHaveLength(2);
   });
 
+  /**
+   * The assertion that actually defends the guard [W6-7], [W6-32].
+   *
+   * The four assertions in the test above hold with the `thinking` guard
+   * removed — verified — because the loop is one-ask-per-publish
+   * architecturally and nothing there provokes a second ask while one is
+   * outstanding. This does: `startNewGame` asks synchronously while the opening
+   * ask is still sitting in its deferred task. Both would carry the *same*
+   * generation, so [W6-16] cannot tell them apart and the guard is the only
+   * thing between one request and two.
+   */
+  it('[W6-32] [W6-7] does not race the deferred opening ask', async () => {
+    history.replaceState({}, '', '/?seed=42&seating=easy-human');
+    vi.resetModules();
+    const state = (await import('../src/game.js')) as StateModule;
+    const harness = deferredThinker();
+    state.useThinker(harness.seam);
+
+    // Synchronously, before the deferred opening ask has run.
+    state.startNewGame();
+    flush();
+    expect(harness.pending, 'the new game did not ask').toHaveLength(1);
+
+    // Now let the opening task fire. It must find a request outstanding and
+    // add nothing.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    flush();
+    expect(harness.pending, 'the deferred opening ask raced the new game').toHaveLength(1);
+  });
+
   it('[W6-8] [W6-34] submits a move that was legal in the position it asked about', async () => {
     const { state, harness } = await load('?seed=42&seating=easy-human');
     const asked = harness.pending[0].position;
@@ -230,6 +260,60 @@ describe('the turn loop [W6-6], [W6-7], [W6-8]', () => {
     }
     expect(state.view().game.isTerminal).toBe(true);
     expect(answered).toBeGreaterThan(20);
+  }, 30_000);
+});
+
+/**
+ * The coverage hole that let a real regression through: every existing
+ * transition test is hot-seat, so nothing exercised a publish with the computer
+ * next to move — which is exactly when the transition was being dropped.
+ */
+describe('round transitions survive a computer opponent [0003 U3-42]', () => {
+  /** Play to the end, collecting every published transition. */
+  async function transitionsOver(search: string): Promise<number> {
+    const { state, harness } = await load(search);
+    let published = 0;
+    let seen = 0;
+    let answered = 0;
+    let plies = 0;
+    while (!state.view().game.isTerminal && plies < 400) {
+      const before = state.view().game;
+      if (state.view().thinking !== null) {
+        await harness.answer(answered);
+        answered++;
+      } else {
+        state.submit(state.view().game.legalActions[0]);
+        flush();
+      }
+      const after = state.view();
+      // [0003 U3-39]: a transition happened when the round advanced or the
+      // game ended. Counted from the games themselves, independently of
+      // whether the view model reported one.
+      if (after.game.round > before.round || (after.game.isTerminal && !before.isTerminal)) {
+        seen++;
+        if (after.transition !== null) published++;
+      } else {
+        // [0003 U3-42]: null on every other ply.
+        expect(after.transition).toBeNull();
+      }
+      plies++;
+    }
+    expect(seen, `${search}: no transition happened at all`).toBeGreaterThan(2);
+    return published === seen ? seen : -1;
+  }
+
+  it('[0003 U3-42] publishes one on every transition, computer to move or not', async () => {
+    // Two seatings, because the loss depended on who moved next: with two
+    // computers every non-terminal transition vanished, and with one it was
+    // about half of them. Only the terminal one survived, because the loop
+    // returns early on a finished game. A third seating is a third whole game
+    // for no extra coverage.
+    for (const seating of ['human-easy', 'easy-easy']) {
+      const result = await transitionsOver(`?seed=42&seating=${seating}`);
+      expect(result, `${seating}: a transition happened without being published`).toBeGreaterThan(
+        2,
+      );
+    }
   }, 30_000);
 });
 

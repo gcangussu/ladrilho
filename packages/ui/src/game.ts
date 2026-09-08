@@ -31,6 +31,7 @@ import {
   type Choice,
   type Seating,
   type Thinker,
+  type ToWorker,
 } from './opponent.js';
 
 /** What a transition put on the wall and what it cost [U3-42]. */
@@ -259,7 +260,11 @@ const [view, setView] = createSignal<ViewModel>(deal(seedFromUrl(location.search
  * forever.
  */
 setTimeout(() => {
-  askIfComputerToMove();
+  const request = pendingRequest();
+  if (request === null) return;
+  // One publish, carrying `thinking`, and only when there is something to say.
+  setView(nextView());
+  dispatch(request);
 }, 0);
 
 /** The published view model — the only state-derived thing a component reads [U3-6]. */
@@ -268,34 +273,52 @@ export { view };
 /**
  * Replace the view model wholesale; never mutate the one it replaces [U3-21].
  *
- * Every publish is followed by a look at whose turn it now is [W6-6]: this is
- * the one place that knows a ply has landed, whichever way it arrived.
+ * **Exactly one `setView` per ply**, which is [U3-42] and is easy to lose. Solid
+ * v2 stages writes, so a second `setView` in the same task discards the first —
+ * and because {@link nextView} advances `previous`, that second view model
+ * computes its transition against the position it was just built from and comes
+ * out `null`. A publish followed by a separate "now say it is thinking" publish
+ * therefore drops the round transition entirely: the tiles that arrived on the
+ * wall and each player's score change ([U3-43]) never render.
+ *
+ * That was a real regression and it was invisible — the transition tests are
+ * hot-seat, so nothing exercised a publish with the computer next to move.
+ * Hence the shape here: decide who moves next and mark `thinking` *before* the
+ * single publish, then send the request.
  */
 function publish(): void {
+  const request = pendingRequest();
   setView(nextView());
-  askIfComputerToMove();
+  if (request !== null) dispatch(request);
 }
 
 /**
- * Issue exactly one request when the seat to move is a tier [W6-6], [W6-7].
+ * Decide whether the seat to move is a tier, and mark `thinking` if it is
+ * [W6-6], [W6-19]. Returns the request to send, or `null`. Publishes nothing.
  *
  * Guarded on `thinking`, so a second request cannot be issued while one is
- * outstanding — which also makes [W6-9] terminate: two tiers alternate through
- * this function, one ply at a time, each publish waking the next request.
+ * outstanding [W6-7] — which also makes [W6-9] terminate: two tiers alternate
+ * through here one ply at a time, each publish waking the next request. The
+ * guard is load-bearing in a second, less obvious way: the opening ask is
+ * deferred by a task, so a `startNewGame` in between would otherwise race it
+ * and issue two requests carrying the same generation, which [W6-16] cannot
+ * filter apart.
+ */
+function pendingRequest(): ToWorker | null {
+  if (state.isTerminal || thinking !== null) return null;
+  const seat = state.currentPlayer;
+  const tier = tierAt(seating, seat);
+  if (tier === null) return null;
+  thinking = { seat };
+  return { generation, position: toJSON(state), tier };
+}
+
+/**
+ * Send a prepared request and act on the reply.
  *
  * The search itself never runs here [W6-10]; this only asks.
  */
-function askIfComputerToMove(): void {
-  if (state.isTerminal || thinking !== null) return;
-  const seat = state.currentPlayer;
-  const tier = tierAt(seating, seat);
-  if (tier === null) return;
-
-  const request = { generation, position: toJSON(state), tier };
-  thinking = { seat };
-  // Republished so the interface can say it is thinking, honestly [W6-20].
-  setView(nextView());
-
+function dispatch(request: ToWorker): void {
   void seam()
     .think(request)
     .then((reply) => {
@@ -325,9 +348,13 @@ function askIfComputerToMove(): void {
  * ships.
  */
 function startGame(seed: number): void {
-  setView(deal(seed));
-  // The opening position may already be the computer's to play [W6-6].
-  askIfComputerToMove();
+  // `deal` resets the held state and builds the opening view; the request is
+  // decided against that state *before* the view is published, so a new game
+  // is one `setView` like every ply is [U3-42].
+  const opening = deal(seed);
+  const request = pendingRequest();
+  setView(request === null ? opening : nextView());
+  if (request !== null) dispatch(request);
 }
 
 /**
