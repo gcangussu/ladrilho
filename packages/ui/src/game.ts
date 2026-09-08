@@ -13,6 +13,7 @@
 import {
   type AzulJSON,
   type AzulState,
+  type Player,
   NUM_COLORS,
   NUM_ROWS,
   apply,
@@ -21,6 +22,16 @@ import {
   toJSON,
 } from 'engine';
 import { createSignal } from 'solid-js';
+import {
+  HOT_SEAT,
+  isComputer,
+  seatingFromUrl,
+  tierAt,
+  workerThinker,
+  type Choice,
+  type Seating,
+  type Thinker,
+} from './opponent.js';
 
 /** What a transition put on the wall and what it cost [U3-42]. */
 export interface Transition {
@@ -29,6 +40,9 @@ export interface Transition {
   scoreDelta: number[];
   ended: boolean;
 }
+
+/** A search is in flight for this seat [W6-19]. */
+export type Thinking = { seat: Player } | null;
 
 /** Everything a component may read that derives from the game state [U3-6]. */
 export interface ViewModel {
@@ -39,6 +53,19 @@ export interface ViewModel {
   seed: number;
   /** Set on exactly one ply, `null` on every other [U3-42]. */
   transition: Transition | null;
+  /** Who occupies each seat this game [W6-2]. */
+  seating: Seating;
+  /**
+   * Non-null exactly while a request is outstanding [W6-19], [W6-33]. Nothing
+   * else may be used to infer that a search is running.
+   */
+  thinking: Thinking;
+  /**
+   * The last search's own report. Published for diagnostics only and MUST NOT
+   * be rendered [W6-24], [W6-25] — intent 0003 rules out explaining a move, and
+   * [0003 U3-30] already rules out judging one before it is made.
+   */
+  lastChoice: Choice | null;
 }
 
 /**
@@ -50,6 +77,57 @@ let state: AzulState;
 
 /** The seed `state` was dealt from, republished on every ply [U3-14]. */
 let currentSeed: number;
+
+/** Who occupies each seat this game [W6-2]. Changing it deals a new one [W6-3]. */
+let seating: Seating = HOT_SEAT;
+
+/**
+ * Bumped whenever a game is dealt or the seating changes [W6-16].
+ *
+ * A worker reply carrying a stale generation is discarded without submitting —
+ * the search that produced it was asked about a position from a game that no
+ * longer exists, and playing its answer would advance the *new* game by a move
+ * chosen for the old one.
+ */
+let generation = 0;
+
+/** The seat a request is outstanding for, or `null` [W6-19], [W6-32]. */
+let thinking: Thinking = null;
+
+/** The last `Choice`, for [W6-25] only. Never rendered [W6-24]. */
+let lastChoice: Choice | null = null;
+
+/**
+ * The worker seam [W6-18]. Created lazily and replaced only by a test — a
+ * two-person game never builds one, so it never spawns a worker [W6-13].
+ */
+let thinker: Thinker | null = null;
+
+/**
+ * Substitute the seam [W6-18]. For the fast suite, which has no `Worker`.
+ *
+ * Replacing a seam **abandons whatever the old one was thinking about**: the
+ * generation is bumped so a late reply from it is discarded [W6-16], and the
+ * outstanding flag is cleared [W6-13].
+ *
+ * It deliberately does **not** restart the loop. An earlier version did, and it
+ * hid a real defect: the opening ask was missing entirely, so every fast-suite
+ * test passed — each one injected a seam, and injecting kicked the loop — while
+ * a page loaded with the computer on seat 0 sat still forever. Only the browser
+ * lane, which injects nothing, ever saw it. The deferred ask below the signal
+ * is what starts a game now, and this function is back to doing one thing.
+ */
+export function useThinker(replacement: Thinker | null): void {
+  thinker?.terminate();
+  thinker = replacement;
+  generation++;
+  thinking = null;
+}
+
+function seam(): Thinker {
+  if (thinker === null) thinker = workerThinker();
+  return thinker;
+}
 
 /**
  * The view model published on the previous ply, kept for exactly one ply and
@@ -140,6 +218,9 @@ function nextView(): ViewModel {
     floorOccupied: [floorOccupied(state, 0), floorOccupied(state, 1)],
     seed: currentSeed,
     transition: prior !== null && transitioned(prior.game, game) ? diff(prior.game, game) : null,
+    seating,
+    thinking,
+    lastChoice,
   };
   previous = next;
   return next;
@@ -150,17 +231,90 @@ function deal(seed: number): ViewModel {
   state = newGame(seed);
   currentSeed = seed;
   previous = null;
+  // A new game abandons whatever the worker was thinking about [W6-16].
+  generation++;
+  thinking = null;
+  lastChoice = null;
   return nextView();
 }
 
+seating = seatingFromUrl(location.search) ?? HOT_SEAT;
 const [view, setView] = createSignal<ViewModel>(deal(seedFromUrl(location.search) ?? freshSeed()));
+
+/**
+ * The opening position may already be the computer's to play [W6-6], and
+ * nothing else would notice: `deal` publishes no ply, so the loop that runs
+ * after every publish never starts.
+ *
+ * Deferred by a task rather than called here, for two reasons. The board paints
+ * before the first search is asked for, so a page opened on
+ * `?seating=sharp-human` shows a board and then says it is thinking, rather
+ * than showing nothing until it does. And it leaves a turn in which
+ * {@link useThinker} can substitute the seam — without that the fast suite
+ * would reach for a real `Worker` on import, and jsdom has none.
+ *
+ * This was a real bug, caught by the browser lane and by nothing else: the
+ * fast suite injects a seam, and injecting one kicks the loop, so every test
+ * there passed while a page loaded with the computer on seat 0 sat still
+ * forever.
+ */
+setTimeout(() => {
+  askIfComputerToMove();
+}, 0);
 
 /** The published view model — the only state-derived thing a component reads [U3-6]. */
 export { view };
 
-/** Replace the view model wholesale; never mutate the one it replaces [U3-21]. */
+/**
+ * Replace the view model wholesale; never mutate the one it replaces [U3-21].
+ *
+ * Every publish is followed by a look at whose turn it now is [W6-6]: this is
+ * the one place that knows a ply has landed, whichever way it arrived.
+ */
 function publish(): void {
   setView(nextView());
+  askIfComputerToMove();
+}
+
+/**
+ * Issue exactly one request when the seat to move is a tier [W6-6], [W6-7].
+ *
+ * Guarded on `thinking`, so a second request cannot be issued while one is
+ * outstanding — which also makes [W6-9] terminate: two tiers alternate through
+ * this function, one ply at a time, each publish waking the next request.
+ *
+ * The search itself never runs here [W6-10]; this only asks.
+ */
+function askIfComputerToMove(): void {
+  if (state.isTerminal || thinking !== null) return;
+  const seat = state.currentPlayer;
+  const tier = tierAt(seating, seat);
+  if (tier === null) return;
+
+  const request = { generation, position: toJSON(state), tier };
+  thinking = { seat };
+  // Republished so the interface can say it is thinking, honestly [W6-20].
+  setView(nextView());
+
+  void seam()
+    .think(request)
+    .then((reply) => {
+      // A reply from a game that no longer exists is dropped, not played
+      // [W6-16]. `thinking` is left alone: whatever superseded this request
+      // already reset it.
+      if (reply.generation !== generation) return;
+      thinking = null;
+      if (!reply.ok) {
+        // [W6-15]. The throw propagates rather than a fallback move being
+        // invented — same discipline as [U3-20], one boundary further out.
+        setView(nextView());
+        throw new Error(`the opponent failed to choose a move: ${reply.message}`);
+      }
+      lastChoice = reply.choice;
+      // A curtailed search still played a legal move [W6-17]; it is a shortened
+      // search, not an error.
+      submit(reply.choice.action);
+    });
 }
 
 /**
@@ -172,6 +326,8 @@ function publish(): void {
  */
 function startGame(seed: number): void {
   setView(deal(seed));
+  // The opening position may already be the computer's to play [W6-6].
+  askIfComputerToMove();
 }
 
 /**
@@ -181,6 +337,24 @@ function startGame(seed: number): void {
  */
 export function startNewGame(): void {
   startGame(freshSeed());
+}
+
+/**
+ * Change who sits where, and deal [W6-3].
+ *
+ * Deliberately not applied to a game in progress. [0003 U3-65] says the
+ * position only ever moves forward from a `newGame`, and a game half-played by
+ * a person and half by a program is one whose seed no longer describes a match
+ * — which is exactly what [0003 U3-14] shows the seed for.
+ */
+export function startWithSeating(next: Seating): void {
+  seating = next;
+  startGame(freshSeed());
+}
+
+/** Whether a seat is played by the computer — for the components [W6-22]. */
+export function computerSeat(seat: Player): boolean {
+  return isComputer(seating, seat);
 }
 
 /**

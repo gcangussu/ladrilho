@@ -27,6 +27,10 @@ const SRC = join(HERE, '..', 'src');
 /** The state module and the components: the two sides [U3-78] names. */
 const STATE_MODULE = 'game.ts';
 const COMPONENTS = `components${sep}`;
+/** The worker seam, the only file that may import `bot` [W6-31], [U3-78]. */
+const SEAM = 'opponent.ts';
+/** What runs inside the worker [W6-12], [U3-78]. */
+const WORKER = 'worker.ts';
 
 interface Source {
   /** Path relative to `src`, so a failure reads as `components/App.tsx`. */
@@ -231,13 +235,47 @@ const CLAUSES: Clause[] = [
 const src = sources();
 
 describe('the module layout the check runs against', () => {
+  /**
+   * [W6-31]. `bot` is reachable from exactly one file, so "the interface
+   * contains no strategy" is a property of the import graph rather than a
+   * promise — the same shape [U3-78] uses for "contains no rule".
+   */
+  it('[W6-31] keeps bot out of the components and the state module', () => {
+    // The ban is on those two, precisely. `worker.ts` imports `bot` because
+    // running the search is its job [W6-12], and `opponent.ts` imports its
+    // types; what must not happen is a component or the held state reaching
+    // strategy directly, because then a move could enter the game without
+    // passing `submit` [W6-8].
+    for (const source of [...inComponents(src), ...inStateModule(src)]) {
+      expect(source.code, `${source.file} imports bot [W6-31]`).not.toMatch(/from\s+'bot'/);
+    }
+    // The two that may really do, so the clause above is not vacuous.
+    expect(src.find((s) => s.file === SEAM)!.code).toMatch(/from\s+'bot'/);
+    expect(src.find((s) => s.file === WORKER)!.code).toMatch(/from\s+'bot'/);
+  });
+
+  /**
+   * [W6-12]. The worker must not be able to reach the held state: if it could,
+   * a move could enter the game without passing `submit` ([U3-18], [W6-8]).
+   */
+  it('[W6-12] keeps the state module out of the worker', () => {
+    const worker = src.find((s) => s.file === WORKER);
+    expect(worker, `${WORKER} is missing`).toBeDefined();
+    expect(worker!.code, 'the worker imports the state module [W6-12]').not.toMatch(
+      /from\s+'\.\/game\.js'/,
+    );
+    expect(worker!.code, 'the worker imports a component [W6-12]').not.toMatch(
+      /from\s+'\.\/components\//,
+    );
+  });
+
   it('[U3-78] finds the single state module and the components beside it', () => {
     expect(inStateModule(src)).toHaveLength(1);
     expect(inComponents(src).length).toBeGreaterThan(3);
     // Anything outside those two sides has to be accounted for here, or a
     // clause below would quietly stop covering it.
     const other = src.filter((s) => s.file !== STATE_MODULE && !s.file.startsWith(COMPONENTS));
-    expect(other.map((s) => s.file)).toEqual(['main.tsx']);
+    expect(other.map((s) => s.file).sort()).toEqual([SEAM, 'main.tsx', WORKER].sort());
   });
 });
 

@@ -1,6 +1,7 @@
 import type { JSX } from '@solidjs/web';
 import type { AzulJSON } from 'engine';
-import { For } from 'solid-js';
+import { For, Show } from 'solid-js';
+import type { Thinking } from '../game.js';
 
 /**
  * The round, what is left to take, whose turn it is, and the seed this game was
@@ -11,7 +12,12 @@ import { For } from 'solid-js';
  * and all it may: the bag's order is hidden information no player may see
  * [U3-34], [0001 E1-55].
  */
-export function Status(props: { game: AzulJSON; seed: number; names: string[] }): JSX.Element {
+export function Status(props: {
+  game: AzulJSON;
+  seed: number;
+  names: string[];
+  thinking: Thinking;
+}): JSX.Element {
   return (
     <section class="status" aria-label="Game status">
       <p>Round {props.game.round + 1}</p>
@@ -21,6 +27,15 @@ export function Status(props: { game: AzulJSON; seed: number; names: string[] })
           ? 'Game over'
           : `Player ${props.game.currentPlayer + 1} to move`}
       </p>
+      {/*
+        Shown exactly while a request is outstanding [W6-19], [W6-21], and never
+        otherwise — which is the whole of intent 0003's "the interface can say
+        'thinking…' honestly". What it never shows is the value, the depth, or
+        any judgement of the move [W6-24].
+      */}
+      <Show when={props.thinking !== null}>
+        <p class="thinking">Player {(props.thinking?.seat ?? 0) + 1} is thinking…</p>
+      </Show>
       <p class="marker-location">
         First-player marker:{' '}
         {props.game.markerInCenter

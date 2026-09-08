@@ -10,6 +10,7 @@
 
 import { type AzulJSON, floorOccupied, newGame, toJSON } from 'engine';
 import type { ViewModel } from '../src/game.js';
+import { HOT_SEAT } from '../src/opponent.js';
 
 export function openingGame(seed = 42): AzulJSON {
   return toJSON(newGame(seed));
@@ -22,6 +23,9 @@ export function openingView(seed = 42): ViewModel {
     floorOccupied: [floorOccupied(state, 0), floorOccupied(state, 1)],
     seed,
     transition: null,
+    seating: HOT_SEAT,
+    thinking: null,
+    lastChoice: null,
   };
 }
 

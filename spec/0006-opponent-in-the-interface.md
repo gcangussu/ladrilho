@@ -82,7 +82,7 @@ interface Seating {
   players: [Tier | null, Tier | null];
 }
 
-type Thinking = { seat: Player; since: number } | null;
+type Thinking = { seat: Player } | null;
 
 interface ViewModel {
   // …every field 0003 declares, unchanged…
@@ -96,7 +96,7 @@ interface ViewModel {
 The worker protocol, both directions structurally cloneable ([0001 E1-52], [0004 B4-40]):
 
 ```ts
-type ToWorker   = { generation: number; position: AzulJSON; options: Options };
+type ToWorker   = { generation: number; position: AzulJSON; tier: Tier };
 type FromWorker =
   | { generation: number; ok: true;  choice: Choice }
   | { generation: number; ok: false; message: string };
@@ -133,7 +133,13 @@ type FromWorker =
 ### The turn loop
 
 - **[W6-6]** After every publish, if the game is not terminal and the seat to move is a tier, the
-  interface MUST issue exactly one request for that position.
+  interface MUST issue exactly one request for that position. It MUST also issue one for the
+  **opening** position, which no publish follows.
+
+  *The opening is a separate clause because it is a separate code path and was missed once: dealing
+  a game publishes nothing, so a loop that only runs after a publish never starts. Issuing it a
+  task later rather than synchronously is what lets the board paint first, and what leaves room for
+  [W6-18]'s seam to be substituted before the first request.*
 - **[W6-7]** There MUST be at most one request outstanding. A second MUST NOT be issued until the
   first has resolved or been abandoned ([W6-16]).
 - **[W6-8]** A `Choice` that arrives for the current generation MUST be submitted through
@@ -177,6 +183,13 @@ type FromWorker =
   has no `Worker`, so without this seam every requirement in this document would fall to the slow
   browser lane of [0003 U3-73], and [W6-29]'s property test would not exist.*
 
+  *Substituting the seam MUST NOT do anything else — in particular it MUST NOT start the turn loop.
+  An implementation that did hid a real defect for as long as it existed: the opening request of
+  [W6-6] was missing altogether, so a page loaded with the computer on seat 0 sat still forever,
+  and every test in the fast suite passed anyway because each one injected a seam and injecting
+  started the loop. Only [W6-30]'s lane, which injects nothing, could see it. A seam that changes
+  behaviour when it is substituted is a seam that tests something other than what ships.*
+
 ### While it thinks
 
 - **[W6-19]** `thinking` MUST be non-null exactly while a request is outstanding, and MUST name the
@@ -185,6 +198,11 @@ type FromWorker =
   live region of [0003 U3-56], naming the seat.
 - **[W6-21]** The indicator MAY be delayed by up to 200 ms so a fast answer does not flash, and
   MUST NOT persist after the response arrives. It MUST NOT be shown when no request is outstanding.
+
+  *The delay is not taken. It would need `thinking` to carry when the request started, and the
+  flash it prevents does not occur: `easy` is the only tier fast enough to cause one and it is well
+  under a frame. If a tier is ever added that lands in the awkward middle, this is where the
+  permission already is.*
 
   *This is the whole of intent 0003's "the interface can say 'thinking…' honestly": shown when it
   is thinking and at no other time. A delay before showing it is still honest — it is thinking

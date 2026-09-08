@@ -148,7 +148,8 @@ type Selection = { source: number; color: Color } | null;
 - **[U3-5]** Exactly one `AzulState` MUST exist per game: `newGame` is called once per game and
   nowhere else.
 - **[U3-6]** Every value a component reads **that derives from the game state** MUST be a declared
-  field of the view model. The exceptions are the current selection and the stateless engine
+  field of the view model. It gains `seating`, `thinking` and `lastChoice` with the computer
+  opponent ([0006 W6-2], [0006 W6-19], [0006 W6-25]). *(Extended by [0006 W6-28].)* The exceptions are the current selection and the stateless engine
   functions of [U3-4]. A component that needs anything else gets a new view-model field, computed
   at publish time.
 
@@ -160,13 +161,19 @@ type Selection = { source: number; color: Color } | null;
 
 ### Package and build
 
-- **[U3-7]** `packages/ui` MUST depend on `engine` as a workspace dependency, and `engine` MUST be
-  the only dependency that carries any knowledge of **the rules of** Azul. *(Intent 0003 adds
-  `packages/bot`, which knows how to play but asks the engine what is legal; this requirement is
-  about rules, not about strategy.)*
+- **[U3-7]** `packages/ui` MUST depend on `engine` and `bot` as workspace dependencies, and
+  `engine` MUST be the only dependency that carries any knowledge of **the rules of** Azul. `bot`
+  knows how to play but asks the engine what is legal; this requirement is about rules, not about
+  strategy. *(Widened by [0006 W6-28]; the parenthetical it replaces anticipated exactly this.)*
 - **[U3-8]** The client MUST make **no network request at runtime**: no `fetch`,
   `XMLHttpRequest`, `WebSocket`, `navigator.sendBeacon`, dynamic `import()`, or asset addressed by
   an absolute URL. There is no server and there are no accounts.
+
+  The one exception is a same-origin **module worker** constructed from
+  `new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })`, which is the only
+  thing the client loads at run time ([0006 W6-11]). It is a script the bundler resolves at build
+  time and emits beside the client, not a request for data and not a dynamic `import()`; every
+  other item above stays forbidden. *(Widened by [0006 W6-28].)*
 - **[U3-9]** The build output MUST be static files, servable from any file host.
 - **[U3-10]** The package MUST build against Solid **v2** — see <https://v2.solidjs.com>, and the
   notes under *Solid v2* below. v1 patterns are not merely dated here; several are gone.
@@ -181,6 +188,11 @@ type Selection = { source: number; color: Color } | null;
 - **[U3-78]** `packages/ui/src` MUST place the held state, `submit` and `publish` in a **single
   module**, and every component under `src/components/`. Nothing else may import that module's
   state binding.
+
+  Two further modules are named and are neither: `opponent.ts`, the worker seam, which is the only
+  file that may import `bot` ([0006 W6-31]); and `worker.ts`, which runs inside the worker and MUST
+  NOT be reachable from the state module or from a component ([0006 W6-12]).
+  *(Extended by [0006 W6-28].)*
 
   *A structural requirement because three checks depend on being able to name the two sides:
   [U3-75] cannot look for "`apply` outside the submit path" or "a component reading the state"
@@ -210,6 +222,11 @@ type Selection = { source: number; color: Color } | null;
   and is not reachable as a move. [U3-65] is the positive form a test can assert.)*
 - **[U3-18]** Every advance of the game MUST go through a single `submit(action)` path, which
   applies the action to the held state and then publishes. No component calls `apply`.
+
+  `submit` stays **synchronous**. What became asynchronous when the computer opponent arrived is
+  the *arrival* of a move — the turn loop of [0006 W6-6] — not this call. A move from the worker
+  reaches the game through the same `submit` a person's does ([U3-31], [0006 W6-8]).
+  *(Clarified by [0006 W6-28].)*
 - **[U3-19]** `submit` MUST NOT be reachable for an action outside `game.legalActions`.
 - **[U3-20]** `submit` MUST NOT guard against an illegal action either: if it is ever called with
   one, the engine's throw ([0001 E1-14]) MUST propagate. A caught-and-ignored illegal action hides
@@ -468,9 +485,10 @@ budget.
   real-browser needs. Layout requirements need a layout engine and a reload requirement needs a
   reload; excusing them because jsdom has neither would excuse four requirements that came
   straight from the intent.
-- **[U3-74]** The suite MUST assert that `packages/ui`'s `dependencies` are exactly `engine` plus
-  the Solid v2 runtime [U3-10], and that the declared `vitest` range satisfies [U3-11]. An allowlist, not
-  a judgement about which packages "carry the rules" — adding one is a spec change to [U3-7].
+- **[U3-74]** The suite MUST assert that `packages/ui`'s `dependencies` are exactly `engine`, `bot`
+  and the Solid v2 runtime [U3-10], and that the declared `vitest` range satisfies [U3-11]. An
+  allowlist, not a judgement about which packages "carry the rules" — adding one is a spec change
+  to [U3-7]. *(Widened by [0006 W6-28].)*
 - **[U3-75]** The suite MUST include a source check over `packages/ui/src`, using the module layout
   of [U3-78], that fails on: a module-level numeric table of length 5, 7 or 25; either penalty
   ladder; any `%` expression whose right operand is `5` or `NUM_COLORS`; and the action multipliers

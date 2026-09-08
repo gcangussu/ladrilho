@@ -34,7 +34,7 @@ function board(patch: Partial<Parameters<typeof PlayerBoard>[0]> = {}) {
 
 describe('the status panel', () => {
   it('[U3-32] shows the round, the tiles left this round, and where the marker is', () => {
-    const { getByRole } = render(() => <Status game={vm.game} seed={vm.seed} names={names} />);
+    const { getByRole } = render(() => <Status game={vm.game} seed={vm.seed} names={names} thinking={null} />);
     const status = getByRole('region', { name: 'Game status' });
     expect(status).toHaveTextContent(`Round ${vm.game.round + 1}`);
     expect(status).toHaveTextContent(`${vm.game.tilesLeft} tiles left`);
@@ -42,19 +42,19 @@ describe('the status panel', () => {
   });
 
   it('[U3-33] says whose turn it is in words, not by colour alone', () => {
-    const { getByRole } = render(() => <Status game={vm.game} seed={vm.seed} names={names} />);
+    const { getByRole } = render(() => <Status game={vm.game} seed={vm.seed} names={names} thinking={null} />);
     expect(getByRole('region', { name: 'Game status' })).toHaveTextContent(
       `Player ${vm.game.currentPlayer + 1} to move`,
     );
   });
 
   it('[U3-14] shows the seed the game was dealt from', () => {
-    const { getByText } = render(() => <Status game={vm.game} seed={4242} names={names} />);
+    const { getByText } = render(() => <Status game={vm.game} seed={4242} names={names} thinking={null} />);
     expect(getByText('4242')).toBeInTheDocument();
   });
 
   it('[U3-34] shows bag and lid as per-colour counts', () => {
-    const { getByRole } = render(() => <Status game={vm.game} seed={vm.seed} names={names} />);
+    const { getByRole } = render(() => <Status game={vm.game} seed={vm.seed} names={names} thinking={null} />);
     const status = getByRole('region', { name: 'Game status' });
     for (const color of names.keys()) {
       expect(status).toHaveTextContent(
@@ -66,7 +66,7 @@ describe('the status panel', () => {
   it('[U3-36] takes every colour name from game.colorNames', () => {
     const posed = { ...vm.game, colorNames: ['aaa', 'bbb', 'ccc', 'ddd', 'eee'] };
     const { getByRole } = render(() => (
-      <Status game={posed} seed={vm.seed} names={posed.colorNames} />
+      <Status game={posed} seed={vm.seed} names={posed.colorNames} thinking={null} />
     ));
     const status = getByRole('region', { name: 'Game status' });
     for (const name of posed.colorNames) expect(status).toHaveTextContent(name);

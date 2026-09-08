@@ -27,6 +27,11 @@ export function announcement(vm: ViewModel): string {
         : `Game over. Player ${game.outcome === 1 ? 1 : 2} wins, ` +
           `${game.scores[0]} to ${game.scores[1]}.`,
     );
+  } else if (vm.thinking !== null) {
+    // Announced in the live region, naming the seat [W6-20]. It replaces the
+    // "to move" line rather than joining it: a screen reader hearing both would
+    // be told the turn had passed to someone who is not being waited on.
+    parts.push(`Player ${vm.thinking.seat + 1} is thinking.`);
   } else {
     parts.push(`Player ${game.currentPlayer + 1} to move.`);
   }

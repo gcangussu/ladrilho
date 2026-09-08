@@ -1,0 +1,433 @@
+/**
+ * The computer opponent in the interface: *0006 — Opponent in the interface*.
+ *
+ * Every test runs against the injected seam of [W6-18] rather than a real
+ * worker, because jsdom has no `Worker`. That is not a shortcut — without the
+ * seam every requirement in 0006 would fall to the slow browser lane of
+ * [0003 U3-73] and the property test of [W6-29] would not exist. The real
+ * worker is exercised there, by [W6-30].
+ *
+ * The seam resolves through a **deferred** promise, never immediately. One that
+ * answered synchronously would make [W6-32] vacuous: the loop could never
+ * observe a request outstanding, so "at most one" would hold because there was
+ * never one to collide with.
+ *
+ * The interface is mounted by importing it afresh at a chosen URL, the route
+ * `turn.test.tsx` uses: `src/game.ts` deals on import [0003 U3-16], so a fresh
+ * import is a reload. Controls are found by accessible role and name
+ * [0003 U3-68], through the same helpers the components label them with.
+ */
+
+import { render } from '@solidjs/testing-library';
+import { flush } from 'solid-js';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { CENTER, apply, decodeAction, legalActions, newGame, type AzulJSON } from 'engine';
+import { pickName, picksIn } from '../src/components/Displays.jsx';
+import { floorLineName } from '../src/components/FloorLine.jsx';
+import { patternLineName } from '../src/components/PatternLines.jsx';
+import type { FromWorker, Thinker, ToWorker } from '../src/opponent.js';
+
+/** A seam that queues requests and answers only when told to. */
+function deferredThinker(): {
+  seam: Thinker;
+  pending: ToWorker[];
+  answer(index?: number): Promise<void>;
+  fail(message: string, index?: number): void;
+  terminations: () => number;
+} {
+  const pending: ToWorker[] = [];
+  const resolvers: ((reply: FromWorker) => void)[] = [];
+  let terminations = 0;
+
+  return {
+    seam: {
+      think(request) {
+        pending.push(request);
+        return new Promise<FromWorker>((resolve) => resolvers.push(resolve));
+      },
+      terminate() {
+        terminations++;
+      },
+    },
+    pending,
+    async answer(index = 0) {
+      const request = pending[index];
+      resolvers[index]({
+        generation: request.generation,
+        ok: true,
+        choice: {
+          action: request.position.legalActions[0],
+          value: 0,
+          depth: 1,
+          nodes: 1,
+          complete: false,
+          curtailed: false,
+        },
+      });
+      // Two turns of the microtask queue: one for the seam's promise, one for
+      // the `.then` in the state module that submits the move.
+      await Promise.resolve();
+      await Promise.resolve();
+      flush();
+    },
+    fail(message, index = 0) {
+      resolvers[index]({ generation: pending[index].generation, ok: false, message });
+    },
+    terminations: () => terminations,
+  };
+}
+
+type Harness = ReturnType<typeof deferredThinker>;
+type Screen = ReturnType<typeof render>;
+type StateModule = typeof import('../src/game.js');
+
+/**
+ * Mount the interface on a fresh game with the seam injected.
+ *
+ * The seam goes in **before** any seating that would make the computer move, or
+ * the state module would reach for a real `Worker` on the opening position and
+ * jsdom has none.
+ */
+async function mount(search = '?seed=42'): Promise<{
+  screen: Screen;
+  state: StateModule;
+  harness: Harness;
+}> {
+  history.replaceState({}, '', `/${search}`);
+  vi.resetModules();
+  const state = (await import('../src/game.js')) as StateModule;
+  const harness = deferredThinker();
+  // The seam goes in synchronously, in the turn the import resolved on — the
+  // module's opening ask is deferred by a task, so this lands first and the
+  // real `Worker` is never reached. Waiting for that task below is what makes
+  // these tests exercise the *production* start-up path rather than a loop
+  // kicked by the injection itself, which is what hid the missing opening ask.
+  state.useThinker(harness.seam);
+  const { App } = await import('../src/components/App.jsx');
+  const screen = render(() => <App />);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  flush();
+  return { screen, state, harness };
+}
+
+beforeEach(() => {
+  // Solid's testing library unmounts between tests; `vi.resetModules` in
+  // `mount` is what keeps one test's held state out of the next.
+  vi.resetModules();
+});
+
+describe('choosing an opponent [W6-1], [W6-2], [W6-3], [W6-4]', () => {
+  it('[W6-38] [W6-4] honours a seating carried in the URL', async () => {
+    const { state } = await mount('?seed=42&seating=human-steady');
+    expect(state.view().seating.players).toEqual([null, 'steady']);
+    expect(state.computerSeat(1)).toBe(true);
+    expect(state.computerSeat(0)).toBe(false);
+  });
+
+  it('[W6-38] [W6-4] discards a malformed seating, as [0003 U3-13] discards a seed', async () => {
+    for (const bad of ['banana', 'easy', 'easy-banana', 'easy-steady-sharp', '']) {
+      const { state } = await mount(`?seed=42&seating=${bad}`);
+      expect(state.view().seating.players, bad).toEqual([null, null]);
+    }
+  });
+
+  it('[W6-5] lets a person occupy either seat', async () => {
+    const first = await mount('?seed=42&seating=sharp-human');
+    expect(first.state.computerSeat(0)).toBe(true);
+    expect(first.state.computerSeat(1)).toBe(false);
+    const second = await mount('?seed=42&seating=human-sharp');
+    expect(second.state.computerSeat(0)).toBe(false);
+    expect(second.state.computerSeat(1)).toBe(true);
+  });
+
+  it('[W6-3] deals a new game when the seating changes', async () => {
+    const { state } = await mount('?seed=42');
+    const before = state.view().seed;
+    state.startWithSeating({ players: [null, 'easy'] });
+    flush();
+    const after = state.view();
+    expect(after.seed).not.toBe(before);
+    expect(after.game.round).toBe(0);
+    expect(after.game.scores).toEqual([0, 0]);
+  });
+
+  it('[W6-2] publishes the seating', async () => {
+    const { state } = await mount('?seed=42&seating=easy-sharp');
+    expect(state.view().seating.players).toEqual(['easy', 'sharp']);
+  });
+});
+
+describe('the turn loop [W6-6], [W6-7], [W6-8]', () => {
+  it('[W6-6] asks for a move as soon as the computer is to move', async () => {
+    const { harness } = await mount('?seed=42&seating=easy-human');
+    expect(harness.pending).toHaveLength(1);
+    expect(harness.pending[0].tier).toBe('easy');
+    expect(harness.pending[0].position.currentPlayer).toBe(0);
+  });
+
+  it('[W6-6] [W6-13] asks for nothing in a two-person game', async () => {
+    const { harness } = await mount('?seed=42');
+    expect(harness.pending).toHaveLength(0);
+  });
+
+  it('[W6-32] [W6-7] keeps at most one request outstanding', async () => {
+    const { harness } = await mount('?seed=42&seating=easy-easy');
+    // Both seats are the computer, so an unguarded loop would run away — the
+    // seam is deliberately still holding the first promise.
+    expect(harness.pending).toHaveLength(1);
+    flush();
+    expect(harness.pending).toHaveLength(1);
+    await harness.answer(0);
+    expect(harness.pending).toHaveLength(2);
+  });
+
+  it('[W6-8] [W6-34] submits a move that was legal in the position it asked about', async () => {
+    const { state, harness } = await mount('?seed=42&seating=easy-human');
+    const asked = harness.pending[0].position;
+    const before = state.view().game.tilesLeft;
+    await harness.answer();
+    const after = state.view().game;
+    expect(asked.legalActions).toContain(state.view().lastChoice!.action);
+    expect(after.tilesLeft).toBeLessThan(before);
+    expect(after.currentPlayer).toBe(1);
+  });
+
+  it('[W6-9] two computers play on until the game is terminal', async () => {
+    const { state, harness } = await mount('?seed=42&seating=easy-easy');
+    let answered = 0;
+    while (!state.view().game.isTerminal && answered < 400) {
+      await harness.answer(answered);
+      answered++;
+    }
+    expect(state.view().game.isTerminal).toBe(true);
+    expect(answered).toBeGreaterThan(20);
+  }, 30_000);
+});
+
+describe('while it thinks [W6-19], [W6-20], [W6-33]', () => {
+  it('[W6-33] [W6-19] publishes thinking exactly while a request is outstanding', async () => {
+    const { state, harness } = await mount('?seed=42&seating=steady-human');
+    expect(state.view().thinking).toEqual({ seat: 0 });
+    await harness.answer();
+    expect(state.view().thinking).toBeNull();
+  });
+
+  it('[W6-20] says so on screen and in the live region, naming the seat', async () => {
+    const { screen } = await mount('?seed=42&seating=sharp-human');
+    // Twice on purpose: once visibly in the status, once in the live region a
+    // screen reader hears [0003 U3-56]. `getAllByText` rather than `getByText`,
+    // which would fail precisely because both are present.
+    expect(screen.getAllByText(/Player 1 is thinking/i).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByRole('status').textContent).toMatch(/Player 1 is thinking/i);
+  });
+
+  it('[W6-21] shows nothing when no request is outstanding', async () => {
+    const { screen } = await mount('?seed=42');
+    expect(screen.queryByText(/thinking/i)).toBeNull();
+  });
+
+  it('[W6-22] makes every move control unavailable while the computer is to move', async () => {
+    const { screen, state } = await mount('?seed=42&seating=sharp-human');
+    const game = state.view().game;
+    const names = game.colorNames;
+    let checked = 0;
+    for (const [source, pool] of [
+      ...game.factories.map((pool, source) => [source, pool] as const),
+      [CENTER, game.center] as const,
+    ]) {
+      for (const pick of picksIn([...pool], source)) {
+        const control = screen.getByRole('button', { name: pickName(pick, names) });
+        // Present, focusable and inert rather than removed — [0003 U3-29].
+        expect(control.getAttribute('aria-disabled'), pickName(pick, names)).toBe('true');
+        checked++;
+      }
+    }
+    expect(checked).toBeGreaterThan(3);
+  });
+
+  it('[W6-23] leaves the new-game control available mid-search', async () => {
+    const { screen } = await mount('?seed=42&seating=sharp-human');
+    const control = screen.getByRole('button', { name: /new game/i });
+    expect(control.getAttribute('aria-disabled')).not.toBe('true');
+    expect((control as HTMLButtonElement).disabled).toBe(false);
+  });
+});
+
+describe('stale and failed replies [W6-15], [W6-16], [W6-17]', () => {
+  it('[W6-37] [W6-16] discards a reply from a game that no longer exists', async () => {
+    const { state, harness } = await mount('?seed=42&seating=easy-human');
+    const stale = harness.pending[0];
+
+    state.startWithSeating({ players: ['easy', null] });
+    flush();
+    expect(harness.pending.length).toBeGreaterThan(1);
+    const fresh = state.view().game.tilesLeft;
+    expect(harness.pending[1].generation).not.toBe(stale.generation);
+
+    // Answering the *old* request must not advance the *new* game.
+    await harness.answer(0);
+    expect(state.view().game.tilesLeft).toBe(fresh);
+  });
+
+  /**
+   * Both halves of [W6-15]: the failure **propagates**, and no move is invented.
+   *
+   * The propagation is caught here rather than left to escape. A throw from
+   * inside the turn loop's promise surfaces as an unhandled rejection — in a
+   * browser that reaches `window.onunhandledrejection` and the console, which
+   * is what "propagates" means across this boundary. Letting it escape the
+   * suite would fail the run for the right reason in the wrong place, and
+   * asserting only "no ply was made" would pass just as well against a client
+   * that swallowed the error silently, which is the defect [W6-15] exists to
+   * prevent.
+   */
+  it('[W6-37] [W6-15] propagates the failure and makes no ply', async () => {
+    const { state, harness } = await mount('?seed=42&seating=easy-human');
+    const before = state.view().game.tilesLeft;
+
+    const rejections: unknown[] = [];
+    const capture = (reason: unknown): void => {
+      rejections.push(reason);
+    };
+    process.on('unhandledRejection', capture);
+    try {
+      harness.fail('the search exploded');
+      // A macrotask, so Node has run its unhandled-rejection check.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    } finally {
+      process.off('unhandledRejection', capture);
+    }
+    flush();
+
+    expect(
+      rejections.map(String).join(' '),
+      'the failure was swallowed instead of propagating',
+    ).toMatch(/the search exploded/);
+    expect(state.view().game.tilesLeft).toBe(before);
+    expect(state.view().thinking).toBeNull();
+  });
+
+  it('[W6-17] submits a curtailed choice — a shortened search, not an error', async () => {
+    const { state, harness } = await mount('?seed=42&seating=easy-human');
+    const request = harness.pending[0];
+    const before = state.view().game.tilesLeft;
+    await harness.answer();
+    expect(state.view().game.tilesLeft).toBeLessThan(before);
+    expect(request.position.legalActions).toContain(state.view().lastChoice!.action);
+  });
+});
+
+describe('what crosses the boundary [W6-14]', () => {
+  it('[W6-14] sends a plain view, never a state', async () => {
+    const { harness } = await mount('?seed=42&seating=easy-human');
+    const request = harness.pending[0];
+    // Structurally cloneable, which an `AzulState` is not — it holds an `Rng`.
+    expect(structuredClone(request)).toEqual(request);
+    expect(JSON.parse(JSON.stringify(request))).toEqual(request);
+    // The bag is counts, so there is no order here to leak [0004 B4-5].
+    expect(request.position.bag).toHaveLength(5);
+    expect('rng' in request.position).toBe(false);
+    expect('shuffle' in request.position).toBe(false);
+  });
+});
+
+/**
+ * [W6-29]: a whole game through the *rendered* interface with one seat a tier,
+ * from a recorded seed, asserting the invariants at every ply.
+ *
+ * The person's side plays among the available controls the way [0003 U3-70]
+ * does, so both halves of a mixed game are exercised — and legality is checked
+ * against an engine state driven in parallel, not against the view.
+ */
+describe('a whole game with a computer opponent [W6-29]', () => {
+  it('[W6-29] [W6-32] [W6-34] plays through, one request at a time', async () => {
+    const { screen, state, harness } = await mount('?seed=42&seating=human-easy');
+    const parallel = newGame(state.view().seed);
+    let answered = 0;
+    let plies = 0;
+
+    while (!state.view().game.isTerminal && plies < 400) {
+      // [0003 U3-63]: the published view always describes the held state, and
+      // the parallel engine agrees about what is legal.
+      expect(state.view().game.legalActions).toEqual(legalActions(parallel));
+
+      if (state.view().thinking !== null) {
+        // [W6-32]: never more than one request outstanding.
+        expect(harness.pending.length - answered).toBe(1);
+        const asked = harness.pending[answered];
+        expect(asked.position.legalActions).toEqual(legalActions(parallel));
+        const action = asked.position.legalActions[0];
+        await harness.answer(answered);
+        answered++;
+        apply(parallel, action);
+      } else {
+        const legal = legalActions(parallel);
+        const action = legal[plies % legal.length];
+        clickThrough(screen, state.view().game, action);
+        apply(parallel, action);
+      }
+      plies++;
+    }
+
+    expect(state.view().game.isTerminal).toBe(true);
+    expect(answered).toBeGreaterThan(10);
+  }, 60_000);
+});
+
+/**
+ * [W6-36]. The opponent changes *who calls* `submit`, not what a ply is: the
+ * held state is still only ever advanced by `apply`, from one `newGame`.
+ *
+ * Spying on those two is sanctioned by [0003 U3-80] and is the only way to see
+ * it — this is a property of a history, and no snapshot shows it.
+ */
+describe('the opponent does not widen how the game advances [W6-36]', () => {
+  it('[W6-36] advances only by apply, from exactly one newGame', async () => {
+    // The computer moves first, so a request is already outstanding. The spies
+    // go on **after** mounting: `mount` resets the module registry, so a spy
+    // installed before it would be watching a different copy of `engine` from
+    // the one the state module ends up holding — which reads as "no ply went
+    // through apply" and is a fact about the test, not about the code.
+    const { state, harness } = await mount('?seed=42&seating=easy-human');
+    const engine = await import('engine');
+    const applySpy = vi.spyOn(engine, 'apply');
+    const newGameSpy = vi.spyOn(engine, 'newGame');
+
+    try {
+      await harness.answer(0);
+      expect(applySpy.mock.calls.length, 'the computer ply did not go through apply').toBe(1);
+      expect(newGameSpy.mock.calls.length, 'a ply dealt a new game').toBe(0);
+      expect(state.view().game.isTerminal).toBe(false);
+
+      // And a person's ply takes the same route.
+      const before = applySpy.mock.calls.length;
+      state.submit(state.view().game.legalActions[0]);
+      flush();
+      expect(applySpy.mock.calls.length, 'a human ply did not go through apply').toBe(before + 1);
+      expect(newGameSpy.mock.calls.length).toBe(0);
+    } finally {
+      applySpy.mockRestore();
+      newGameSpy.mockRestore();
+    }
+  });
+});
+
+/** Drive a ply through the rendered controls, the way a person would. */
+function clickThrough(screen: Screen, game: AzulJSON, action: number): void {
+  const [source, color, dest] = decodeAction(action);
+  const pool = source === CENTER ? game.center : game.factories[source];
+  const pick = picksIn([...pool], source).find((p) => p.color === color)!;
+  (screen.getByRole('button', { name: pickName(pick, game.colorNames) }) as HTMLElement).click();
+  flush();
+  const seat = game.currentPlayer;
+  const name =
+    dest === 5
+      ? floorLineName(
+          game.players[seat].floor.reduce((t, n) => t + n, 0) +
+            (game.players[seat].floorMarker ? 1 : 0),
+          game.players[seat].floorPenalty,
+        )
+      : patternLineName(game.players[seat].patternLines[dest], dest, game.colorNames);
+  (screen.getByRole('button', { name }) as HTMLElement).click();
+  flush();
+}

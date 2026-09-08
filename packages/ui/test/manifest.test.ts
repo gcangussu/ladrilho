@@ -16,11 +16,11 @@ const manifest = JSON.parse(readFileSync(join(HERE, '..', 'package.json'), 'utf8
   devDependencies: Record<string, string>;
 };
 
-/** `engine` [U3-7] plus the Solid v2 runtime [U3-10]. */
-const ALLOWED = ['@solidjs/web', 'engine', 'solid-js'];
+/** `engine` and `bot` [U3-7] plus the Solid v2 runtime [U3-10]. */
+const ALLOWED = ['@solidjs/web', 'bot', 'engine', 'solid-js'];
 
 describe('package manifest', () => {
-  it('[U3-74] declares exactly engine plus the Solid v2 runtime as dependencies', () => {
+  it('[U3-74] declares exactly engine, bot and the Solid v2 runtime as dependencies', () => {
     expect(Object.keys(manifest.dependencies).sort()).toEqual(ALLOWED);
   });
 
@@ -30,8 +30,9 @@ describe('package manifest', () => {
     }
   });
 
-  it('[U3-74] depends on engine through the workspace, not a registry copy [U3-7]', () => {
+  it('[U3-74] depends on engine and bot through the workspace, not registry copies [U3-7]', () => {
     expect(manifest.dependencies['engine']).toMatch(/^workspace:/);
+    expect(manifest.dependencies['bot']).toMatch(/^workspace:/);
   });
 
   it('[U3-74] [U3-11] declares a vitest range that resolves to 5', () => {

@@ -1,11 +1,12 @@
 import type { JSX } from '@solidjs/web';
 import { decodeAction, encodeAction } from 'engine';
 import { Show, createEffect, createSignal } from 'solid-js';
-import { startNewGame, submit, view } from '../game.js';
+import { computerSeat, startNewGame, startWithSeating, submit, view } from '../game.js';
 import { Announcer, announcement } from './Announcer.jsx';
 import { Displays, type Pick } from './Displays.jsx';
 import { GameOver } from './GameOver.jsx';
 import { PlayerBoard } from './PlayerBoard.jsx';
+import { Seating } from './Seating.jsx';
 import { Status } from './Status.jsx';
 
 /**
@@ -46,13 +47,27 @@ export function App(): JSX.Element {
     return open;
   };
 
+  /**
+   * Is it a person's turn at all [W6-22]?
+   *
+   * While the seat to move is a tier every move control is unavailable — under
+   * [U3-29]'s discipline, so it stays present, focusable and `aria-disabled`
+   * rather than vanishing. The new-game control is deliberately not a move
+   * control ([U3-79]) and stays live throughout [W6-23], which is the player's
+   * way out of a long think.
+   */
+  const humanToMove = (): boolean =>
+    !game().isTerminal && !computerSeat(game().currentPlayer);
+
   const pickAvailable = (source: number, color: number): boolean =>
-    pairs().has(`${source},${color}`);
+    humanToMove() && pairs().has(`${source},${color}`);
 
   /** A destination is available when this exact action is legal [U3-24], [U3-62]. */
   const destAvailable = (dest: number): boolean => {
     const picked = selection();
-    return picked !== null && legal().has(encodeAction(picked.source, picked.color, dest));
+    return (
+      humanToMove() && picked !== null && legal().has(encodeAction(picked.source, picked.color, dest))
+    );
   };
 
   const choosePick = (picked: Pick): void => {
@@ -113,7 +128,13 @@ export function App(): JSX.Element {
     >
       <h1>Azul</h1>
       <Announcer message={announcement(view())} />
-      <Status game={game()} seed={view().seed} names={names()} />
+      <Status
+        game={game()}
+        seed={view().seed}
+        names={names()}
+        thinking={view().thinking}
+      />
+      <Seating seating={view().seating} onChoose={(next) => startWithSeating(next)} />
 
       <Show when={game().isTerminal}>
         <GameOver game={game()} names={names()} />

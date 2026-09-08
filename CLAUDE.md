@@ -8,8 +8,9 @@ TypeScript implementation of the board game Azul, delivered in three roadmap ste
 
 1. **Engine** (`packages/engine`) — fast, deterministic 2-player Azul rules engine. **Done.**
 2. **UI** (`packages/ui`) — web client using Solid.js **v2**. **Done.**
-3. **Bot** (`packages/bot`) — AI agent that plays through the engine, in-browser. **In progress:**
-   the player (spec 0004) and the arena (0005) are built; the interface seam (0006) is not.
+3. **Bot** (`packages/bot`) — AI agent that plays through the engine, in-browser. **Done:** the
+   player (spec 0004), the arena (0005), and the interface seam (0006). The search runs in a
+   worker; `packages/ui` reaches it only through `src/opponent.ts`.
 
 The repo is a **pnpm monorepo**. Check what is actually on disk before assuming a package is
 present.
