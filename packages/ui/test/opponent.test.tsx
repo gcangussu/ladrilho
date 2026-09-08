@@ -25,7 +25,13 @@ import { CENTER, apply, decodeAction, legalActions, newGame, type AzulJSON } fro
 import { pickName, picksIn } from '../src/components/Displays.jsx';
 import { floorLineName } from '../src/components/FloorLine.jsx';
 import { patternLineName } from '../src/components/PatternLines.jsx';
-import type { FromWorker, Thinker, ToWorker } from '../src/opponent.js';
+import {
+  seatingFromUrl,
+  seatingToUrl,
+  type FromWorker,
+  type Thinker,
+  type ToWorker,
+} from '../src/opponent.js';
 
 /** A seam that queues requests and answers only when told to. */
 function deferredThinker(): {
@@ -88,11 +94,7 @@ type StateModule = typeof import('../src/game.js');
  * the state module would reach for a real `Worker` on the opening position and
  * jsdom has none.
  */
-async function mount(search = '?seed=42'): Promise<{
-  screen: Screen;
-  state: StateModule;
-  harness: Harness;
-}> {
+async function load(search = '?seed=42'): Promise<{ state: StateModule; harness: Harness }> {
   history.replaceState({}, '', `/${search}`);
   vi.resetModules();
   const state = (await import('../src/game.js')) as StateModule;
@@ -103,9 +105,26 @@ async function mount(search = '?seed=42'): Promise<{
   // these tests exercise the *production* start-up path rather than a loop
   // kicked by the injection itself, which is what hid the missing opening ask.
   state.useThinker(harness.seam);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  flush();
+  return { state, harness };
+}
+
+/**
+ * As {@link load}, plus the rendered interface.
+ *
+ * Separate because rendering is the expensive half and most of these tests
+ * never look at the DOM — mounting the App for all of them put this file, and
+ * with it the suite, over [0003 U3-77]'s budget.
+ */
+async function mount(search = '?seed=42'): Promise<{
+  screen: Screen;
+  state: StateModule;
+  harness: Harness;
+}> {
+  const { state, harness } = await load(search);
   const { App } = await import('../src/components/App.jsx');
   const screen = render(() => <App />);
-  await new Promise((resolve) => setTimeout(resolve, 0));
   flush();
   return { screen, state, harness };
 }
@@ -118,30 +137,40 @@ beforeEach(() => {
 
 describe('choosing an opponent [W6-1], [W6-2], [W6-3], [W6-4]', () => {
   it('[W6-38] [W6-4] honours a seating carried in the URL', async () => {
-    const { state } = await mount('?seed=42&seating=human-steady');
+    const { state } = await load('?seed=42&seating=human-steady');
     expect(state.view().seating.players).toEqual([null, 'steady']);
     expect(state.computerSeat(1)).toBe(true);
     expect(state.computerSeat(0)).toBe(false);
   });
 
-  it('[W6-38] [W6-4] discards a malformed seating, as [0003 U3-13] discards a seed', async () => {
-    for (const bad of ['banana', 'easy', 'easy-banana', 'easy-steady-sharp', '']) {
-      const { state } = await mount(`?seed=42&seating=${bad}`);
-      expect(state.view().seating.players, bad).toEqual([null, null]);
+  /**
+   * Parsed directly rather than through a mount.
+   *
+   * `seatingFromUrl` is a pure function of a query string, and `mount` costs a
+   * module reset plus two dynamic imports — spending seven of those to check
+   * seven strings put this file, and with it the whole suite, over
+   * [0003 U3-77]'s budget. The end-to-end path is covered by the mount above,
+   * once, which is all it needs to be.
+   */
+  it('[W6-38] [W6-4] discards a malformed seating, as [0003 U3-13] discards a seed', () => {
+    for (const bad of ['banana', 'easy', 'easy-banana', 'easy-steady-sharp', '', '-', 'human']) {
+      expect(seatingFromUrl(`?seating=${bad}`), bad).toBeNull();
     }
+    expect(seatingFromUrl('?seed=42')).toBeNull();
   });
 
-  it('[W6-5] lets a person occupy either seat', async () => {
-    const first = await mount('?seed=42&seating=sharp-human');
-    expect(first.state.computerSeat(0)).toBe(true);
-    expect(first.state.computerSeat(1)).toBe(false);
-    const second = await mount('?seed=42&seating=human-sharp');
-    expect(second.state.computerSeat(0)).toBe(false);
-    expect(second.state.computerSeat(1)).toBe(true);
+  it('[W6-5] [W6-4] lets a person occupy either seat', () => {
+    expect(seatingFromUrl('?seating=sharp-human')?.players).toEqual(['sharp', null]);
+    expect(seatingFromUrl('?seating=human-sharp')?.players).toEqual([null, 'sharp']);
+    expect(seatingFromUrl('?seating=human-human')?.players).toEqual([null, null]);
+    expect(seatingFromUrl('?seating=easy-steady')?.players).toEqual(['easy', 'steady']);
+    // And the inverse, so a game can be linked to [W6-4].
+    expect(seatingToUrl({ players: ['sharp', null] })).toBe('sharp-human');
+    expect(seatingToUrl({ players: [null, 'easy'] })).toBe('human-easy');
   });
 
   it('[W6-3] deals a new game when the seating changes', async () => {
-    const { state } = await mount('?seed=42');
+    const { state } = await load('?seed=42');
     const before = state.view().seed;
     state.startWithSeating({ players: [null, 'easy'] });
     flush();
@@ -152,26 +181,26 @@ describe('choosing an opponent [W6-1], [W6-2], [W6-3], [W6-4]', () => {
   });
 
   it('[W6-2] publishes the seating', async () => {
-    const { state } = await mount('?seed=42&seating=easy-sharp');
+    const { state } = await load('?seed=42&seating=easy-sharp');
     expect(state.view().seating.players).toEqual(['easy', 'sharp']);
   });
 });
 
 describe('the turn loop [W6-6], [W6-7], [W6-8]', () => {
   it('[W6-6] asks for a move as soon as the computer is to move', async () => {
-    const { harness } = await mount('?seed=42&seating=easy-human');
+    const { harness } = await load('?seed=42&seating=easy-human');
     expect(harness.pending).toHaveLength(1);
     expect(harness.pending[0].tier).toBe('easy');
     expect(harness.pending[0].position.currentPlayer).toBe(0);
   });
 
   it('[W6-6] [W6-13] asks for nothing in a two-person game', async () => {
-    const { harness } = await mount('?seed=42');
+    const { harness } = await load('?seed=42');
     expect(harness.pending).toHaveLength(0);
   });
 
   it('[W6-32] [W6-7] keeps at most one request outstanding', async () => {
-    const { harness } = await mount('?seed=42&seating=easy-easy');
+    const { harness } = await load('?seed=42&seating=easy-easy');
     // Both seats are the computer, so an unguarded loop would run away — the
     // seam is deliberately still holding the first promise.
     expect(harness.pending).toHaveLength(1);
@@ -182,7 +211,7 @@ describe('the turn loop [W6-6], [W6-7], [W6-8]', () => {
   });
 
   it('[W6-8] [W6-34] submits a move that was legal in the position it asked about', async () => {
-    const { state, harness } = await mount('?seed=42&seating=easy-human');
+    const { state, harness } = await load('?seed=42&seating=easy-human');
     const asked = harness.pending[0].position;
     const before = state.view().game.tilesLeft;
     await harness.answer();
@@ -193,7 +222,7 @@ describe('the turn loop [W6-6], [W6-7], [W6-8]', () => {
   });
 
   it('[W6-9] two computers play on until the game is terminal', async () => {
-    const { state, harness } = await mount('?seed=42&seating=easy-easy');
+    const { state, harness } = await load('?seed=42&seating=easy-easy');
     let answered = 0;
     while (!state.view().game.isTerminal && answered < 400) {
       await harness.answer(answered);
@@ -206,7 +235,7 @@ describe('the turn loop [W6-6], [W6-7], [W6-8]', () => {
 
 describe('while it thinks [W6-19], [W6-20], [W6-33]', () => {
   it('[W6-33] [W6-19] publishes thinking exactly while a request is outstanding', async () => {
-    const { state, harness } = await mount('?seed=42&seating=steady-human');
+    const { state, harness } = await load('?seed=42&seating=steady-human');
     expect(state.view().thinking).toEqual({ seat: 0 });
     await harness.answer();
     expect(state.view().thinking).toBeNull();
@@ -255,7 +284,7 @@ describe('while it thinks [W6-19], [W6-20], [W6-33]', () => {
 
 describe('stale and failed replies [W6-15], [W6-16], [W6-17]', () => {
   it('[W6-37] [W6-16] discards a reply from a game that no longer exists', async () => {
-    const { state, harness } = await mount('?seed=42&seating=easy-human');
+    const { state, harness } = await load('?seed=42&seating=easy-human');
     const stale = harness.pending[0];
 
     state.startWithSeating({ players: ['easy', null] });
@@ -282,7 +311,7 @@ describe('stale and failed replies [W6-15], [W6-16], [W6-17]', () => {
    * prevent.
    */
   it('[W6-37] [W6-15] propagates the failure and makes no ply', async () => {
-    const { state, harness } = await mount('?seed=42&seating=easy-human');
+    const { state, harness } = await load('?seed=42&seating=easy-human');
     const before = state.view().game.tilesLeft;
 
     const rejections: unknown[] = [];
@@ -308,7 +337,7 @@ describe('stale and failed replies [W6-15], [W6-16], [W6-17]', () => {
   });
 
   it('[W6-17] submits a curtailed choice — a shortened search, not an error', async () => {
-    const { state, harness } = await mount('?seed=42&seating=easy-human');
+    const { state, harness } = await load('?seed=42&seating=easy-human');
     const request = harness.pending[0];
     const before = state.view().game.tilesLeft;
     await harness.answer();
@@ -319,7 +348,7 @@ describe('stale and failed replies [W6-15], [W6-16], [W6-17]', () => {
 
 describe('what crosses the boundary [W6-14]', () => {
   it('[W6-14] sends a plain view, never a state', async () => {
-    const { harness } = await mount('?seed=42&seating=easy-human');
+    const { harness } = await load('?seed=42&seating=easy-human');
     const request = harness.pending[0];
     // Structurally cloneable, which an `AzulState` is not — it holds an `Rng`.
     expect(structuredClone(request)).toEqual(request);
@@ -388,7 +417,7 @@ describe('the opponent does not widen how the game advances [W6-36]', () => {
     // installed before it would be watching a different copy of `engine` from
     // the one the state module ends up holding — which reads as "no ply went
     // through apply" and is a fact about the test, not about the code.
-    const { state, harness } = await mount('?seed=42&seating=easy-human');
+    const { state, harness } = await load('?seed=42&seating=easy-human');
     const engine = await import('engine');
     const applySpy = vi.spyOn(engine, 'apply');
     const newGameSpy = vi.spyOn(engine, 'newGame');
