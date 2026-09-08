@@ -2,7 +2,7 @@
 title: Computer opponent
 author: Gabriel Cangussu
 date: 2026-09-06
-status: draft
+status: implemented
 intent: 0003 — Computer opponent
 prefix: B4
 depends-on: 0001 — Engine core, 0003 — Web interface

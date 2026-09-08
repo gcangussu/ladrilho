@@ -2,7 +2,7 @@
 title: Opponent in the interface
 author: Gabriel Cangussu
 date: 2026-09-06
-status: draft
+status: implemented
 intent: 0003 — Computer opponent
 prefix: W6
 depends-on: 0001 — Engine core, 0003 — Web interface, 0004 — Computer opponent
