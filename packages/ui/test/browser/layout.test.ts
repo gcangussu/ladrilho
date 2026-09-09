@@ -209,10 +209,12 @@ describe('a board that holds still', () => {
     );
   });
 
-  it.each(VIEWPORTS)('[U3-86] does not resize either board when the turn passes, at $name',
+  it.each(VIEWPORTS)('[U3-86] does not resize either play area when the turn passes, at $name',
     async (viewport) => {
       const doc = await load(viewport.width, viewport.height);
-      const before = ['Player 1', 'Player 2'].map((who) => height(board(doc, who)));
+      const areas = (): number[] =>
+        ['Player 1', 'Player 2'].map((who) => height(playArea(board(doc, who))));
+      const before = areas();
 
       await playAPly(doc);
 
@@ -221,7 +223,13 @@ describe('a board that holds still', () => {
       // about. Neither may have changed size for it.
       expect(board(doc, 'Player 2').querySelector('[data-group="destinations"]'),
         'the ply did not pass the turn').not.toBeNull();
-      expect(['Player 1', 'Player 2'].map((who) => height(board(doc, who)))).toEqual(before);
+      expect(areas()).toEqual(before);
+
+      // The play area and not the whole board, because the whole board cannot
+      // fail: the two are grid items on one row and `align-items: stretch`
+      // makes them the same height whatever they hold. This assertion passed
+      // under the very defect it names until the mutation of [U3-86] showed it
+      // could not fail, which is what that record is for.
     });
 
   it('[U3-88] lays every pattern line level with the wall row it feeds, at a laptop', async () => {
