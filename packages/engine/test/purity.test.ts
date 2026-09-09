@@ -118,15 +118,21 @@ describe('the package is self-contained [E1-50]', () => {
    * - The **run scans** have exactly two call sites each, both in `score.ts`.
    *   They are module-private, so nothing outside that file can call them at
    *   all; this clause is what covers a sibling written *inside* `score.ts`.
-   * - **`placementRuns`** has one call site, and what it returns is read only
-   *   as the record's `h` and `v`. Arithmetic on either field, a comparison of
-   *   either, or a second call is a sibling.
+   * - **`placementRuns`** has one call site, and the block it sits in does
+   *   nothing but copy: no arithmetic, no comparison, no third function, no
+   *   read of `h` or `v` outside the record's fields.
    *
-   * An earlier version had only the first two, and a sibling written with
-   * `if`s instead of a ternary walked straight past both — found in review, and
-   * the third clause is what closes it. What none of them can see is a copy
-   * that scans the wall itself; [E1-71] says so in as many words, and names
-   * [0007 S7-30]'s corpus as the backstop.
+   * Both of the last two came out of review, one after the other. The first
+   * two clauses missed a sibling written with `if`s instead of a ternary; the
+   * third, written to catch it, tracked the binding by name and missed a
+   * sibling that destructured the call. Hence the block: what legitimately
+   * happens there is a copy, and a fusion rule cannot be written without an
+   * operator, a comparison, or a third function to hide in.
+   *
+   * What none of them can see is a copy that scans the wall itself. [E1-71]
+   * says so in as many words, and says why [0007 S7-30]'s corpus only half
+   * covers it — a copy is caught the first time it *disagrees*, which is after
+   * the drift it exists to prevent.
    *
    * Every clause is run against a source it must reject, and those sources are
    * code that could really exist: an earlier fixture called the run scans from
@@ -175,26 +181,59 @@ describe('the package is self-contained [E1-50]', () => {
       });
 
     /**
-     * Every use of a `placementRuns` result that is not a copy into the record.
+     * The recording block: everything from the sole `placementRuns` call to the
+     * end of the braces it sits inside.
      *
-     * The binding is captured from the call itself rather than assumed to be
-     * called `runs`, so renaming it changes nothing. Each read of `X.h` or
-     * `X.v` must sit immediately after `h:` or `v:` — the object-literal
-     * position — and anything else it is put to, arithmetic most of all, is
-     * reported. A second call site is reported by the count beside it.
+     * Tracking the *binding* was the first attempt and it was wrong — it
+     * matched `const runs = placementRuns(...)` and nothing else, so
+     * destructuring the call was enough to walk past it, which is the form a
+     * person is likelier to write. Found in review, with a working sibling.
+     *
+     * So the window is the unit, not the name. What legitimately happens in it
+     * is a copy: the call, then the record's five fields. That block needs no
+     * arithmetic, no comparison, and no third function — and a fusion rule
+     * cannot be written without at least one of the three.
      */
+    const recordingBlock = (code: string): string | null => {
+      const at = code.search(/\bplacementRuns\s*\(/);
+      if (at < 0) return null;
+      let depth = 0;
+      for (let i = at; i < code.length; i++) {
+        if (code[i] === '{') depth++;
+        else if (code[i] === '}') {
+          if (depth === 0) return code.slice(at, i);
+          depth--;
+        }
+      }
+      return code.slice(at);
+    };
+
+    /** What a copy never needs, and a second implementation always does. */
+    const OPERATORS = /[-+*/%<>!?|&=]/g;
+
     const runsMisuse = (files: { file: string; code: string }[]): string[] =>
       files.flatMap(({ file, code }) => {
         const calls = callsOf('placementRuns', code);
         if (calls === 0) return [];
         const out = calls === 1 ? [] : [`${file}: ${calls} calls`];
-        for (const binding of code.matchAll(/(?:const|let|var)\s+(\w+)\s*=\s*placementRuns\s*\(/g)) {
-          const name = binding[1];
-          const reads = new RegExp(`(.{0,4})\\b${name}\\.([hv])\\b`, 'g');
-          for (const use of code.matchAll(reads)) {
-            if (!new RegExp(`${use[2]}:\\s*$`).test(use[1])) {
-              out.push(`${file}: ${name}.${use[2]} used as ${use[0].trim()}`);
-            }
+        const block = recordingBlock(code);
+        if (block === null) return out;
+
+        // Arithmetic or a comparison in the block that only copies.
+        for (const op of block.match(OPERATORS) ?? []) out.push(`${file}: operator ${op}`);
+
+        // A third call in it: `points: fuse(h, v)` needs no operator of its
+        // own, and hands the runs to something that does.
+        const called = [...block.matchAll(/\b(\w+)\s*\(/g)].map((m) => m[1]);
+        for (const name of called) {
+          if (name !== 'placementRuns' && name !== 'push') out.push(`${file}: calls ${name}`);
+        }
+
+        // And a property read of the runs that is not a copy into the record.
+        for (const use of block.matchAll(/(.{0,12})\.([hv])\b/g)) {
+          // The copy shape, and the only one: `h: runs.h`, `v: runs.v`.
+          if (!new RegExp(`${use[2]}:\\s*\\w+$`).test(use[1])) {
+            out.push(`${file}: ${use[0].trim()} read outside the record`);
           }
         }
         return out;
@@ -239,6 +278,30 @@ describe('the package is self-contained [E1-50]', () => {
         '}',
       ].join('\n'),
     };
+    /** The one that defeated the binding-tracking version of clause 3. */
+    const DESTRUCTURED_SIBLING = {
+      file: 'round.ts',
+      code: [
+        'function record(wall, r, col, sink) {',
+        '  const { h, v } = placementRuns(wall, r, col);',
+        '  let pts = 0;',
+        '  if (h > 1) pts += h;',
+        '  if (v > 1) pts += v;',
+        '  if (pts === 0) pts = 1;',
+        '  sink.push({ row: r, col, h, v, points: pts });',
+        '}',
+      ].join('\n'),
+    };
+    /** And the one that needs no operator of its own: hand the runs away. */
+    const HELPER_SIBLING = {
+      file: 'round.ts',
+      code: [
+        'function record(wall, r, col, sink) {',
+        '  const { h, v } = placementRuns(wall, r, col);',
+        '  sink.push({ row: r, col, h, v, points: fuse(h, v) });',
+        '}',
+      ].join('\n'),
+    };
 
     it('finds the rule written exactly once, in placementValue', () => {
       const files = srcFiles();
@@ -256,15 +319,20 @@ describe('the package is self-contained [E1-50]', () => {
 
     it('finds the runs copied into the record and put to no other use', () => {
       expect(runsMisuse(srcFiles())).toEqual([]);
-      // Not vacuous: there really is a call site to have checked.
+      // Not vacuous: there really is a call site, and a block, to have checked.
       const round = srcFiles().find((f) => f.file === 'round.ts')!.code;
       expect(callsOf('placementRuns', round)).toBe(1);
+      const block = recordingBlock(round);
+      expect(block, 'no recording block found').not.toBeNull();
+      expect(block).toMatch(/sink\.push/);
     });
 
     it.each([
       ['a ternary sibling', TERNARY_SIBLING, 1],
       ['a sibling inside score.ts', SCORE_TS_SIBLING, 2],
       ['a sibling that fuses with ifs', IF_SIBLING, 3],
+      ['a sibling that destructures the runs', DESTRUCTURED_SIBLING, 3],
+      ['a sibling that hands the runs to a helper', HELPER_SIBLING, 3],
     ])('[S7-35] fails against %s', (_name, sibling, clause) => {
       const caught =
         fusions([sibling]).length + runCallers([sibling]).length + runsMisuse([sibling]).length;

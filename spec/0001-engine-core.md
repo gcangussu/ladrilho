@@ -330,18 +330,22 @@ Runs for both players, player 0 first, when the board empties.
   2. `horizontalRun` and `verticalRun` have exactly two call sites each, both in `score.ts`.
      They are module-private, so a sibling in another file cannot reach them at all; this clause
      is what covers a sibling placed *inside* `score.ts`.
-  3. `placementRuns` has exactly one call site, and the value it returns is read only as the
-     record's `h` and `v`. Arithmetic on either field, a comparison of either, or a second call
-     is a sibling.
+  3. `placementRuns` has exactly one call site, and the block that call sits in does nothing but
+     copy: no arithmetic, no comparison, no third function, and no read of `h` or `v` outside the
+     record's own fields. The unit is the **block**, not the binding — an earlier version tracked
+     `const runs = placementRuns(...)` by name, and destructuring the call walked past it.
 
   **What this cannot see, stated plainly:** a copy that scans the wall itself, rather than reusing
   either helper, is out of reach. Banning run-scanning loops by pattern was tried and removed under
   [E1-68] for being both under-inclusive and a landmine, and a blanket ban on comparing against `1`
-  would fail the build on `shuffleInPlace`'s loop bound. The backstop for that case is behavioural
-  and lives in *0007*: [0007 S7-30]'s corpus re-derives every placement's runs and points from the
-  wall on both sides of the resolution, so a second implementation that *disagrees* is caught the
-  first time it disagrees. What no check here can catch is a second implementation that agrees
-  today and drifts tomorrow, which is the whole reason clauses 2 and 3 close the cheap routes.
+  would fail the build on `shuffleInPlace`'s loop bound.
+
+  And [0007 S7-30]'s corpus is a weaker backstop than it sounds, so it is worth saying exactly what
+  it does: it re-derives every placement's runs and points from the wall on both sides of the
+  resolution, which catches a second implementation **the first time it disagrees** — not while it
+  still agrees. A correct copy is invisible to it, and the damage a second copy does is that it is
+  free to drift later. That is the whole reason clauses 2 and 3 close the cheap routes rather than
+  leaving the corpus to carry it.
 
   Declared here, where the `E1` scanner reads it, and required by [0007 S7-12] and [0007 S7-35].
 
