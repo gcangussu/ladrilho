@@ -253,12 +253,15 @@ describe('a board that holds still', () => {
         levels.map(() => [0, 0]),
       );
 
-      // Level, and on the left: a line fills toward the wall, so its last tile
-      // is the one nearest the cell it will feed.
-      expect(
-        Math.round(lines[NUM_ROWS - 1].getBoundingClientRect().right),
-        `${who}: the lines are not left of the wall`,
-      ).toBeLessThanOrEqual(Math.round(wall[0].getBoundingClientRect().left));
+      // Level, and filling toward the wall: every line ends on the same edge,
+      // and that edge is the wall's. Checking only that the lines are somewhere
+      // to the left would pass on a column of rows aligned the other way, whose
+      // filled ends are then five different distances from the cells they feed.
+      const rights = lines.map((line) => Math.round(line.getBoundingClientRect().right));
+      const wallLeft = Math.round(wall[0].getBoundingClientRect().left);
+      expect([...new Set(rights)], `${who}: the lines do not share a right edge`).toHaveLength(1);
+      expect(rights[0], `${who}: the lines are not left of the wall`).toBeLessThanOrEqual(wallLeft);
+      expect(wallLeft - rights[0], `${who}: the lines are not beside the wall`).toBeLessThan(44);
     }
   });
 
