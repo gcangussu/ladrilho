@@ -13,7 +13,12 @@ export type {
   AzulState,
   CanonicalState,
   Color,
+  FloorCharge,
+  Placement,
   Player,
+  PlayerBonuses,
+  PlayerRound,
+  RoundScoring,
   Shuffle,
 } from './types.js';
 
@@ -41,7 +46,7 @@ export {
 export { Rng } from './rng.js';
 export { clone, newGame } from './state.js';
 export { decodeAction, encodeAction, isLegal, legalActions } from './actions.js';
-export { apply } from './apply.js';
+export { apply, applyExplained } from './apply.js';
 export {
   completedColors,
   completedCols,

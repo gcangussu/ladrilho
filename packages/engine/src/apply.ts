@@ -2,7 +2,7 @@ import { ACTION_SPACE, CENTER, FLOOR, FLOOR_SLOTS, NUM_COLORS, NUM_ROWS, WALL_ID
 import { decodeAction } from './actions.js';
 import { floorOccupied } from './inspect.js';
 import { endRound } from './round.js';
-import type { AzulState, Player } from './types.js';
+import type { AzulState, Player, RoundScoring } from './types.js';
 
 /**
  * Plays one ply, including any round or game transition it triggers [E1-21].
@@ -13,6 +13,30 @@ import type { AzulState, Player } from './types.js';
  * half-applied state is a defect rather than an outcome.
  */
 export function apply(s: AzulState, action: number): void {
+  ply(s, action, false);
+}
+
+/**
+ * The same ply, and additionally what round resolution charged [S7-1].
+ *
+ * Returns `null` on a ply that ends no round — which is most of them — and
+ * allocates nothing on that path [S7-4]: the sink is a parameter of round
+ * resolution, and round resolution is entered only when `tilesLeft` reaches
+ * zero. The record it returns shares nothing mutable with `s`, so a caller may
+ * keep it for as long as it likes [S7-8]; the engine keeps none [S7-7].
+ *
+ * It throws on the same inputs `apply` does, and returns nothing on that path
+ * [E1-14], [S7-5].
+ */
+export function applyExplained(s: AzulState, action: number): RoundScoring | null {
+  return ply(s, action, true);
+}
+
+/**
+ * The one implementation of a ply [S7-3]. `explain` is the only difference
+ * between the two entry points above, and it reaches nothing but `endRound`.
+ */
+function ply(s: AzulState, action: number, explain: boolean): RoundScoring | null {
   if (s.isTerminal) throw new Error('game is over');
   if (!Number.isInteger(action) || action < 0 || action >= ACTION_SPACE) {
     throw new Error(`action ${action} out of range`);
@@ -84,7 +108,7 @@ export function apply(s: AzulState, action: number): void {
 
   if (s.tilesLeft !== 0) {
     s.currentPlayer = (1 - p) as Player;
-  } else {
-    endRound(s, p);
+    return null;
   }
+  return endRound(s, p, explain);
 }

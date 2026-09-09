@@ -183,6 +183,10 @@ For the current player, action `(source, color, dest)` is legal exactly when all
   turn passes to the other player; if it reaches zero, round resolution ([E1-22] onwards) runs
   immediately as part of the same `apply`.
 
+  A ply may also be played by `applyExplained` ([0007 S7-1]), which performs the identical
+  transition and additionally reports what round resolution charged. What a ply *is* is unchanged
+  by that, and the two entry points are indistinguishable as state transitions ([0007 S7-28]).
+
 ## Round resolution
 
 Runs for both players, player 0 first, when the board empties.
@@ -213,6 +217,11 @@ Runs for both players, player 0 first, when the board empties.
   places. Callers SHOULD still ask about an unset cell, because that is the only reading under
   which the name means anything — but a precondition with no consequence would only earn a
   defensive write in the hottest loop in the project, so the normative form is the one above.
+
+  A private `placementRuns` stands beside it, exposing the two runs as `{ h, v }` without
+  restating the fusion rule ([0007 S7-11]). It is reached only from the explained path of
+  [0007 S7-4], it allocates, and it is not exported: the record's `h` and `v` are the only
+  witness the two numbers need.
 
   *Exported for the bot, which cannot value a pattern line without knowing what the tile it will
   place is worth ([0004 B4-9]), and which calls this a few million times a move. It takes a wall
@@ -303,6 +312,13 @@ Runs for both players, player 0 first, when the board empties.
   ```
 
   `wall` is the flat `[25]` row-major wall of [E1-2]. None of the three reads any state.
+
+- **[E1-71]** The delegation check of [E1-68] MUST additionally fail on a second implementation of
+  [E1-24]'s fusion rule anywhere in `packages/engine/src`. The existing check asserts only that
+  `round.ts` calls `placementValue`, which a divergent sibling would not disturb — a "recording"
+  copy of `placementValue` that combined the runs itself would keep that assertion green from the
+  unexplained branch while the explained branch drifted. Declared here, where the `E1` scanner
+  reads it, and required by [0007 S7-12] and [0007 S7-35].
 
   *Wall-shaped for the same reason [E1-68] is, and added at the same time by the same caller. The
   bot's evaluation values the wall as the current round will leave it — pattern lines tiled, which
@@ -397,6 +413,11 @@ function decodeAction(action: number): [source: number, color: Color, dest: numb
 function legalActions(s: AzulState): number[];
 function isLegal(s: AzulState, action: number): boolean;
 function apply(s: AzulState, action: number): void;   // mutates; throws on illegal
+function applyExplained(                              // mutates; throws on illegal
+  s: AzulState,
+  action: number,
+): RoundScoring | null;                               // null unless the ply ended a round;
+                                                      // see [0007 S7-1]
 
 // inspection
 function outcome(s: AzulState): 1 | 0 | -1 | null;
@@ -436,6 +457,11 @@ function encodeFor(                                   // same, from p's seat; se
   p: Player,
 ): Float32Array;
 ```
+
+Exported types: `AzulState`, `CanonicalState`, `AzulJSON`, `AzulJSONPlayer`, `Color`, `Player`,
+`Shuffle`, and the round-scoring record of *0007 — Scoring explained*: `RoundScoring`,
+`PlayerRound`, `PlayerBonuses`, `Placement`, `FloorCharge`. `placementRuns` is private and is
+deliberately not listed ([0007 S7-11]).
 
 - **[E1-50]** The package MUST have no runtime dependencies and MUST NOT touch the DOM, the
   filesystem, timers, or the network — it has to run unchanged in a browser, in a worker, and

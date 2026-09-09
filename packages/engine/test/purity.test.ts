@@ -101,6 +101,108 @@ describe('the package is self-contained [E1-50]', () => {
     }
   });
 
+  /**
+   * [E1-71] widens that check, because delegation alone stopped being enough
+   * the moment round scoring grew a second branch [0007 S7-12], [0007 S7-35].
+   *
+   * The clause above is satisfied by the *unexplained* branch calling
+   * `placementValue`. A recording sibling — one that asks for the two runs and
+   * combines them itself, so it can report `h` and `v` alongside the points —
+   * would leave that assertion green and write [E1-24] down a second time, and
+   * the two copies would then be free to disagree. Every behavioural test in
+   * the suite would keep passing until they did.
+   *
+   * Two decidable clauses, and the escape hatch for each named where it is
+   * declared:
+   *
+   * - The **fusion shape** — a comparison against `1` used as the test of a
+   *   conditional expression — occurs exactly once in `packages/engine/src`,
+   *   inside `placementValue`. Code that legitimately needs to branch on a
+   *   count of one writes an `if`, not a ternary; the ban is on the shape the
+   *   rule is written in, which is why it can be checked at all.
+   * - The **run scans** are called from exactly two places, both in
+   *   `score.ts`: `placementValue`, which fuses them, and `placementRuns`,
+   *   which does not [0007 S7-11]. A third caller is a sibling.
+   *
+   * Both are run against a source they must reject, because a matcher that has
+   * never matched is a matcher nobody has tested.
+   */
+  describe('[E1-71] no second implementation of the fusion rule', () => {
+    /** Line and block comments removed; the rule quoted in prose is not a copy of it. */
+    const stripComments = (text: string): string =>
+      text.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, '');
+
+    const FUSION = /(?:[<>]=?|[=!]==?)\s*1\s*\?/g;
+    const callsOf = (name: string, code: string): number =>
+      (code.match(new RegExp(`(?<!function\\s)\\b${name}\\s*\\(`, 'g')) ?? []).length;
+
+    /**
+     * `placementValue`'s own body, excised: it is the one implementation, so
+     * the question the clause asks is whether the shape appears anywhere else.
+     * The excision is asserted to have found something, below, so a renamed
+     * function cannot quietly turn this into a scan of nothing.
+     */
+    const withoutPlacementValue = (code: string): string => {
+      const start = code.indexOf('export function placementValue');
+      if (start < 0) return code;
+      const end = code.indexOf('\n}', start);
+      return code.slice(0, start) + code.slice(end);
+    };
+
+    const srcFiles = (): { file: string; code: string }[] =>
+      readdirSync(join(PACKAGE_ROOT, 'src'))
+        .filter((f) => f.endsWith('.ts'))
+        .map((file) => ({
+          file,
+          code: stripComments(readFileSync(join(PACKAGE_ROOT, 'src', file), 'utf8')),
+        }));
+
+    /** What a recording sibling looks like: the runs asked for, then fused again. */
+    const SIBLING = {
+      file: 'round.ts',
+      code: [
+        'function scoreAndReport(wall, row, col) {',
+        '  const h = horizontalRun(wall, row, col);',
+        '  const v = verticalRun(wall, row, col);',
+        '  return { h, v, points: h > 1 || v > 1 ? (h > 1 ? h : 0) + (v > 1 ? v : 0) : 1 };',
+        '}',
+      ].join('\n'),
+    };
+
+    const fusions = (files: { file: string; code: string }[]): string[] =>
+      files.flatMap(({ file, code }) =>
+        [...withoutPlacementValue(code).matchAll(FUSION)].map((m) => `${file}: ${m[0]}`),
+      );
+
+    const runCallers = (files: { file: string; code: string }[]): string[] =>
+      files.flatMap(({ file, code }) => {
+        const calls = callsOf('horizontalRun', code) + callsOf('verticalRun', code);
+        return calls === 0 ? [] : [`${file}: ${calls}`];
+      });
+
+    it('finds the rule written exactly once, in placementValue', () => {
+      const files = srcFiles();
+      const score = files.find((f) => f.file === 'score.ts')!.code;
+      // The excision really cuts the rule out, so the scan below is a scan of
+      // everything else rather than of a function that has been renamed away.
+      expect(score).toMatch(FUSION);
+      expect(withoutPlacementValue(score)).not.toMatch(FUSION);
+      expect(fusions(files)).toEqual([]);
+    });
+
+    it('finds the run scans called from placementValue and placementRuns and nowhere else', () => {
+      expect(runCallers(srcFiles())).toEqual(['score.ts: 4']);
+    });
+
+    it('fails against a sibling that combines the runs itself', () => {
+      // The mutation this check exists for, and the reason it is not enough for
+      // `round.ts` to merely mention `placementValue` somewhere.
+      expect(fusions([SIBLING]).length).toBeGreaterThan(0);
+      expect(runCallers([SIBLING])).toEqual(['round.ts: 2']);
+      expect(runCallers([...srcFiles(), SIBLING])).toEqual(['score.ts: 4', 'round.ts: 2']);
+    });
+  });
+
   it('plays a whole game with the DOM, fetch, timers and the clock removed', () => {
     const globals = globalThis as unknown as Record<string, unknown>;
     const saved: Record<string, unknown> = {};

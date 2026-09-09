@@ -105,3 +105,86 @@ export interface AzulJSON {
   colorNames: string[];
   players: AzulJSONPlayer[];
 }
+
+/**
+ * What one tile earned when it was placed [S7-9], [S7-10], [S7-11].
+ *
+ * The colour is deliberately absent: the wall's colour pattern is fixed
+ * [E1-1], so `wallColorAt(row, col)` answers it, and a second copy of a
+ * derivable field is what [S7-21] forbids.
+ */
+export interface Placement {
+  /** Pattern-line row, `0..4`; also the wall row [E1-22]. */
+  row: number;
+  /** Wall column, `0..4` [E1-1]. */
+  col: number;
+  /** Horizontal run through the new tile, itself included [E1-24]. */
+  h: number;
+  /** Vertical run through the new tile, itself included. */
+  v: number;
+  /** What was charged: `placementValue(wall, row, col)` [E1-68], [S7-10]. */
+  points: number;
+}
+
+/**
+ * What the floor line cost, by slot [E1-26], [E1-27].
+ *
+ * `occupied` beside `rungs` is not a derived pair: `occupied > rungs.length` is
+ * exactly [E1-27], the rule that slots past the seventh cost nothing.
+ */
+export interface FloorCharge {
+  /** `floorOccupied` at the moment of charging. MAY exceed `FLOOR_SLOTS`. */
+  occupied: number;
+  /** The rungs charged: the first `min(occupied, FLOOR_SLOTS)` of `FLOOR_PENALTIES` [S7-16]. */
+  rungs: readonly number[];
+  /** Did this player hold the marker. Captured before [E1-30] clears it [S7-14]. */
+  markerHeld: boolean;
+  /** The (non-positive) number charged: `CUM_PENALTY[min(FLOOR_SLOTS, occupied)]` [S7-15]. */
+  penalty: number;
+}
+
+/** One player's round [S7-17], [S7-18]. */
+export interface PlayerRound {
+  /** In resolution order, rows `0..4` [E1-22], [E1-25]. */
+  placements: readonly Placement[];
+  /** The accumulator's value: what wall-tiling charged. */
+  tiling: number;
+  floor: FloorCharge;
+  scoreBefore: number;
+  /** The score after the clamp of [E1-28], before any bonus. */
+  scoreAfterRound: number;
+  /** `>= 0`; what the clamp did not take [S7-17]. */
+  forgiven: number;
+}
+
+/** One player's end-of-game bonuses [E1-38]. Present only on the terminal ply [S7-19]. */
+export interface PlayerBonuses {
+  rows: number;
+  cols: number;
+  colors: number;
+  rowPoints: number;
+  colPoints: number;
+  colorPoints: number;
+  /** `rowPoints + colPoints + colorPoints`, charged unclamped. */
+  total: number;
+  /** Equal to this player's `scoreAfterRound` [S7-26]. */
+  scoreBefore: number;
+  /** The final score. Nothing is added after this [S7-22]. */
+  scoreAfter: number;
+}
+
+/**
+ * One round resolution [S7-1]: what `endRound` charged, per player.
+ *
+ * An event, not a position. It is no part of a snapshot [E1-62], the engine
+ * retains none [S7-7], and it shares no mutable container with the state it
+ * came from, so a caller may keep one indefinitely [S7-8].
+ */
+export interface RoundScoring {
+  /** The index of the round that just ended, captured on entry [S7-13]. */
+  round: number;
+  /** By seat, `[player 0, player 1]`. */
+  players: readonly [PlayerRound, PlayerRound];
+  /** Non-`null` if and only if the game ended on this ply [S7-20]. */
+  bonuses: readonly [PlayerBonuses, PlayerBonuses] | null;
+}

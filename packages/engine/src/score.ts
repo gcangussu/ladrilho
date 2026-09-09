@@ -51,6 +51,27 @@ export function placementValue(wall: readonly number[], row: number, col: number
   return h > 1 || v > 1 ? (h > 1 ? h : 0) + (v > 1 ? v : 0) : 1;
 }
 
+/**
+ * The two runs through `(row, col)`, the new tile included [S7-11].
+ *
+ * Private, and private on purpose: nothing outside round resolution asks what
+ * a hypothetical placement's runs would be, and the record's `h` and `v` are
+ * the only witness the two numbers need. It stands on the same two scans
+ * {@link placementValue} stands on and stops there — combining them is
+ * [E1-24]'s fusion rule, which has exactly one implementation and it is
+ * `placementValue`'s [E1-71].
+ *
+ * It allocates, unlike everything else in this file, and is reached only from
+ * the explained path of [S7-4].
+ */
+export function placementRuns(
+  wall: readonly number[],
+  row: number,
+  col: number,
+): { h: number; v: number } {
+  return { h: horizontalRun(wall, row, col), v: verticalRun(wall, row, col) };
+}
+
 /** Complete rows on `wall` — the flat `[25]` of [E1-2] — [E1-70]. */
 export function wallCompletedRows(wall: readonly number[]): number {
   let n = 0;

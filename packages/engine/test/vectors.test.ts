@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ACTION_SPACE,
   apply,
+  applyExplained,
   clone,
   fromCanonical,
   isLegal,
@@ -40,6 +41,12 @@ const REPLAY_SEED = 0;
 interface Options {
   /** Cross-check `legalActions` against `isLegal` over all 180 [0002 V2-20]. */
   bruteForceLegality?: boolean;
+  /**
+   * The entry point the replay drives [0007 S7-29]. The oracle is not
+   * re-derived for the second one: the same fixtures are driven twice, and
+   * every assertion below is the assertion the `apply` replay makes.
+   */
+  entry?: (s: AzulState, action: number) => void;
 }
 
 interface Replay {
@@ -142,7 +149,7 @@ function replay(v: Vector, options: Options = {}): Replay {
 
     const before = s.shufflesUsed;
     const roundBefore = s.roundIndex;
-    apply(s, ply.action);
+    (options.entry ?? apply)(s, ply.action);
 
     // [E1-47] the generator is consumed only by the shuffles in `newGame` and
     // the lid recycle of [E1-33], so a ply that shuffled is a ply that ran a
@@ -225,6 +232,25 @@ describe('replay', () => {
       // game per run; it is the same comparison 180 times a ply, so one game
       // buys the coverage and thirty would only buy the runtime.
       replay(v, { bruteForceLegality: v.name === 'game-00.json' });
+    });
+  }
+});
+
+/**
+ * [0007 S7-29]. `applyExplained` adds a caller to round resolution and to
+ * `tileWall`, and every replay above drives `apply` — the configuration
+ * CLAUDE.md names, where a new caller meets a requirement whose tests all
+ * predate it. So the vectors are driven a second time, through the new entry
+ * point, against the same recorded states.
+ */
+describe('replay through applyExplained [S7-29]', () => {
+  for (const v of vectors) {
+    it(`${v.name} replays ${v.plies.length} plies exactly`, () => {
+      replay(v, {
+        entry: (s, action) => {
+          applyExplained(s, action);
+        },
+      });
     });
   }
 });
