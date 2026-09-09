@@ -121,7 +121,10 @@ describe('the package is self-contained [E1-50]', () => {
    * - **`placementRuns`** has one call site, and the block it sits in does
    *   nothing but copy: no arithmetic, no comparison, no third function, no
    *   read of `h` or `v` outside the record's fields.
-   * - **Each run field** is read exactly once in the whole file — the copy.
+   * - **The text `.h` and `.v`** each occur exactly once in the whole file —
+   *   the copy. Text, not reads: a bracket read is invisible to it, which is
+   *   the fifth form, found on the pass after this clause was written and
+   *   deliberately left uncovered.
    *
    * The last two came out of review, one after the other, and so did the third
    * version of the third. The first two clauses missed a sibling written with
@@ -133,7 +136,9 @@ describe('the package is self-contained [E1-50]', () => {
    * below.
    *
    * **Which is the honest description of this check: a tripwire, not a proof.**
-   * A fifth form almost certainly exists. What holds the property is
+   * A fifth form exists and is known — `runs['h']` — and there is deliberately
+   * no clause for it: it would buy one shape and teach nobody anything. What
+   * holds the property is
    * behavioural — [0007 S7-30]'s corpus re-derives every placement's points
    * from the wall independently, on every build, so a copy that *disagrees*
    * fails the build the first time it produces a different number. [E1-71]

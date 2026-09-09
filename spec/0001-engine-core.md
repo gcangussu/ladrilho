@@ -332,16 +332,19 @@ Runs for both players, player 0 first, when the board empties.
   3. `placementRuns` has exactly one call site, and the block that call sits in does nothing but
      copy: no arithmetic, no comparison, no third function, no read of `h` or `v` outside the
      record's own fields.
-  4. Over the whole file, each of the runs' two fields is read exactly once — the copy into the
-     record. A second reader is a second use.
+  4. Over the whole file, the text `.h` and `.v` each occur exactly once — the copy into the
+     record. A second occurrence is a second use. It counts **text, not reads**: it cannot tell
+     whose `.h` it is, and a bracket read (`runs['h']`) is invisible to it.
 
   **This is a tripwire, not a proof, and the wording above says "plausible" advisedly.** Clause 3
   was walked past three times in review, each time by a form its previous version had not
   anticipated: a binding-tracking version fell to destructuring, a block-scoped version fell to a
   binding declared *before* the block that carried the runs past the window. Clause 4 answers that
-  one. A fifth form almost certainly exists, and each round of this costs a regex and buys one
-  shape. Every clause MUST therefore be accompanied by the sources it rejects, kept as fixtures,
-  so that what it does cover is legible rather than asserted.
+  one — and was itself walked past on the next pass, by a bracket read, which is why its text says
+  what it counts. A fifth clause would buy that one shape and teach nobody anything, so there is
+  deliberately no fifth clause. Every clause MUST instead be accompanied by the sources it
+  rejects, kept as fixtures: that is the part that compounds, because it makes what the check
+  covers legible rather than asserted.
 
   **What actually holds the property is behavioural, and it is not weak.** [0007 S7-30]'s corpus
   re-derives every placement's runs and points from the wall on both sides of every resolution of
@@ -349,7 +352,9 @@ Runs for both players, player 0 first, when the board empties.
   copy that *disagrees* fails the build the first time it produces a different number, and the
   build is the gate, so no drift ships. The residue that neither the clauses nor the corpus covers
   is precise and small: a second implementation that agrees on every position the corpus reaches
-  and differs only on one it does not.
+  and differs only on one it does not, and a second implementation whose output never reaches the
+  record at all — of which [0007 S7-23] catches the part that matters, since a sibling feeding the
+  accumulator instead of the record breaks `tiling === sum(points)`.
 
   Declared here, where the `E1` scanner reads it, and required by [0007 S7-12] and [0007 S7-35].
 
