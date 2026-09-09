@@ -192,6 +192,22 @@ function playArea(el: HTMLElement): HTMLElement {
 
 const height = (el: HTMLElement): number => Math.round(el.getBoundingClientRect().height);
 
+/**
+ * Mutation records for the four assertions below, in the manner of
+ * [0007 S7-31]: each was applied to a `git archive HEAD` copy, run, and seen to
+ * fail exactly what it names. Re-run them if the rules they point at move.
+ *
+ * | Mutation in `src/styles.css` | Fails |
+ * | --- | --- |
+ * | `.destination`: `padding: 0` → `0.25rem`, `border: 0` → `2px solid var(--line)` | both [U3-86] |
+ * | `.lines, .pattern-lines, .wall`: drop `.wall` from the selector | [U3-88] |
+ * | `.board-play`: `flex-wrap: wrap` → `nowrap` | [U3-89], and [U3-58] with it |
+ * | `.pattern-lines`: `align-items: flex-end` → `flex-start` | [U3-88] |
+ *
+ * The first of those is why the ply assertion measures `.board-play`: against
+ * the whole board section it stayed green, both boards being grid items that
+ * `align-items: stretch` pins to one height whatever they hold.
+ */
 describe('a board that holds still', () => {
   it.each(VIEWPORTS)('[U3-86] is the same size to move as waiting, at $name', async (viewport) => {
     const doc = await load(viewport.width, viewport.height);

@@ -259,6 +259,14 @@ describe('the end of a game', () => {
  * [U3-79], and a board that only shows them. The size they occupy is a layout
  * fact and belongs to the [U3-73] lane; what jsdom can see is that the two are
  * saying the same words in the same order.
+ *
+ * Mutation records, applied to a `git archive HEAD` copy and seen to fail
+ * exactly what they name, in the manner of [0007 S7-31]:
+ *
+ * | Mutation | Fails |
+ * | --- | --- |
+ * | `PlayerBoard`: move `<Wall>` back above the `<Show>` in `.board-play` | [U3-90] |
+ * | `Destinations`: replace `<FloorSummary>` with its own `<p class="floor-summary">Floor line: {n} slots…` | [U3-87] |
  */
 describe('a board that holds still', () => {
   /** A board of the player to move, offering rows nothing has selected for yet. */
