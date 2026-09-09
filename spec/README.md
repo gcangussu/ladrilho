@@ -123,3 +123,4 @@ Required fields: `title`, `author`, `date`, `status`, `intent`, `prefix`, `summa
 | [0004 — Computer opponent](0004-computer-opponent.md) | implemented | 0003 — Computer opponent | The player: the information barrier, evaluation, search, difficulty tiers, determinism |
 | [0005 — Opponent strength](0005-opponent-strength.md) | implemented | 0003 — Computer opponent | How we know it plays well: the arena, the reference opponents, the ladder, the blunder audit |
 | [0006 — Opponent in the interface](0006-opponent-in-the-interface.md) | implemented | 0003 — Computer opponent | Where it runs and what you see: seating, the worker, the thinking state; amends 0003 |
+| [0007 — Scoring explained](0007-scoring-explained.md) | draft | 0004 — Scoring explained | How the engine reports the way it scored a round: the second entry point, the record, the invariants; amends 0001 and 0003 |
