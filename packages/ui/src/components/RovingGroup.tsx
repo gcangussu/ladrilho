@@ -21,6 +21,15 @@ export function RovingGroup(props: {
   /** Stable across renders; how [U3-57] finds this group again after a ply. */
   group: string;
   /**
+   * The arrangement this group brings with it, if it brings one.
+   *
+   * A board's rows are a column whether they are offered or shown, and under
+   * [U3-86] it has to be the *same* column — so the class that arranges them is
+   * the caller's to name, and lands on the container rather than on a wrapper
+   * inside it that only one of the two configurations would have.
+   */
+  class?: string;
+  /**
    * How many controls the children render. Checked against the DOM below,
    * because unlike the list this replaced it is a promise rather than a fact.
    */
@@ -103,7 +112,7 @@ export function RovingGroup(props: {
 
   return (
     <div
-      class="roving-group"
+      class={['roving-group', props.class ?? '']}
       role="group"
       aria-label={props.label}
       data-group={props.group}

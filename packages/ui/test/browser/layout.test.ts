@@ -7,7 +7,7 @@
  * can be reloaded without taking the test runner down with it.
  */
 
-import { NUM_FACTORIES } from 'engine';
+import { NUM_FACTORIES, NUM_ROWS } from 'engine';
 import { afterEach, describe, expect, it } from 'vitest';
 
 /** A laptop, and a phone held sideways [U3-58]. */
@@ -154,6 +154,119 @@ describe('the board at a real size', () => {
       })
       .map((caption) => caption.textContent);
     expect(unseen, 'display captions that are in the markup but not on screen').toEqual([]);
+  });
+});
+
+/**
+ * A board's parts, found the way this lane can find them.
+ *
+ * [U3-68] wants elements located by role and visible text, and these are as
+ * close to that as a layout measurement gets: the board and the wall by their
+ * accessible names, and the five pattern lines by `data-row`, which is the one
+ * hook both configurations of [U3-86] carry — a `<button>` on the board of the
+ * player to move and a `<div>` on the other. Reaching for `.pattern-line`
+ * instead would be reaching for the very class under test.
+ */
+function board(doc: Document, who: string): HTMLElement {
+  const section = doc.querySelector<HTMLElement>(`section[aria-label="${who}"]`);
+  expect(section, `no board for ${who}`).not.toBeNull();
+  return section!;
+}
+
+function patternRows(el: HTMLElement): HTMLElement[] {
+  return [...el.querySelectorAll<HTMLElement>('[data-row]')];
+}
+
+function wallRows(el: HTMLElement): HTMLElement[] {
+  const wall = el.querySelector<HTMLElement>('[role="group"][aria-label$="wall"]');
+  expect(wall, 'no wall').not.toBeNull();
+  return [...wall!.children] as HTMLElement[];
+}
+
+/** The play area [U3-86] is about: the lines and the wall, and nothing else. */
+function playArea(el: HTMLElement): HTMLElement {
+  const play = el.querySelector<HTMLElement>('.board-play');
+  expect(play, 'no play area').not.toBeNull();
+  return play!;
+}
+
+const height = (el: HTMLElement): number => Math.round(el.getBoundingClientRect().height);
+
+describe('a board that holds still', () => {
+  it.each(VIEWPORTS)('[U3-86] is the same size to move as waiting, at $name', async (viewport) => {
+    const doc = await load(viewport.width, viewport.height);
+
+    // At the opening the two boards hold the same nothing and differ only in
+    // whose turn it is, which is the whole of what [U3-86] forbids mattering.
+    const mover = board(doc, 'Player 1');
+    const waiting = board(doc, 'Player 2');
+    expect(mover.querySelector('[data-group="destinations"]'), 'Player 1 is not to move').not
+      .toBeNull();
+    expect(waiting.querySelector('[data-group="destinations"]'), 'Player 2 is to move too').toBeNull();
+
+    expect(height(playArea(mover)), 'the offered play area against the shown one').toBe(
+      height(playArea(waiting)),
+    );
+  });
+
+  it.each(VIEWPORTS)('[U3-86] does not resize either board when the turn passes, at $name',
+    async (viewport) => {
+      const doc = await load(viewport.width, viewport.height);
+      const before = ['Player 1', 'Player 2'].map((who) => height(board(doc, who)));
+
+      await playAPly(doc);
+
+      // The turn has moved, so both boards have changed configuration — the
+      // one that was offering its rows is now showing them, and the other way
+      // about. Neither may have changed size for it.
+      expect(board(doc, 'Player 2').querySelector('[data-group="destinations"]'),
+        'the ply did not pass the turn').not.toBeNull();
+      expect(['Player 1', 'Player 2'].map((who) => height(board(doc, who)))).toEqual(before);
+    });
+
+  it('[U3-88] lays every pattern line level with the wall row it feeds, at a laptop', async () => {
+    const doc = await load(1280, 800);
+
+    // Both configurations: the board of the player to move, whose rows are the
+    // six controls of [U3-79], and the board that is only showing them.
+    for (const who of ['Player 1', 'Player 2']) {
+      const el = board(doc, who);
+      const lines = patternRows(el);
+      const wall = wallRows(el);
+      expect(lines, who).toHaveLength(NUM_ROWS);
+      expect(wall, who).toHaveLength(NUM_ROWS);
+
+      const levels = lines.map((line, r) => {
+        const a = line.getBoundingClientRect();
+        const b = wall[r].getBoundingClientRect();
+        return [Math.round(a.top - b.top), Math.round(a.height - b.height)];
+      });
+      expect(levels, `${who}: [top, height] of each pattern line against its wall row`).toEqual(
+        levels.map(() => [0, 0]),
+      );
+
+      // Level, and on the left: a line fills toward the wall, so its last tile
+      // is the one nearest the cell it will feed.
+      expect(
+        Math.round(lines[NUM_ROWS - 1].getBoundingClientRect().right),
+        `${who}: the lines are not left of the wall`,
+      ).toBeLessThanOrEqual(Math.round(wall[0].getBoundingClientRect().left));
+    }
+  });
+
+  it('[U3-89] stacks the lines and the wall where the board is too narrow', async () => {
+    const doc = await load(844, 390);
+    for (const who of ['Player 1', 'Player 2']) {
+      const el = board(doc, who);
+      const lines = patternRows(el)[0].getBoundingClientRect();
+      const wall = wallRows(el)[0].getBoundingClientRect();
+      expect(Math.round(wall.top), `${who}: the wall did not wrap below the lines`).toBeGreaterThan(
+        Math.round(lines.top),
+      );
+      expect(Math.round(wall.left), `${who}: the wall did not wrap below the lines`).toBeLessThan(
+        Math.round(lines.right),
+      );
+    }
   });
 });
 

@@ -17,6 +17,18 @@
   --tile-2: #cf4a45;
   --tile-3: #23262e;
   --tile-4: #46b6b0;
+  /*
+   * One tile size and one gap between tiles, for the wall and for the lines
+   * alike. [U3-88] wants pattern line r level with wall row r, and two columns
+   * whose rows are the same height and whose gaps are the same width are level
+   * by construction rather than by two numbers that have to be kept equal.
+   *
+   * 2.75rem is 44px, which is also [U3-59]'s minimum for a control; a row is a
+   * control on the board of the player to move, so the size is load-bearing at
+   * both ends and `.destination` adds nothing to it.
+   */
+  --tile: 2.75rem;
+  --tile-gap: 0.2rem;
   color-scheme: dark;
 }
 
@@ -105,8 +117,8 @@ h2 {
 .tile {
   display: inline-grid;
   place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
+  width: var(--tile);
+  height: var(--tile);
   border-radius: 0.3rem;
   background: var(--slot);
   border: 1px solid var(--line);
@@ -138,33 +150,72 @@ h2 {
   outline-offset: -3px;
 }
 
-.wall,
-.pattern-lines {
-  display: grid;
-  gap: 0.2rem;
+/*
+ * A board's play area: the lines on the left, the wall on the right, and the
+ * two level row for row [U3-88].
+ *
+ * `flex-wrap` and no breakpoint, because the decision [U3-89] describes is
+ * about the width this board has been given and not about the viewport — the
+ * same board is one of two columns at 1280 and the whole width at 844. Where
+ * the two columns fit side by side they sit side by side; where they do not
+ * they wrap, which is the stacked arrangement and needs no second rule.
+ */
+.board-play {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.6rem 0.75rem;
   margin: 0.5rem 0;
 }
 
-.wall-row {
+/*
+ * The two columns, and every row inside them: one height, one gap, from the two
+ * custom properties. Nothing here is per-configuration — this is what makes a
+ * board the same size whether its rows are offered or shown [U3-86].
+ */
+.lines,
+.pattern-lines,
+.wall {
   display: flex;
-  gap: 0.2rem;
+  flex-direction: column;
+  gap: var(--tile-gap);
 }
 
-.pattern-line {
+.wall-row,
+.pattern-line,
+.floor-row {
   display: flex;
-  gap: 0.2rem;
+  gap: var(--tile-gap);
+  height: var(--tile);
+}
+
+/*
+ * The lines column is as wide as the floor line needs, and the pattern lines
+ * are right-aligned in it, so a line's filled end meets the wall's left edge —
+ * which is where its tiles are going [U3-88]. The gutter this leaves to the
+ * left of the short rows is the printed board's own shape.
+ */
+.pattern-line {
+  width: 100%;
   justify-content: flex-end;
+}
+
+/* Tile and penalty; taller than a tile row, and the last row, so it disturbs
+   nothing above it. */
+.floor-row {
+  height: auto;
 }
 
 .floor-slots {
   display: flex;
-  gap: 0.2rem;
+  gap: var(--tile-gap);
   flex-wrap: wrap;
 }
 
 .floor-slot {
   display: grid;
   justify-items: center;
+  width: var(--tile);
 }
 
 .floor-cost {
@@ -220,14 +271,20 @@ h2 {
   gap: 0.5rem;
 }
 
-.roving-group {
+/*
+ * A group arranges its own controls: the factory plates as a grid of plates
+ * below, a board's rows as the `.lines` column above. The centre pool is the
+ * one that wants a plain wrapping row, so it is the one that says so — a bare
+ * `.roving-group` rule here would tie with `.lines` on specificity and be
+ * settled by which of the two happened to be written last.
+ */
+.roving-group[data-group='centre'] {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
 }
 
 .pick,
-.destination,
 .new-game {
   min-width: 44px;
   min-height: 44px;
@@ -243,9 +300,25 @@ h2 {
   cursor: pointer;
 }
 
+/*
+ * A destination is a row of the board that happens to be a control [U3-79], so
+ * it is drawn with an inset outline and no border and no padding: an outline is
+ * painted over the box rather than added to it, and a row that is offered has
+ * to be exactly the size of the same row shown [U3-86]. The border and the
+ * 0.25rem of padding this replaces are the four pixels a turn used to cost.
+ */
 .destination {
-  justify-content: flex-end;
-  width: 100%;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  background: var(--slot);
+  border: 0;
+  border-radius: 0.4rem;
+  outline: 2px solid var(--line);
+  outline-offset: -2px;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }
 
 .pick[aria-disabled='true'],

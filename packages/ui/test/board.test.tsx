@@ -9,7 +9,7 @@ import { NUM_COLORS, NUM_ROWS, wallColorAt } from 'engine';
 import { describe, expect, it } from 'vitest';
 import { FloorLine } from '../src/components/FloorLine.jsx';
 import { GameOver } from '../src/components/GameOver.jsx';
-import { PlayerBoard } from '../src/components/PlayerBoard.jsx';
+import { type DestinationApi, PlayerBoard } from '../src/components/PlayerBoard.jsx';
 import { Status } from '../src/components/Status.jsx';
 import { endedGame, openingView } from './fixtures.js';
 
@@ -250,6 +250,48 @@ describe('the end of a game', () => {
         `Player ${p + 1}: ${player.score} points, ${player.completedRows} completed rows, ` +
           `${player.completedCols} completed columns, ${player.completedColors} completed colours`,
       );
+    }
+  });
+});
+
+/**
+ * The two configurations of [U3-86]: a board whose six rows are the controls of
+ * [U3-79], and a board that only shows them. The size they occupy is a layout
+ * fact and belongs to the [U3-73] lane; what jsdom can see is that the two are
+ * saying the same words in the same order.
+ */
+describe('a board that holds still', () => {
+  /** A board of the player to move, offering rows nothing has selected for yet. */
+  const offered: DestinationApi = { available: () => false, onChoose: () => {} };
+
+  it('[U3-87] says the same thing about the floor line, offered or shown', () => {
+    const said = (destinations: DestinationApi | null): string => {
+      const { getByText, unmount } = board({ destinations });
+      const text = getByText(/^Floor line:/).textContent ?? '';
+      unmount();
+      return text;
+    };
+    // Both spellings existed, agreed on the numbers, and disagreed on the words.
+    expect(said(offered)).toBe(said(null));
+    expect(said(null)).toContain('of 7 slots');
+  });
+
+  it('[U3-90] puts the lines and the floor before the wall, offered or shown', () => {
+    for (const destinations of [offered, null]) {
+      const { container, unmount } = board({ destinations });
+      // `querySelectorAll` answers in document order, which is the order under
+      // test: the five lines, the floor, then the wall.
+      const parts = [
+        ...container.querySelectorAll('[data-row], [aria-label*="floor line"], [aria-label$="wall"]'),
+      ];
+      expect(parts, String(destinations)).toHaveLength(NUM_ROWS + 2);
+      expect(parts[NUM_ROWS].getAttribute('aria-label'), String(destinations)).toContain(
+        'floor line',
+      );
+      expect(parts[NUM_ROWS + 1].getAttribute('aria-label'), String(destinations)).toBe(
+        'Player 1 wall',
+      );
+      unmount();
     }
   });
 });

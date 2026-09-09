@@ -1,6 +1,7 @@
 import type { JSX } from '@solidjs/web';
 import { FLOOR_PENALTIES, FLOOR_SLOTS, NUM_COLORS } from 'engine';
 import { For, Show } from 'solid-js';
+import type { RowControl } from './PatternLines.jsx';
 import { Tile } from './Tile.jsx';
 
 /**
@@ -77,7 +78,15 @@ export function floorOverflow(occupied: number): number {
   return occupied - FLOOR_SLOTS;
 }
 
-export function FloorLine(props: {
+/**
+ * The floor's slots, in both of [U3-86]'s configurations — the sixth
+ * destination of [0001 E1-6] on the board of the player to move, an inert row
+ * on every other board.
+ *
+ * The counterpart of `PatternRow`, and for the same reason: `.floor-row` is on
+ * both, so `control` changes what the row is and never how much room it takes.
+ */
+export function FloorRow(props: {
   floor: number[];
   marker: boolean;
   /** From the view model's `floorOccupied`, never recomputed here [U3-4]. */
@@ -85,18 +94,74 @@ export function FloorLine(props: {
   /** From `players[p].floorPenalty` [U3-38]. */
   penalty: number;
   names: string[];
+  /** Null on a board that is shown rather than offered. */
+  control: RowControl | null;
+}): JSX.Element {
+  const tiles = (): JSX.Element => (
+    <FloorTiles floor={props.floor} marker={props.marker} names={props.names} />
+  );
+  return (
+    <Show
+      when={props.control}
+      fallback={<div class="floor-row">{tiles()}</div>}
+    >
+      {(control) => (
+        <button
+          type="button"
+          data-roving="true"
+          class="floor-row destination"
+          aria-label={floorLineName(props.occupied, props.penalty)}
+          aria-disabled={control().available ? 'false' : 'true'}
+          tabindex={control().tabindex}
+          onClick={() => control().onChoose()}
+        >
+          {tiles()}
+        </button>
+      )}
+    </Show>
+  );
+}
+
+/**
+ * What the floor line costs, in words — one sentence, said the same way on
+ * every board [U3-87].
+ *
+ * It was two sentences, one beside the controls and one beside the display,
+ * agreeing on the numbers and disagreeing on the words. Two spellings of one
+ * sentence are two lengths, and at some board width two heights.
+ */
+export function FloorSummary(props: { occupied: number; penalty: number }): JSX.Element {
+  return (
+    <p class="floor-summary">
+      Floor line: {props.occupied} of {FLOOR_SLOTS} slots, penalty {props.penalty}
+      <Show when={floorOverflow(props.occupied) > 0}>
+        {' '}
+        (plus {floorOverflow(props.occupied)} beyond the last slot, costing nothing)
+      </Show>
+    </p>
+  );
+}
+
+/** One player's floor line, shown but not offered. */
+export function FloorLine(props: {
+  floor: number[];
+  marker: boolean;
+  occupied: number;
+  penalty: number;
+  names: string[];
   label: string;
 }): JSX.Element {
   return (
-    <div class="floor-line" role="group" aria-label={props.label}>
-      <FloorTiles floor={props.floor} marker={props.marker} names={props.names} />
-      <p class="floor-summary">
-        Floor line: {props.occupied} of {FLOOR_SLOTS} slots, penalty {props.penalty}
-        <Show when={floorOverflow(props.occupied) > 0}>
-          {' '}
-          (plus {floorOverflow(props.occupied)} beyond the last slot, costing nothing)
-        </Show>
-      </p>
+    <div class="floor-block" role="group" aria-label={props.label}>
+      <FloorRow
+        floor={props.floor}
+        marker={props.marker}
+        occupied={props.occupied}
+        penalty={props.penalty}
+        names={props.names}
+        control={null}
+      />
+      <FloorSummary occupied={props.occupied} penalty={props.penalty} />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import type { JSX } from '@solidjs/web';
 import type { AzulJSONPlayer } from 'engine';
 import { Show } from 'solid-js';
-import { Destinations, FloorSummary } from './Destinations.jsx';
+import { Destinations } from './Destinations.jsx';
 import { FloorLine } from './FloorLine.jsx';
 import { PatternLines } from './PatternLines.jsx';
 import { Wall } from './Wall.jsx';
@@ -61,35 +61,31 @@ export function PlayerBoard(props: {
         <p class="turn-marker">{props.toMove ? 'To move' : 'Waiting'}</p>
       </header>
 
-      <Wall
-        wall={props.player.wall}
-        placed={props.placed}
-        names={props.names}
-        label={`${props.name} wall`}
-      />
-
-      <Show
-        when={props.destinations}
-        fallback={
-          <>
-            <PatternLines
-              lines={props.player.patternLines}
-              names={props.names}
-              label={`${props.name} pattern lines`}
-            />
-            <FloorLine
-              floor={props.player.floor}
-              marker={props.player.floorMarker}
-              occupied={props.floorOccupied}
-              penalty={props.player.floorPenalty}
-              names={props.names}
-              label={`${props.name} floor line`}
-            />
-          </>
-        }
-      >
-        {(api) => (
-          <>
+      {/* The lines before the wall, in the document as on the screen [U3-90]:
+          side by side where there is room they are the left column [U3-88], and
+          the six controls of [U3-79] are in them. */}
+      <div class="board-play">
+        <Show
+          when={props.destinations}
+          fallback={
+            <div class="lines">
+              <PatternLines
+                lines={props.player.patternLines}
+                names={props.names}
+                label={`${props.name} pattern lines`}
+              />
+              <FloorLine
+                floor={props.player.floor}
+                marker={props.player.floorMarker}
+                occupied={props.floorOccupied}
+                penalty={props.player.floorPenalty}
+                names={props.names}
+                label={`${props.name} floor line`}
+              />
+            </div>
+          }
+        >
+          {(api) => (
             <Destinations
               player={props.player}
               floorOccupied={props.floorOccupied}
@@ -98,10 +94,16 @@ export function PlayerBoard(props: {
               available={(dest) => api().available(dest)}
               onChoose={(dest) => api().onChoose(dest)}
             />
-            <FloorSummary occupied={props.floorOccupied} penalty={props.player.floorPenalty} />
-          </>
-        )}
-      </Show>
+          )}
+        </Show>
+
+        <Wall
+          wall={props.player.wall}
+          placed={props.placed}
+          names={props.names}
+          label={`${props.name} wall`}
+        />
+      </div>
 
       <p class="completed">
         Completed: {props.player.completedRows} rows, {props.player.completedCols} columns,{' '}
