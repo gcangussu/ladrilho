@@ -43,6 +43,9 @@ import {
   toCanonical,
   toJSON,
   wallColorAt,
+  wallCompletedColors,
+  wallCompletedCols,
+  wallCompletedRows,
   type AzulState,
   type CanonicalState,
   type Color,
@@ -460,6 +463,16 @@ describe('the record against the position it came from', () => {
       expect(before.isTerminal, `${where}: the ply started terminal`).toBe(false);
       if (record.bonuses === null) continue;
       for (const [p, bonus] of record.bonuses.entries()) {
+        // The counts against the wall the game ended on, not against the
+        // record: `rowPoints === ROW_BONUS * rows` is true of any pair of
+        // numbers in that ratio, and says nothing about whether `rows` is the
+        // number of rows this player actually completed [0001 E1-70].
+        const wall = after.walls[p];
+        expect(bonus.rows, `${where} seat ${p}: rows completed`).toBe(wallCompletedRows(wall));
+        expect(bonus.cols, `${where} seat ${p}: columns completed`).toBe(wallCompletedCols(wall));
+        expect(bonus.colors, `${where} seat ${p}: colours completed`).toBe(
+          wallCompletedColors(wall),
+        );
         expect(bonus.rowPoints, `${where} seat ${p}: rows`).toBe(ROW_BONUS * bonus.rows);
         expect(bonus.colPoints, `${where} seat ${p}: cols`).toBe(COL_BONUS * bonus.cols);
         expect(bonus.colorPoints, `${where} seat ${p}: colors`).toBe(COLOR_BONUS * bonus.colors);

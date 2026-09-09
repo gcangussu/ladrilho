@@ -259,9 +259,14 @@ export function endRound(
     }
   }
 
-  // [S7-20] `bonuses` is non-null exactly when one of the two endings above
-  // ran, which is exactly when the game ended. Both seats answer `null`
-  // together or neither does — they were asked the same question.
+  // [S7-20] on the explained path `bonuses` is non-null exactly when one of
+  // the two endings above ran, which is exactly when the game ended. On the
+  // unexplained path it is `null` throughout and says nothing about either —
+  // `finishGame` was asked for no record, so a game that ended returns the
+  // same `null` as one that did not. Nothing reads it there.
+  //
+  // Both seats answer `null` together or neither does: they were asked the
+  // same question.
   if (first === null || second === null) return null;
   return { round, players: [first, second], bonuses };
 }

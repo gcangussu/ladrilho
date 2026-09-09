@@ -133,7 +133,7 @@ describe('the package is self-contained [E1-50]', () => {
    * `round.ts`, where they are not in scope, so the clause had been "seen to
    * fail" against a file that could never have compiled.
    */
-  describe('[E1-71] no second implementation of the fusion rule', () => {
+  describe('[E1-71] [S7-12] no second implementation of the fusion rule', () => {
     /** Line and block comments removed; the rule quoted in prose is not a copy of it. */
     const stripComments = (text: string): string =>
       text.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, '');
@@ -265,7 +265,7 @@ describe('the package is self-contained [E1-50]', () => {
       ['a ternary sibling', TERNARY_SIBLING, 1],
       ['a sibling inside score.ts', SCORE_TS_SIBLING, 2],
       ['a sibling that fuses with ifs', IF_SIBLING, 3],
-    ])('fails against %s', (_name, sibling, clause) => {
+    ])('[S7-35] fails against %s', (_name, sibling, clause) => {
       const caught =
         fusions([sibling]).length + runCallers([sibling]).length + runsMisuse([sibling]).length;
       expect(caught, `nothing caught ${_name}`).toBeGreaterThan(0);
