@@ -20,6 +20,14 @@
  *   `packages/engine/src` and run; what failed and what did not is recorded
  *   verbatim, including where a mutation is visible to tests outside this
  *   file.
+ *
+ *   A record like that rots in two ways, and both have been guarded against
+ *   here. It names a function the code has since moved out of — which happened,
+ *   when `resolvePlayer` was extracted from `endRound`, and all five were
+ *   re-run and two of the names corrected. And the anchor it names silently
+ *   stops matching, so nothing is mutated and a green run reads as "the
+ *   mutation was not caught" — so every one of these was applied by a script
+ *   that asserts its anchor occurs exactly once before it writes.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -149,7 +157,7 @@ describe('the invariants [S7-23]..[S7-27]', () => {
 
   /**
    * Seen to fail against: `FLOOR_PENALTIES.slice(0, Math.min(occupied, FLOOR_SLOTS - 1))`
-   * in `endRound` — one rung short. This assertion failed; [S7-23], [S7-25],
+   * in `resolvePlayer` — one rung short. This assertion failed; [S7-23], [S7-25],
    * [S7-26] and [S7-27] all passed, because the number charged is
    * `CUM_PENALTY`'s and the ladder is only reported beside it. The ladder
    * check of [S7-16] below failed too, which is the same lie stated directly.
@@ -164,7 +172,7 @@ describe('the invariants [S7-23]..[S7-27]', () => {
 
   /**
    * Seen to fail against: the clamp removed — `s.scores[p] = charged` in
-   * `endRound`. The second clause failed (a negative score is not
+   * `resolvePlayer`. The second clause failed (a negative score is not
    * `max(0, ...)`); the first kept holding, because `forgiven` is measured
    * against what was written. [S7-23], [S7-24], [S7-26] and [S7-27] passed.
    * [S7-17] failed with it, and so did the corpus check of [S7-30] — with
