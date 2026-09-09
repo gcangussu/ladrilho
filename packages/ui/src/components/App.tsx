@@ -6,6 +6,7 @@ import { Announcer, announcement } from './Announcer.jsx';
 import { Displays, type Pick } from './Displays.jsx';
 import { GameOver } from './GameOver.jsx';
 import { PlayerBoard } from './PlayerBoard.jsx';
+import { Scoring } from './Scoring.jsx';
 import { Seating } from './Seating.jsx';
 import { Status } from './Status.jsx';
 
@@ -137,7 +138,21 @@ export function App(): JSX.Element {
       <Seating seating={view().seating} onChoose={(next) => startWithSeating(next)} />
 
       <Show when={game().isTerminal}>
-        <GameOver game={game()} names={names()} />
+        <GameOver game={game()} names={names()} bonuses={view().scoring?.bonuses ?? null} />
+      </Show>
+
+      {/* The workings of the last round, for as long as it is the last round
+          [U3-82]. Unlike the transition marking of [U3-43] this does not clear
+          on the next ply — reading a round's arithmetic takes longer than a
+          ply does. */}
+      <Show when={view().scoring}>
+        {(scoring) => (
+          <Scoring
+            scoring={scoring()}
+            names={names()}
+            playerNames={['Player 1', 'Player 2']}
+          />
+        )}
       </Show>
 
       <Displays

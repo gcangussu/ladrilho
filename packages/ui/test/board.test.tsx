@@ -208,32 +208,32 @@ describe('a round transition', () => {
 
 describe('the end of a game', () => {
   it('[U3-44] declares the winner from game.outcome', () => {
-    const { getByRole } = render(() => <GameOver game={endedGame()} names={names} />);
+    const { getByRole } = render(() => <GameOver game={endedGame()} names={names} bonuses={null} />);
     const panel = getByRole('region', { name: 'Final result' });
     expect(panel).toHaveTextContent('Player 1 wins.');
   });
 
   it('[U3-44] declares the other player the winner when outcome is -1', () => {
     const game = endedGame({ outcome: -1, scores: [40, 50] });
-    const { getByRole } = render(() => <GameOver game={game} names={names} />);
+    const { getByRole } = render(() => <GameOver game={game} names={names} bonuses={null} />);
     expect(getByRole('region', { name: 'Final result' })).toHaveTextContent('Player 2 wins.');
   });
 
   it('[U3-44] reports a draw as a draw, not as a win', () => {
     const game = endedGame({ outcome: 0, scores: [45, 45] });
-    const { getByRole } = render(() => <GameOver game={game} names={names} />);
+    const { getByRole } = render(() => <GameOver game={game} names={names} bonuses={null} />);
     const panel = getByRole('region', { name: 'Final result' });
     expect(panel).toHaveTextContent('A draw.');
     expect(panel).not.toHaveTextContent('wins');
   });
 
   it('[U3-45] distinguishes an exhausted ending from an ordinary one', () => {
-    const ordinary = render(() => <GameOver game={endedGame()} names={names} />);
+    const ordinary = render(() => <GameOver game={endedGame()} names={names} bonuses={null} />);
     expect(ordinary.getByRole('region', { name: 'Final result' })).toHaveTextContent(
       'ended on a completed row',
     );
     const drained = render(() => (
-      <GameOver game={endedGame({ exhausted: true })} names={names} />
+      <GameOver game={endedGame({ exhausted: true })} names={names} bonuses={null} />
     ));
     expect(drained.getByRole('region', { name: 'Final result' })).toHaveTextContent(
       'no tiles could be dealt',
@@ -242,7 +242,7 @@ describe('the end of a game', () => {
 
   it('[U3-46] shows both final scores and each player’s completed counts', () => {
     const game = endedGame();
-    const { getByRole } = render(() => <GameOver game={game} names={names} />);
+    const { getByRole } = render(() => <GameOver game={game} names={names} bonuses={null} />);
     const panel = getByRole('region', { name: 'Final result' });
     for (const p of [0, 1]) {
       const player = game.players[p];

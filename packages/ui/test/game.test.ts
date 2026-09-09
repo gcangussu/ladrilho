@@ -1,12 +1,13 @@
 /**
  * The engine seam: the held state, `submit`, and what `publish` derives.
  *
- * The engine module is wrapped so that `newGame` and `apply` can be counted and
- * the state `newGame` returned can be captured. [U3-80] sanctions exactly this,
- * and for the reason it gives: [U3-5], [U3-18] and [U3-65] are properties of a
- * *history*, and no snapshot of a position can show them. Capturing the state
- * is also how [U3-63] is asserted without a back door — `apply` mutates in
- * place [0001 E1-51], so the captured reference stays the held state.
+ * The engine module is wrapped so that `newGame` and `applyExplained` can be
+ * counted and the state `newGame` returned can be captured. [U3-80] sanctions
+ * exactly this, and for the reason it gives: [U3-5], [U3-18] and [U3-65] are
+ * properties of a *history*, and no snapshot of a position can show them.
+ * Capturing the state is also how [U3-63] is asserted without a back door — the
+ * engine mutates in place [0001 E1-51], so the captured reference stays the
+ * held state.
  *
  * [U3-1] has no test here and needs none: "no component reads the state" is a
  * statement about source, and [U3-75]'s source check owns it — the state binding
@@ -19,7 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const engine = vi.hoisted(() => ({
   newGame: vi.fn(),
-  apply: vi.fn(),
+  applyExplained: vi.fn(),
   states: [] as AzulState[],
 }));
 
@@ -33,9 +34,9 @@ vi.mock('engine', async (importOriginal) => {
       engine.states.push(state);
       return state;
     },
-    apply: (state: AzulState, action: number) => {
-      engine.apply(state, action);
-      return actual.apply(state, action);
+    applyExplained: (state: AzulState, action: number) => {
+      engine.applyExplained(state, action);
+      return actual.applyExplained(state, action);
     },
   };
 });
@@ -60,7 +61,7 @@ async function load(search = ''): Promise<Game> {
   vi.resetModules();
   engine.states.length = 0;
   engine.newGame.mockClear();
-  engine.apply.mockClear();
+  engine.applyExplained.mockClear();
   return import('../src/game.js');
 }
 
@@ -150,12 +151,15 @@ describe('one state per game', () => {
     expect(engine.newGame).toHaveBeenCalledTimes(1);
   });
 
-  it('[U3-65] only ever advances the held state with apply', async () => {
+  it('[U3-65] only ever advances the held state with applyExplained', async () => {
+    // [U3-18], widened: `applyExplained` is the entry point `submit` takes, and
+    // it is the *only* one — a ply that also went through `apply` would be a
+    // second path into the held state [0007 S7-2].
     const game = await load('?seed=42');
     const state = held();
     const played = [step(game), step(game), step(game)];
-    expect(engine.apply.mock.calls.map((c) => c[1])).toEqual(played);
-    expect(engine.apply.mock.calls.every((c) => c[0] === state)).toBe(true);
+    expect(engine.applyExplained.mock.calls.map((c) => c[1])).toEqual(played);
+    expect(engine.applyExplained.mock.calls.every((c) => c[0] === state)).toBe(true);
     expect(held()).toBe(state);
   });
 
@@ -175,7 +179,7 @@ describe('submit', () => {
     const game = await load('?seed=42');
     expect(game.submit.length).toBe(1);
     const action = step(game);
-    expect(engine.apply).toHaveBeenCalledExactlyOnceWith(held(), action);
+    expect(engine.applyExplained).toHaveBeenCalledExactlyOnceWith(held(), action);
   });
 
   it('[U3-20] does not guard: the engine throw propagates', async () => {

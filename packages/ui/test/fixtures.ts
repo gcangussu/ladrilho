@@ -26,6 +26,7 @@ export function openingView(seed = 42): ViewModel {
     seating: HOT_SEAT,
     thinking: null,
     lastChoice: null,
+    scoring: null,
   };
 }
 

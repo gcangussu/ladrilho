@@ -108,13 +108,18 @@ const outsideStateModule = (files: Source[]): Source[] =>
 
 /**
  * One forbidden shape. `find` returns a description of every occurrence, and
- * `offender` is a source that must produce at least one.
+ * every source in `offenders` must produce at least one.
+ *
+ * Plural because a clause can have more than one way of being broken, and a
+ * matcher proven against one of them is not proven against the others: the
+ * `apply` clauses below each cover two entry points, and a regex that had
+ * quietly stopped matching the second would look exactly like a passing test.
  */
 interface Clause {
   cites: string;
   what: string;
   find: (files: Source[]) => string[];
-  offender: Source;
+  offenders: Source[];
 }
 
 const CLAUSES: Clause[] = [
@@ -139,20 +144,20 @@ const CLAUSES: Clause[] = [
           .map(({ file, items }) => `${file}: [${items.join(', ')}]`),
       );
     },
-    offender: { file: 'bad.ts', code: 'const CAPACITIES = [1, 2, 3, 4, 5];\n' },
+    offenders: [{ file: 'bad.ts', code: 'const CAPACITIES = [1, 2, 3, 4, 5];\n' }],
   },
   {
     cites: '[U3-49]',
     what: 'the incremental penalty ladder',
     find: (files) => matches(files, /-1\s*,\s*-1\s*,\s*-2\s*,\s*-2\s*,\s*-2\s*,\s*-3\s*,\s*-3/g),
-    offender: { file: 'bad.ts', code: 'const p = [-1, -1, -2, -2, -2, -3, -3];\n' },
+    offenders: [{ file: 'bad.ts', code: 'const p = [-1, -1, -2, -2, -2, -3, -3];\n' }],
   },
   {
     cites: '[U3-49]',
     what: 'the cumulative penalty ladder',
     find: (files) =>
       matches(files, /0\s*,\s*-1\s*,\s*-2\s*,\s*-4\s*,\s*-6\s*,\s*-8\s*,\s*-11\s*,\s*-14/g),
-    offender: { file: 'bad.ts', code: 'const c = [0, -1, -2, -4, -6, -8, -11, -14];\n' },
+    offenders: [{ file: 'bad.ts', code: 'const c = [0, -1, -2, -4, -6, -8, -11, -14];\n' }],
   },
   {
     cites: '[U3-49]',
@@ -161,7 +166,7 @@ const CLAUSES: Clause[] = [
     // with nested r/col loops over NUM_ROWS and NUM_COLORS, indexing
     // r * NUM_COLORS + col [0001 E1-2] — never with a remainder.
     find: (files) => matches(files, /%\s*(?:5|NUM_COLORS)\b/g),
-    offender: { file: 'bad.ts', code: 'const col = (color + row) % NUM_COLORS;\n' },
+    offenders: [{ file: 'bad.ts', code: 'const col = (color + row) % NUM_COLORS;\n' }],
   },
   {
     cites: '[U3-51]',
@@ -171,7 +176,7 @@ const CLAUSES: Clause[] = [
         files,
         /(?<![\w.])(?:30|6)(?![\w.])\s*[*/%]|[*/%]\s*(?<![\w.])(?:30|6)(?![\w.])/g,
       ),
-    offender: { file: 'bad.ts', code: 'const a = source * 30 + color * 6 + dest;\n' },
+    offenders: [{ file: 'bad.ts', code: 'const a = source * 30 + color * 6 + dest;\n' }],
   },
   {
     cites: '[U3-50]',
@@ -180,16 +185,25 @@ const CLAUSES: Clause[] = [
       files
         .filter(({ code }) => {
           const copy = code.search(/\b(?:structuredClone|fromCanonical|clone)\s*\(/);
-          return copy >= 0 && code.search(/\bapply\s*\(/) > copy;
+          // [U3-75] as amended: `/\bapply\s*\(/` does not match
+          // `applyExplained(`, so an unwidened clause would silently stop
+          // covering the entry point `submit` actually takes [0007 S7-1].
+          return copy >= 0 && code.search(/\bapply(?:Explained)?\s*\(/) > copy;
         })
         .map(({ file }) => file),
-    offender: { file: 'bad.ts', code: 'const s = clone(state);\napply(s, action);\n' },
+    offenders: [
+      { file: 'bad.ts', code: 'const s = clone(state);\napply(s, action);\n' },
+      { file: 'bad.ts', code: 'const s = clone(state);\napplyExplained(s, action);\n' },
+    ],
   },
   {
     cites: '[U3-18]',
-    what: 'apply called outside the state module',
-    find: (files) => matches(outsideStateModule(files), /\bapply\s*\(/g),
-    offender: { file: `${COMPONENTS}Bad.tsx`, code: 'apply(state, action);\n' },
+    what: 'apply or applyExplained called outside the state module',
+    find: (files) => matches(outsideStateModule(files), /\bapply(?:Explained)?\s*\(/g),
+    offenders: [
+      { file: `${COMPONENTS}Bad.tsx`, code: 'apply(state, action);\n' },
+      { file: `${COMPONENTS}Bad.tsx`, code: 'applyExplained(state, action);\n' },
+    ],
   },
   {
     cites: '[U3-1]',
@@ -204,10 +218,10 @@ const CLAUSES: Clause[] = [
           .map((name) => `${file}: ${name}`),
       );
     },
-    offender: {
+    offenders: [{
       file: `${COMPONENTS}Bad.tsx`,
       code: "import { state, view } from '../game.js';\n",
-    },
+    }],
   },
   {
     cites: '[U3-40]',
@@ -216,19 +230,19 @@ const CLAUSES: Clause[] = [
     // module is barred, which is where a transition would be predicted rather
     // than detected.
     find: (files) => matches(inStateModule(files), /\btilesLeft\b/g),
-    offender: { file: STATE_MODULE, code: 'if (state.tilesLeft === 0) endRound();\n' },
+    offenders: [{ file: STATE_MODULE, code: 'if (state.tilesLeft === 0) endRound();\n' }],
   },
   {
     cites: '[U3-8]',
     what: 'a dynamic import',
     find: (files) => matches(files, /\bimport\s*\(/g),
-    offender: { file: 'bad.ts', code: "const m = await import('./late.js');\n" },
+    offenders: [{ file: 'bad.ts', code: "const m = await import('./late.js');\n" }],
   },
   {
     cites: '[U3-8]',
     what: 'an absolute http(s) URL outside a comment',
     find: (files) => matches(files, /https?:\/\//g),
-    offender: { file: 'bad.ts', code: "const logo = 'https://example.com/logo.png';\n" },
+    offenders: [{ file: 'bad.ts', code: "const logo = 'https://example.com/logo.png';\n" }],
   },
 ];
 
@@ -283,7 +297,13 @@ describe('[U3-75] the source check', () => {
   it.each(CLAUSES.map((c) => [`${c.cites} ${c.what}`, c] as const))(
     'rejects %s',
     (_name, clause) => {
-      expect(clause.find([clause.offender]).length, 'the matcher never matches').toBeGreaterThan(0);
+      for (const offender of clause.offenders) {
+        expect(
+          clause.find([offender]).length,
+          `the matcher does not match ${offender.code.trim()}`,
+        ).toBeGreaterThan(0);
+      }
+      expect(clause.offenders.length).toBeGreaterThan(0);
     },
   );
 

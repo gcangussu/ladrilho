@@ -46,20 +46,19 @@ replay log, and persistence a versioned snapshot format. Neither exists, and nei
 The engine's own open question about history — *0001 — Engine core*, *Open questions* — resolves
 to *nowhere*.
 
-### Two places this knowingly falls short of intent 0002
+### Two places this knowingly fell short of intent 0002, and when they were reopened
 
 Beyond its three questions intent 0002 states things it simply wants — one criterion under *What
-good looks like*, one sentence in *The idea*. Both are met only in part, and both shortfalls trace
-to the same constraint under *Constraints*: "It never contains a rule. Everything it knows about
-legality and scoring it asks the engine for."
+good looks like*, one sentence in *The idea*. Both were met only in part when this document was
+written, and both shortfalls traced to the same constraint under *Constraints*: "It never contains
+a rule. Everything it knows about legality and scoring it asks the engine for."
 
 **Scoring legibility.** "Scoring is legible: when points are awarded you can tell which tiles
-earned them." [U3-43] shows which tiles arrived on the wall and each player's net change — but
-not what each tile earned, and when three pattern lines resolve together the arithmetic is not
-recoverable from what is shown. Producing a per-tile figure means re-deriving [0001 E1-24] in the
-interface, because `apply` resolves a round atomically and reports no breakdown
-([0001 E1-22] through [0001 E1-29]). This is a **deliberate narrowing of a stated criterion**, not
-an open question being answered.
+earned them." [U3-43] shows which tiles arrived on the wall and each player's net change — but not
+what each tile earned, and when three pattern lines resolve together the arithmetic was not
+recoverable from what is shown. Producing a per-tile figure meant re-deriving [0001 E1-24] in the
+interface, because `apply` resolves a round atomically and reported no breakdown
+([0001 E1-22] through [0001 E1-29]).
 
 **End-of-game bonuses.** "At the end of the game the bonuses are shown and a winner is declared."
 [U3-44] declares the winner and [U3-46] shows each player's completed row, column and colour
@@ -69,11 +68,19 @@ the round score at zero ([0001 E1-28]) and `finishGame` then adds unclamped bonu
 observed delta is `max(0, score + tiling + penalty) − score + bonus` and the clamp destroys the
 split irrecoverably.
 
-Both are recorded rather than quietly narrowed, because a frozen intent cannot argue back — and
-both are now *intent 0004 — Scoring explained*, which asks for the workings rather than the total.
-Neither is a UI change: the points exist only inside the engine's round resolution, so closing
-either gap starts with the engine reporting how it scored, not only how much. Until that lands,
-[U3-43] and [U3-46] are what this interface can honestly show.
+**Both are now closed, and neither was closed here.** They were recorded rather than quietly
+narrowed, because a frozen intent cannot argue back; they became *intent 0004 — Scoring explained*,
+which asks for the workings rather than the total; and the fix was where the diagnosis said it had
+to be. The points exist only inside round resolution, so the engine reports how it scored and not
+only how much — `applyExplained` and its `RoundScoring` ([0007 S7-1]) — and the interface shows
+what it is handed. [U3-82] through [U3-85] are that side of it, and [U3-46] is extended to itemise
+the bonus half. The interface still performs no arithmetic on either.
+
+What remains narrowed is smaller and is not a shortfall against the intent: only the most recent
+round's workings are kept ([U3-82]), because the engine retains no record ([0007 S7-7]) and a
+scoresheet of every round needs a place to accumulate and a surface to browse. *Intent 0004* asks
+that question; a record is already a value safe to keep ([0007 S7-8]), so nothing here forecloses
+it.
 
 ## Definitions
 
@@ -106,6 +113,8 @@ interface ViewModel {
   floorOccupied: number[];        // [2], from floorOccupied(state, p)
   seed: number;                   // the seed this game was dealt from
   transition: Transition | null;  // set for exactly one ply; see [U3-42]
+  scoring: RoundScoring | null;   // the most recent round's workings; sticky,
+                                  // see [U3-82] and [0007 S7-1]
 }
 
 interface Transition {
@@ -149,7 +158,8 @@ type Selection = { source: number; color: Color } | null;
   nowhere else.
 - **[U3-6]** Every value a component reads **that derives from the game state** MUST be a declared
   field of the view model. It gains `seating`, `thinking` and `lastChoice` with the computer
-  opponent ([0006 W6-2], [0006 W6-19], [0006 W6-25]). *(Extended by [0006 W6-28].)* The exceptions are the current selection and the stateless engine
+  opponent ([0006 W6-2], [0006 W6-19], [0006 W6-25]), and `scoring` with the workings
+  ([U3-82]). *(Extended by [0006 W6-28].)* The exceptions are the current selection and the stateless engine
   functions of [U3-4]. A component that needs anything else gets a new view-model field, computed
   at publish time.
 
@@ -222,6 +232,11 @@ type Selection = { source: number; color: Color } | null;
   and is not reachable as a move. [U3-65] is the positive form a test can assert.)*
 - **[U3-18]** Every advance of the game MUST go through a single `submit(action)` path, which
   applies the action to the held state and then publishes. No component calls `apply`.
+
+  `applyExplained` ([0007 S7-1]) is the state module's alone on the same terms, and is the path
+  `submit` takes: it performs the identical transition and additionally returns the record
+  [U3-82] keeps. There is still exactly one way into the held state — the entry point changed,
+  the number of them did not.
 
   `submit` stays **synchronous**. What became asynchronous when the computer opponent arrived is
   the *arrival* of a move — the turn loop of [0006 W6-6] — not this call. A move from the worker
@@ -347,11 +362,41 @@ type Selection = { source: number; color: Color } | null;
 - **[U3-45]** A game that ended exhausted (`game.exhausted`, [0001 E1-37]) MUST be distinguishable
   from an ordinary finish.
 - **[U3-46]** The end of a game MUST show each player's completed row, column and colour counts,
-  and MUST NOT compute the bonus arithmetic of [0001 E1-38] from them. See *Two places this
-  knowingly falls short of intent 0002*, and *intent 0004 — Scoring explained*.
+  and MUST NOT compute the bonus arithmetic of [0001 E1-38] from them. It MUST also itemise what
+  each count earned, read from the bonus half of the record ([0007 S7-19], [0007 S7-22]) and from
+  nothing else — the interface still performs no bonus arithmetic. Where there is no record to
+  read, the counts stand alone as they did before.
 - **[U3-47]** A terminal position has no legal actions ([0001 E1-11]), so every move control MUST
   be unavailable, and the only offer MUST be a new game. That new game MUST take a freshly
   generated seed per [U3-13], never the one in the URL.
+
+### How a round scored
+
+Closes the *scoring legibility* shortfall recorded in *Scope*. All four requirements read the
+engine's `RoundScoring` ([0007 S7-1]); none of them computes anything.
+
+- **[U3-82]** The view model MUST carry the most recent `RoundScoring`, or `null` before any round
+  has scored. Unlike `transition` it **persists across plies**: it is sourced from module state
+  the way `seed` and `lastChoice` are, and is replaced only by a later record.
+
+  *A different lifetime from `transition`, in the same struct, and the two MUST NOT be conflated —
+  [U3-42] is unchanged and stays null on every non-transition ply. The marking of [U3-43] clears
+  on the next ply because it marks tiles on a board that is moving on; the workings stay, because
+  reading a round's arithmetic takes longer than a ply does.*
+
+- **[U3-83]** Dealing a game MUST clear it, beside the existing resets of `previous`, `thinking`
+  and `lastChoice`. Without this a new game shows the previous game's workings until its first
+  round scores — which the sticky lifetime makes minutes rather than a frame, and which no
+  single-game test can see.
+
+- **[U3-84]** The workings MUST be rendered from the record and from nothing else: no arithmetic
+  on the record's fields, no diff of two positions, no second source. A record whose numbers
+  disagree with each other MUST be displayed as it stands, because the interface has no second
+  opinion to prefer.
+
+- **[U3-85]** The floor penalty MUST be shown as the ladder of charged rungs, with the marker
+  called out, per [0007 S7-16]. Never per tile: the floor is a per-colour count and a marker flag
+  ([0001 E1-3]), so there is no order to attribute a rung to a tile by.
 
 ### No rule lives here
 
@@ -497,6 +542,11 @@ budget.
   under `src/components/` ([U3-1]); a read of `tilesLeft` in the state module ([U3-40]); and
   `import(` or an absolute `http(s)` URL in a string literal or JSX attribute — comments excepted,
   since [U3-10] sends implementers to the Solid docs by URL ([U3-8]).
+
+  Both `apply` clauses MUST match `applyExplained` too: `/\bapply\s*\(/` does not, so as
+  written they silently stopped covering the entry point `submit` takes ([U3-18]). The matcher is
+  `/\bapply(?:Explained)?\s*\(/`, and each clause MUST be shown to reject **both** names — a
+  clause proven against one alternative is not proven against the other.
 
   Two of those need their escape hatch named, because the ban is absolute and the workaround is
   not obvious. A flat `[25]` wall is walked with nested `r`/`col` loops over `NUM_ROWS` and

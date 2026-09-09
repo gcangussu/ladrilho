@@ -14,9 +14,10 @@ import {
   type AzulJSON,
   type AzulState,
   type Player,
+  type RoundScoring,
   NUM_COLORS,
   NUM_ROWS,
-  apply,
+  applyExplained,
   floorOccupied,
   newGame,
   toJSON,
@@ -67,12 +68,24 @@ export interface ViewModel {
    * [0003 U3-30] already rules out judging one before it is made.
    */
   lastChoice: Choice | null;
+  /**
+   * How the engine scored the most recent round [U3-82], or `null` before the
+   * first one has scored.
+   *
+   * A *different lifetime* from `transition` in the same struct, and the two
+   * must not be conflated [U3-42]. `transition` is set on the one ply that
+   * caused it and is null on every other; this persists, replaced only by a
+   * later record, so the workings stay on screen while the next round is
+   * played. It is sourced from module state the way `seed` and `lastChoice`
+   * are, and dealing a game clears it [U3-83].
+   */
+  scoring: RoundScoring | null;
 }
 
 /**
  * Held, never observed, never exported [U3-1]. Exactly one per game [U3-5],
- * produced only by `newGame` [U3-12], and only ever advanced by `apply` — which
- * is what makes [U3-65] true, and what makes there be no undo [U3-17].
+ * produced only by `newGame` [U3-12], and only ever advanced by `applyExplained`
+ * — which is what makes [U3-65] true, and what makes there be no undo [U3-17].
  */
 let state: AzulState;
 
@@ -97,6 +110,13 @@ let thinking: Thinking = null;
 
 /** The last `Choice`, for [W6-25] only. Never rendered [W6-24]. */
 let lastChoice: Choice | null = null;
+
+/**
+ * The most recent `RoundScoring`, or `null` [U3-82]. Replaced only by a later
+ * record: a ply that resolves no round leaves it alone, which is the whole
+ * difference between this and `transition`.
+ */
+let lastScoring: RoundScoring | null = null;
 
 /**
  * The worker seam [W6-18]. Created lazily and replaced only by a test — a
@@ -222,6 +242,7 @@ function nextView(): ViewModel {
     seating,
     thinking,
     lastChoice,
+    scoring: lastScoring,
   };
   previous = next;
   return next;
@@ -236,6 +257,10 @@ function deal(seed: number): ViewModel {
   generation++;
   thinking = null;
   lastChoice = null;
+  // [U3-83]. Without this a new game shows the previous game's workings until
+  // its first round scores, which the sticky lifetime of [U3-82] makes minutes
+  // rather than a frame — and which no single-game test can see.
+  lastScoring = null;
   return nextView();
 }
 
@@ -389,12 +414,18 @@ export function computerSeat(seat: Player): boolean {
  * nothing about who chose it, so a move from a person and a move from a program
  * are the same call [U3-31].
  *
- * There is deliberately no legality guard: an illegal action reaches `apply`
- * and the engine's throw propagates [U3-20]. Swallowing it would hide a view
- * that has drifted from the rules, which is the one defect this package is
- * arranged to prevent.
+ * There is deliberately no legality guard: an illegal action reaches the engine
+ * and its throw propagates [U3-20], on the same inputs `apply` throws on
+ * [0007 S7-5]. Swallowing it would hide a view that has drifted from the rules,
+ * which is the one defect this package is arranged to prevent.
  */
 export function submit(action: number): void {
-  apply(state, action);
+  // [U3-18], widened: `applyExplained` is the state module's alone and is the
+  // path `submit` takes [0007 S7-1]. Still synchronous, still the single path,
+  // and still learning nothing about who chose the action.
+  const scoring = applyExplained(state, action);
+  // A ply that resolved no round returns `null` and leaves the last record
+  // standing [U3-82]; a ply that resolved one replaces it.
+  if (scoring !== null) lastScoring = scoring;
   publish();
 }

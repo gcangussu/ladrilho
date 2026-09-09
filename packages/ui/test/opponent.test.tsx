@@ -489,13 +489,14 @@ describe('a whole game with a computer opponent [W6-29]', () => {
 
 /**
  * [W6-36]. The opponent changes *who calls* `submit`, not what a ply is: the
- * held state is still only ever advanced by `apply`, from one `newGame`.
+ * held state is still only ever advanced by one engine entry point, from one
+ * `newGame`. That entry point is now `applyExplained` [0003 U3-18].
  *
  * Spying on those two is sanctioned by [0003 U3-80] and is the only way to see
  * it — this is a property of a history, and no snapshot shows it.
  */
 describe('the opponent does not widen how the game advances [W6-36]', () => {
-  it('[W6-36] advances only by apply, from exactly one newGame', async () => {
+  it('[W6-36] advances only by applyExplained, from exactly one newGame', async () => {
     // The computer moves first, so a request is already outstanding. The spies
     // go on **after** mounting: `mount` resets the module registry, so a spy
     // installed before it would be watching a different copy of `engine` from
@@ -503,12 +504,16 @@ describe('the opponent does not widen how the game advances [W6-36]', () => {
     // through apply" and is a fact about the test, not about the code.
     const { state, harness } = await load('?seed=42&seating=easy-human');
     const engine = await import('engine');
-    const applySpy = vi.spyOn(engine, 'apply');
+    const applySpy = vi.spyOn(engine, 'applyExplained');
+    // The path `submit` no longer takes: a ply through it would be a second
+    // way into the held state, which is what this test exists to deny.
+    const plainSpy = vi.spyOn(engine, 'apply');
     const newGameSpy = vi.spyOn(engine, 'newGame');
 
     try {
       await harness.answer(0);
-      expect(applySpy.mock.calls.length, 'the computer ply did not go through apply').toBe(1);
+      expect(applySpy.mock.calls.length, 'the computer ply did not go through applyExplained').toBe(1);
+      expect(plainSpy.mock.calls.length, 'a ply went through apply').toBe(0);
       expect(newGameSpy.mock.calls.length, 'a ply dealt a new game').toBe(0);
       expect(state.view().game.isTerminal).toBe(false);
 
@@ -516,9 +521,13 @@ describe('the opponent does not widen how the game advances [W6-36]', () => {
       const before = applySpy.mock.calls.length;
       state.submit(state.view().game.legalActions[0]);
       flush();
-      expect(applySpy.mock.calls.length, 'a human ply did not go through apply').toBe(before + 1);
+      expect(applySpy.mock.calls.length, 'a human ply did not go through applyExplained').toBe(
+        before + 1,
+      );
+      expect(plainSpy.mock.calls.length, 'a ply went through apply').toBe(0);
       expect(newGameSpy.mock.calls.length).toBe(0);
     } finally {
+      plainSpy.mockRestore();
       applySpy.mockRestore();
       newGameSpy.mockRestore();
     }
