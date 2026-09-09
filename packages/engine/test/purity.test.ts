@@ -121,18 +121,24 @@ describe('the package is self-contained [E1-50]', () => {
    * - **`placementRuns`** has one call site, and the block it sits in does
    *   nothing but copy: no arithmetic, no comparison, no third function, no
    *   read of `h` or `v` outside the record's fields.
+   * - **Each run field** is read exactly once in the whole file — the copy.
    *
-   * Both of the last two came out of review, one after the other. The first
-   * two clauses missed a sibling written with `if`s instead of a ternary; the
-   * third, written to catch it, tracked the binding by name and missed a
-   * sibling that destructured the call. Hence the block: what legitimately
-   * happens there is a copy, and a fusion rule cannot be written without an
-   * operator, a comparison, or a third function to hide in.
+   * The last two came out of review, one after the other, and so did the third
+   * version of the third. The first two clauses missed a sibling written with
+   * `if`s instead of a ternary; the clause written to catch it tracked the
+   * binding by name and missed one that destructured the call; the block-scoped
+   * version that replaced *that* missed one that declared the binding before
+   * the block and put the fusion one line past the closing brace. The read
+   * count is the answer to that, and every one of those forms is a fixture
+   * below.
    *
-   * What none of them can see is a copy that scans the wall itself. [E1-71]
-   * says so in as many words, and says why [0007 S7-30]'s corpus only half
-   * covers it — a copy is caught the first time it *disagrees*, which is after
-   * the drift it exists to prevent.
+   * **Which is the honest description of this check: a tripwire, not a proof.**
+   * A fifth form almost certainly exists. What holds the property is
+   * behavioural — [0007 S7-30]'s corpus re-derives every placement's points
+   * from the wall independently, on every build, so a copy that *disagrees*
+   * fails the build the first time it produces a different number. [E1-71]
+   * states the residue neither covers: a copy that agrees everywhere the
+   * corpus reaches and differs where it does not.
    *
    * Every clause is run against a source it must reject, and those sources are
    * code that could really exist: an earlier fixture called the run scans from
@@ -236,6 +242,15 @@ describe('the package is self-contained [E1-50]', () => {
             out.push(`${file}: ${use[0].trim()} read outside the record`);
           }
         }
+
+        // Counted over the whole file, not the block: a binding declared
+        // outside the block carries the runs past the window, and the fusion
+        // then sits one line beyond anything the window can see. The copy
+        // reads each field exactly once; a second reader is a second use.
+        for (const field of ['h', 'v']) {
+          const reads = (code.match(new RegExp(`\\.${field}\\b`, 'g')) ?? []).length;
+          if (reads !== 1) out.push(`${file}: .${field} read ${reads} times`);
+        }
         return out;
       });
 
@@ -292,6 +307,26 @@ describe('the package is self-contained [E1-50]', () => {
         '}',
       ].join('\n'),
     };
+    /** The one that carries the runs out of the block on a binding declared before it. */
+    const CARRIED_SIBLING = {
+      file: 'round.ts',
+      code: [
+        'function record(wall, r, col, sink) {',
+        '  let runs = null;',
+        '  if (sink !== null) {',
+        '    runs = placementRuns(wall, r, col);',
+        '    sink.push({ row: r, col, h: runs.h, v: runs.v, points });',
+        '  }',
+        '  if (runs !== null && sink !== null) {',
+        '    let pts = 0;',
+        '    if (runs.h > 1) pts += runs.h;',
+        '    if (runs.v > 1) pts += runs.v;',
+        '    if (pts === 0) pts = 1;',
+        '    sink[sink.length - 1].points = pts;',
+        '  }',
+        '}',
+      ].join('\n'),
+    };
     /** And the one that needs no operator of its own: hand the runs away. */
     const HELPER_SIBLING = {
       file: 'round.ts',
@@ -333,6 +368,7 @@ describe('the package is self-contained [E1-50]', () => {
       ['a sibling that fuses with ifs', IF_SIBLING, 3],
       ['a sibling that destructures the runs', DESTRUCTURED_SIBLING, 3],
       ['a sibling that hands the runs to a helper', HELPER_SIBLING, 3],
+      ['a sibling that carries the runs out of the block', CARRIED_SIBLING, 3],
     ])('[S7-35] fails against %s', (_name, sibling, clause) => {
       const caught =
         fusions([sibling]).length + runCallers([sibling]).length + runsMisuse([sibling]).length;

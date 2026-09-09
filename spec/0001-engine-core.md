@@ -319,33 +319,37 @@ Runs for both players, player 0 first, when the board empties.
   to weigh [E1-38]'s bonuses ([0004 B4-14]). Counting the cells itself would be a second
   implementation of this rule sitting in a package whose whole premise is that it contains none.*
 - **[E1-71]** The delegation check of [E1-68] MUST additionally fail on a second implementation of
-  [E1-24]'s fusion rule that reuses the run scans. The existing check asserts only that `round.ts`
-  calls `placementValue`, which a divergent sibling would not disturb — a "recording" copy of
-  `placementValue` that combined the runs itself would keep that assertion green from the
-  unexplained branch while the explained branch drifted. Three decidable clauses, which together
-  leave a sibling nowhere to get its runs from:
+  [E1-24]'s fusion rule **in the forms it is plausible to write one**. The existing check asserts
+  only that `round.ts` calls `placementValue`, which a divergent sibling would not disturb — a
+  "recording" copy of `placementValue` that combined the runs itself would keep that assertion
+  green from the unexplained branch while the explained branch drifted. Four decidable clauses:
 
   1. The fusion **shape** — a comparison against `1` used as the test of a conditional expression
      — occurs exactly once in `packages/engine/src`, inside `placementValue`.
-  2. `horizontalRun` and `verticalRun` have exactly two call sites each, both in `score.ts`.
-     They are module-private, so a sibling in another file cannot reach them at all; this clause
-     is what covers a sibling placed *inside* `score.ts`.
+  2. `horizontalRun` and `verticalRun` have exactly two call sites each, both in `score.ts`. They
+     are module-private, so a sibling in another file cannot reach them at all; this clause is
+     what covers a sibling placed *inside* `score.ts`.
   3. `placementRuns` has exactly one call site, and the block that call sits in does nothing but
-     copy: no arithmetic, no comparison, no third function, and no read of `h` or `v` outside the
-     record's own fields. The unit is the **block**, not the binding — an earlier version tracked
-     `const runs = placementRuns(...)` by name, and destructuring the call walked past it.
+     copy: no arithmetic, no comparison, no third function, no read of `h` or `v` outside the
+     record's own fields.
+  4. Over the whole file, each of the runs' two fields is read exactly once — the copy into the
+     record. A second reader is a second use.
 
-  **What this cannot see, stated plainly:** a copy that scans the wall itself, rather than reusing
-  either helper, is out of reach. Banning run-scanning loops by pattern was tried and removed under
-  [E1-68] for being both under-inclusive and a landmine, and a blanket ban on comparing against `1`
-  would fail the build on `shuffleInPlace`'s loop bound.
+  **This is a tripwire, not a proof, and the wording above says "plausible" advisedly.** Clause 3
+  was walked past three times in review, each time by a form its previous version had not
+  anticipated: a binding-tracking version fell to destructuring, a block-scoped version fell to a
+  binding declared *before* the block that carried the runs past the window. Clause 4 answers that
+  one. A fifth form almost certainly exists, and each round of this costs a regex and buys one
+  shape. Every clause MUST therefore be accompanied by the sources it rejects, kept as fixtures,
+  so that what it does cover is legible rather than asserted.
 
-  And [0007 S7-30]'s corpus is a weaker backstop than it sounds, so it is worth saying exactly what
-  it does: it re-derives every placement's runs and points from the wall on both sides of the
-  resolution, which catches a second implementation **the first time it disagrees** — not while it
-  still agrees. A correct copy is invisible to it, and the damage a second copy does is that it is
-  free to drift later. That is the whole reason clauses 2 and 3 close the cheap routes rather than
-  leaving the corpus to carry it.
+  **What actually holds the property is behavioural, and it is not weak.** [0007 S7-30]'s corpus
+  re-derives every placement's runs and points from the wall on both sides of every resolution of
+  every conformance vector, using an implementation written independently in the test. A second
+  copy that *disagrees* fails the build the first time it produces a different number, and the
+  build is the gate, so no drift ships. The residue that neither the clauses nor the corpus covers
+  is precise and small: a second implementation that agrees on every position the corpus reaches
+  and differs only on one it does not.
 
   Declared here, where the `E1` scanner reads it, and required by [0007 S7-12] and [0007 S7-35].
 
