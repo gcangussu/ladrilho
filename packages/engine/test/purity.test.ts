@@ -109,23 +109,29 @@ describe('the package is self-contained [E1-50]', () => {
    * `placementValue`. A recording sibling — one that asks for the two runs and
    * combines them itself, so it can report `h` and `v` alongside the points —
    * would leave that assertion green and write [E1-24] down a second time, and
-   * the two copies would then be free to disagree. Every behavioural test in
-   * the suite would keep passing until they did.
+   * the two copies would then be free to disagree.
    *
-   * Two decidable clauses, and the escape hatch for each named where it is
-   * declared:
+   * Three clauses, and between them a sibling has nowhere to get its runs from:
    *
    * - The **fusion shape** — a comparison against `1` used as the test of a
-   *   conditional expression — occurs exactly once in `packages/engine/src`,
-   *   inside `placementValue`. Code that legitimately needs to branch on a
-   *   count of one writes an `if`, not a ternary; the ban is on the shape the
-   *   rule is written in, which is why it can be checked at all.
-   * - The **run scans** are called from exactly two places, both in
-   *   `score.ts`: `placementValue`, which fuses them, and `placementRuns`,
-   *   which does not [0007 S7-11]. A third caller is a sibling.
+   *   conditional expression — occurs once, inside `placementValue`.
+   * - The **run scans** have exactly two call sites each, both in `score.ts`.
+   *   They are module-private, so nothing outside that file can call them at
+   *   all; this clause is what covers a sibling written *inside* `score.ts`.
+   * - **`placementRuns`** has one call site, and what it returns is read only
+   *   as the record's `h` and `v`. Arithmetic on either field, a comparison of
+   *   either, or a second call is a sibling.
    *
-   * Both are run against a source they must reject, because a matcher that has
-   * never matched is a matcher nobody has tested.
+   * An earlier version had only the first two, and a sibling written with
+   * `if`s instead of a ternary walked straight past both — found in review, and
+   * the third clause is what closes it. What none of them can see is a copy
+   * that scans the wall itself; [E1-71] says so in as many words, and names
+   * [0007 S7-30]'s corpus as the backstop.
+   *
+   * Every clause is run against a source it must reject, and those sources are
+   * code that could really exist: an earlier fixture called the run scans from
+   * `round.ts`, where they are not in scope, so the clause had been "seen to
+   * fail" against a file that could never have compiled.
    */
   describe('[E1-71] no second implementation of the fusion rule', () => {
     /** Line and block comments removed; the rule quoted in prose is not a copy of it. */
@@ -157,18 +163,6 @@ describe('the package is self-contained [E1-50]', () => {
           code: stripComments(readFileSync(join(PACKAGE_ROOT, 'src', file), 'utf8')),
         }));
 
-    /** What a recording sibling looks like: the runs asked for, then fused again. */
-    const SIBLING = {
-      file: 'round.ts',
-      code: [
-        'function scoreAndReport(wall, row, col) {',
-        '  const h = horizontalRun(wall, row, col);',
-        '  const v = verticalRun(wall, row, col);',
-        '  return { h, v, points: h > 1 || v > 1 ? (h > 1 ? h : 0) + (v > 1 ? v : 0) : 1 };',
-        '}',
-      ].join('\n'),
-    };
-
     const fusions = (files: { file: string; code: string }[]): string[] =>
       files.flatMap(({ file, code }) =>
         [...withoutPlacementValue(code).matchAll(FUSION)].map((m) => `${file}: ${m[0]}`),
@@ -179,6 +173,72 @@ describe('the package is self-contained [E1-50]', () => {
         const calls = callsOf('horizontalRun', code) + callsOf('verticalRun', code);
         return calls === 0 ? [] : [`${file}: ${calls}`];
       });
+
+    /**
+     * Every use of a `placementRuns` result that is not a copy into the record.
+     *
+     * The binding is captured from the call itself rather than assumed to be
+     * called `runs`, so renaming it changes nothing. Each read of `X.h` or
+     * `X.v` must sit immediately after `h:` or `v:` — the object-literal
+     * position — and anything else it is put to, arithmetic most of all, is
+     * reported. A second call site is reported by the count beside it.
+     */
+    const runsMisuse = (files: { file: string; code: string }[]): string[] =>
+      files.flatMap(({ file, code }) => {
+        const calls = callsOf('placementRuns', code);
+        if (calls === 0) return [];
+        const out = calls === 1 ? [] : [`${file}: ${calls} calls`];
+        for (const binding of code.matchAll(/(?:const|let|var)\s+(\w+)\s*=\s*placementRuns\s*\(/g)) {
+          const name = binding[1];
+          const reads = new RegExp(`(.{0,4})\\b${name}\\.([hv])\\b`, 'g');
+          for (const use of code.matchAll(reads)) {
+            if (!new RegExp(`${use[2]}:\\s*$`).test(use[1])) {
+              out.push(`${file}: ${name}.${use[2]} used as ${use[0].trim()}`);
+            }
+          }
+        }
+        return out;
+      });
+
+    /**
+     * Three siblings that could each really be written, one per clause.
+     *
+     * The third is the one review found: it takes its runs from the public
+     * `placementRuns`, fuses them with `if`s rather than a ternary, and so
+     * disturbs neither of the first two clauses.
+     */
+    const TERNARY_SIBLING = {
+      file: 'round.ts',
+      code: [
+        'function scoreAndReport(wall, row, col) {',
+        '  const runs = placementRuns(wall, row, col);',
+        '  return { h: runs.h, v: runs.v, points: runs.h > 1 || runs.v > 1 ? 0 : 1 };',
+        '}',
+      ].join('\n'),
+    };
+    const SCORE_TS_SIBLING = {
+      file: 'score.ts',
+      code: [
+        'export function scoreAndReport(wall, row, col) {',
+        '  const h = horizontalRun(wall, row, col);',
+        '  const v = verticalRun(wall, row, col);',
+        '  return { h, v, points: h > 1 || v > 1 ? (h > 1 ? h : 0) + (v > 1 ? v : 0) : 1 };',
+        '}',
+      ].join('\n'),
+    };
+    const IF_SIBLING = {
+      file: 'round.ts',
+      code: [
+        'function scoreAndReport(wall, row, col) {',
+        '  const runs = placementRuns(wall, row, col);',
+        '  let points = 0;',
+        '  if (runs.h > 1) points += runs.h;',
+        '  if (runs.v > 1) points += runs.v;',
+        '  if (points === 0) points = 1;',
+        '  return { h: runs.h, v: runs.v, points };',
+        '}',
+      ].join('\n'),
+    };
 
     it('finds the rule written exactly once, in placementValue', () => {
       const files = srcFiles();
@@ -194,12 +254,24 @@ describe('the package is self-contained [E1-50]', () => {
       expect(runCallers(srcFiles())).toEqual(['score.ts: 4']);
     });
 
-    it('fails against a sibling that combines the runs itself', () => {
-      // The mutation this check exists for, and the reason it is not enough for
-      // `round.ts` to merely mention `placementValue` somewhere.
-      expect(fusions([SIBLING]).length).toBeGreaterThan(0);
-      expect(runCallers([SIBLING])).toEqual(['round.ts: 2']);
-      expect(runCallers([...srcFiles(), SIBLING])).toEqual(['score.ts: 4', 'round.ts: 2']);
+    it('finds the runs copied into the record and put to no other use', () => {
+      expect(runsMisuse(srcFiles())).toEqual([]);
+      // Not vacuous: there really is a call site to have checked.
+      const round = srcFiles().find((f) => f.file === 'round.ts')!.code;
+      expect(callsOf('placementRuns', round)).toBe(1);
+    });
+
+    it.each([
+      ['a ternary sibling', TERNARY_SIBLING, 1],
+      ['a sibling inside score.ts', SCORE_TS_SIBLING, 2],
+      ['a sibling that fuses with ifs', IF_SIBLING, 3],
+    ])('fails against %s', (_name, sibling, clause) => {
+      const caught =
+        fusions([sibling]).length + runCallers([sibling]).length + runsMisuse([sibling]).length;
+      expect(caught, `nothing caught ${_name}`).toBeGreaterThan(0);
+      // And the clause that is supposed to catch it does.
+      const by = [fusions, runCallers, runsMisuse][clause - 1];
+      expect(by([sibling]).length, `clause ${clause} missed ${_name}`).toBeGreaterThan(0);
     });
   });
 

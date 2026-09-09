@@ -148,7 +148,60 @@ function finishGame(
     }
   }
   s.isTerminal = true;
-  return sink === null ? null : [sink[0], sink[1]];
+  // `PLAYERS` has two members and the loop pushed once per member, so the
+  // array is the tuple; asserting that is cheaper and more honest than
+  // rebuilding it element by element, which would silently truncate if the
+  // seat count ever grew.
+  return sink === null ? null : (sink as [PlayerBonuses, PlayerBonuses]);
+}
+
+/**
+ * One player's wall-tiling, floor charge and clamped round score [E1-22]..
+ * [E1-28], and the record of it when one was asked for.
+ *
+ * `explain` is the sink of [S7-3] and it is carried by exactly one thing: the
+ * `placements` array is `null` when no record was asked for, which is what
+ * makes the return `null` too. Every number in the record is read here, where
+ * it is charged — the floor and the marker while the floor still holds what it
+ * cost [S7-14], the score on both sides of the clamp [S7-18] — because a
+ * record filled in afterwards would report an empty floor, no marker, and a
+ * score that had already moved.
+ */
+function resolvePlayer(s: AzulState, p: Player, explain: boolean): PlayerRound | null {
+  const placements: Placement[] | null = explain ? [] : null;
+  const tiling = tileWall(s, p, placements);
+  const occupied = floorOccupied(s, p);
+  const markerHeld = s.floorMarker[p];
+  const penalty = CUM_PENALTY[Math.min(FLOOR_SLOTS, occupied)];
+  const fl = s.floor[p];
+  for (let c = 0; c < NUM_COLORS; c++) {
+    s.lid[c] += fl[c];
+    fl[c] = 0;
+  }
+  // Clamped per round, so a penalty larger than the score never carries a debt
+  // into the next one [E1-28].
+  const scoreBefore = s.scores[p];
+  const charged = scoreBefore + tiling + penalty;
+  s.scores[p] = Math.max(0, charged);
+  if (placements === null) return null;
+  return {
+    placements,
+    tiling,
+    floor: {
+      occupied,
+      // [S7-16] by slot, in ladder order, never attributed to a tile: the floor
+      // is a per-colour count and a marker flag [E1-3], with no order to
+      // attribute by.
+      rungs: FLOOR_PENALTIES.slice(0, Math.min(occupied, FLOOR_SLOTS)),
+      markerHeld,
+      penalty,
+    },
+    scoreBefore,
+    scoreAfterRound: s.scores[p],
+    // [S7-17] what the clamp did not take, a property of the round rather than
+    // of the floor: [E1-28] clamps tiling and penalty together.
+    forgiven: s.scores[p] - charged,
+  };
 }
 
 /**
@@ -169,50 +222,10 @@ export function endRound(
   // end it would name the round that follows on one of the three exits and the
   // round that ended on the other two.
   const round = s.roundIndex;
-  const rounds: PlayerRound[] | null = explain ? [] : null;
-
-  for (const p of PLAYERS) {
-    // `placements` and `rounds` are the same decision, made twice because the
-    // compiler cannot see that they are: both are `null` exactly when the
-    // caller asked for no record.
-    const placements: Placement[] | null = rounds === null ? null : [];
-    const tiling = tileWall(s, p, placements);
-    // [S7-14] both read while the floor still holds what it cost: the clearing
-    // below empties it and [E1-30] takes the marker back further down.
-    const occupied = floorOccupied(s, p);
-    const markerHeld = s.floorMarker[p];
-    const penalty = CUM_PENALTY[Math.min(FLOOR_SLOTS, occupied)];
-    const fl = s.floor[p];
-    for (let c = 0; c < NUM_COLORS; c++) {
-      s.lid[c] += fl[c];
-      fl[c] = 0;
-    }
-    // Clamped per round, so a penalty larger than the score never carries a
-    // debt into the next one [E1-28].
-    const scoreBefore = s.scores[p];
-    const charged = scoreBefore + tiling + penalty;
-    s.scores[p] = Math.max(0, charged);
-    if (rounds !== null && placements !== null) {
-      rounds.push({
-        placements,
-        tiling,
-        floor: {
-          occupied,
-          // [S7-16] by slot, in ladder order, never attributed to a tile: the
-          // floor is a per-colour count and a marker flag [E1-3], with no
-          // order to attribute by.
-          rungs: FLOOR_PENALTIES.slice(0, Math.min(occupied, FLOOR_SLOTS)),
-          markerHeld,
-          penalty,
-        },
-        scoreBefore,
-        scoreAfterRound: s.scores[p],
-        // [S7-17] what the clamp did not take, a property of the round rather
-        // than of the floor: [E1-28] clamps tiling and penalty together.
-        forgiven: s.scores[p] - charged,
-      });
-    }
-  }
+  // Seat order is load-bearing: a tile player 0 places is on the board when
+  // player 1's rows resolve [E1-22].
+  const first = resolvePlayer(s, PLAYERS[0], explain);
+  const second = resolvePlayer(s, PLAYERS[1], explain);
 
   // The marker holder gives it up and starts the next round [E1-30]. When
   // nobody took from the centre all round the marker never left it, and
@@ -247,6 +260,8 @@ export function endRound(
   }
 
   // [S7-20] `bonuses` is non-null exactly when one of the two endings above
-  // ran, which is exactly when the game ended.
-  return rounds === null ? null : { round, players: [rounds[0], rounds[1]], bonuses };
+  // ran, which is exactly when the game ended. Both seats answer `null`
+  // together or neither does — they were asked the same question.
+  if (first === null || second === null) return null;
+  return { round, players: [first, second], bonuses };
 }

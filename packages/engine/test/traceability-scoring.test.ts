@@ -147,6 +147,27 @@ describe('[S7-38] the amendments landed in the specs they amend', () => {
   const read = (name: string): string => readFileSync(join(SPEC_DIR, name), 'utf8');
   const declares = (text: string, id: string): boolean => text.includes(`**[${id}]**`);
 
+  /**
+   * The widenings, not only the new identifier.
+   *
+   * [S7-42] and [S7-43] say "these amendments", plural — six rows against 0001
+   * and six against 0003 — and an earlier version of this check read four of
+   * the twelve. A widening that is quietly reverted leaves a spec describing an
+   * engine that no longer exists, which is the failure the whole check is aimed
+   * at; each row below is the one decidable sentence its amendment turns on.
+   */
+  it.each([
+    ['0001-engine-core.md', 'E1-21 admits the second entry point', /\bapplyExplained\b[\s\S]{0,200}identical\s+transition/],
+    ['0001-engine-core.md', 'E1-68 names placementRuns beside it', /A private `placementRuns` stands beside it/],
+    ['0003-web-interface.md', 'U3-6 gains the scoring field', /`scoring` with the workings/],
+    ['0003-web-interface.md', 'U3-18 admits applyExplained as the submit path', /`applyExplained`[^.]*is the state module's alone/],
+    ['0003-web-interface.md', 'U3-46 itemises what each count earned', /itemise what\s+each count earned/],
+    ['0003-web-interface.md', 'U3-75 widens both apply clauses', /apply\(\?:Explained\)\?/],
+    ['0003-web-interface.md', 'the shortfall section records that both were reopened', /fell short of intent 0002, and when they were reopened/],
+  ])('%s: %s', (file, _what, pattern) => {
+    expect(read(file)).toMatch(pattern);
+  });
+
   it('[S7-42] 0001 declares E1-71 and lists applyExplained', () => {
     const engine = read('0001-engine-core.md');
     expect(declares(engine, 'E1-71'), '0001 does not declare [E1-71]').toBe(true);

@@ -24,6 +24,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  CENTER,
   CUM_PENALTY,
   COLOR_BONUS,
   COL_BONUS,
@@ -34,6 +35,7 @@ import {
   Rng,
   applyExplained,
   clone,
+  decodeAction,
   fromCanonical,
   legalActions,
   newGame,
@@ -52,6 +54,8 @@ import { loadVectors } from './support/vectors.js';
 interface Resolution {
   /** `<vector> ply <n>`, so a failure names the game and the ply. */
   where: string;
+  /** The action that closed the round, for the marker check of [S7-14]. */
+  action: number;
   record: RoundScoring;
   /** The position round resolution found, as the ply that ran it began. */
   before: CanonicalState;
@@ -81,7 +85,8 @@ function corpus(): Resolution[] {
       const before = toCanonical(s);
       const record = applyExplained(s, v.plies[i].action);
       if (record !== null) {
-        out.push({ where: `${v.name} ply ${i}`, record, before, after: toCanonical(s) });
+        const where = `${v.name} ply ${i}`;
+        out.push({ where, action: v.plies[i].action, record, before, after: toCanonical(s) });
       }
     }
   }
@@ -300,27 +305,40 @@ describe('the record against the position it came from', () => {
    */
   it('[S7-14] [S7-33] reports the floor and the marker as resolution found them', () => {
     let witnesses = 0;
-    for (const { where, record, before, after } of rounds) {
+    for (const { where, action, record, before, after } of rounds) {
+      // Who held the marker when resolution ran, derived from the position and
+      // the action rather than read back out of the record: whoever held it
+      // before, plus the closing player if their take was the first from the
+      // centre this round [0001 E1-17].
+      const [source] = decodeAction(action);
+      const tookMarker = before.markerInCenter && source === CENTER;
       for (const [p, player] of record.players.entries()) {
-        if (p !== before.currentPlayer) {
+        const closed = p === before.currentPlayer;
+        expect(player.floor.markerHeld, `${where} seat ${p}: marker`).toBe(
+          before.floorMarker[p] || (closed && tookMarker),
+        );
+        if (!closed) {
           // The seat that did not play the closing ply: its floor is untouched
           // between the snapshot and round resolution, so the snapshot *is*
           // the position resolution found, exactly.
           expect(player.floor.occupied, `${where} seat ${p}: occupied`).toBe(occupiedIn(before, p));
-          expect(player.floor.markerHeld, `${where} seat ${p}: marker`).toBe(before.floorMarker[p]);
           if (before.floorMarker[p] && sum(before.floor[p]) > 0) witnesses++;
         } else {
-          // The closing ply may have added to its own floor and may have taken
-          // the marker [0001 E1-17], so the snapshot bounds it from below
-          // rather than fixing it. It cannot have *lost* either.
+          // The closing ply may have added to its own floor, so the snapshot
+          // bounds `occupied` from below rather than fixing it. Tiles cannot
+          // leave a floor mid-round, and what the number is exactly is pinned
+          // from the other side by [S7-15] and [S7-16] — `penalty` and `rungs`
+          // are both functions of it, and both are checked against the ladder.
           expect(player.floor.occupied, `${where} seat ${p}: occupied`).toBeGreaterThanOrEqual(
             occupiedIn(before, p),
           );
-          if (before.floorMarker[p]) {
-            expect(player.floor.markerHeld, `${where} seat ${p}: marker`).toBe(true);
-          }
         }
       }
+      // At most one seat holds it, which is [0001 E1-17] from the other side.
+      expect(
+        record.players.filter((p) => p.floor.markerHeld).length,
+        `${where}: two seats held the marker`,
+      ).toBeLessThanOrEqual(1);
       // And the position afterwards holds neither, which is what makes a
       // record filled in after resolution indistinguishable from an empty one
       // — and is why the two fields are captured where they are charged.

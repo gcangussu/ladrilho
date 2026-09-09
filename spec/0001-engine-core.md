@@ -313,18 +313,38 @@ Runs for both players, player 0 first, when the board empties.
 
   `wall` is the flat `[25]` row-major wall of [E1-2]. None of the three reads any state.
 
-- **[E1-71]** The delegation check of [E1-68] MUST additionally fail on a second implementation of
-  [E1-24]'s fusion rule anywhere in `packages/engine/src`. The existing check asserts only that
-  `round.ts` calls `placementValue`, which a divergent sibling would not disturb — a "recording"
-  copy of `placementValue` that combined the runs itself would keep that assertion green from the
-  unexplained branch while the explained branch drifted. Declared here, where the `E1` scanner
-  reads it, and required by [0007 S7-12] and [0007 S7-35].
-
   *Wall-shaped for the same reason [E1-68] is, and added at the same time by the same caller. The
   bot's evaluation values the wall as the current round will leave it — pattern lines tiled, which
   is a wall no state holds — and it needs to know what that speculative wall has completed in order
   to weigh [E1-38]'s bonuses ([0004 B4-14]). Counting the cells itself would be a second
   implementation of this rule sitting in a package whose whole premise is that it contains none.*
+- **[E1-71]** The delegation check of [E1-68] MUST additionally fail on a second implementation of
+  [E1-24]'s fusion rule that reuses the run scans. The existing check asserts only that `round.ts`
+  calls `placementValue`, which a divergent sibling would not disturb — a "recording" copy of
+  `placementValue` that combined the runs itself would keep that assertion green from the
+  unexplained branch while the explained branch drifted. Three decidable clauses, which together
+  leave a sibling nowhere to get its runs from:
+
+  1. The fusion **shape** — a comparison against `1` used as the test of a conditional expression
+     — occurs exactly once in `packages/engine/src`, inside `placementValue`.
+  2. `horizontalRun` and `verticalRun` have exactly two call sites each, both in `score.ts`.
+     They are module-private, so a sibling in another file cannot reach them at all; this clause
+     is what covers a sibling placed *inside* `score.ts`.
+  3. `placementRuns` has exactly one call site, and the value it returns is read only as the
+     record's `h` and `v`. Arithmetic on either field, a comparison of either, or a second call
+     is a sibling.
+
+  **What this cannot see, stated plainly:** a copy that scans the wall itself, rather than reusing
+  either helper, is out of reach. Banning run-scanning loops by pattern was tried and removed under
+  [E1-68] for being both under-inclusive and a landmine, and a blanket ban on comparing against `1`
+  would fail the build on `shuffleInPlace`'s loop bound. The backstop for that case is behavioural
+  and lives in *0007*: [0007 S7-30]'s corpus re-derives every placement's runs and points from the
+  wall on both sides of the resolution, so a second implementation that *disagrees* is caught the
+  first time it disagrees. What no check here can catch is a second implementation that agrees
+  today and drifts tomorrow, which is the whole reason clauses 2 and 3 close the cheap routes.
+
+  Declared here, where the `E1` scanner reads it, and required by [0007 S7-12] and [0007 S7-35].
+
 - **[E1-39]** `outcome()` returns `+1` if player 0 wins, `-1` if player 1 wins, `0` for a draw,
   and `null` while the game is unfinished. Ties on score are broken by the number of complete
   rows; still tied is a draw.

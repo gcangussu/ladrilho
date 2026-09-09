@@ -93,24 +93,41 @@ describe('apply and applyExplained are one transition [S7-28]', () => {
   });
 
   /**
-   * The same claim from the other side: a position played by one entry point
-   * continues identically under the other. A clone splits the game in two at
-   * every ply of a real game and plays the *next* ply both ways.
+   * The same claim from the other side, and in both directions.
+   *
+   * The game itself is played through alternating entry points, so the history
+   * every comparison starts from is a mixture of the two rather than a
+   * `apply`-only history the other one is merely sampled against. At each ply a
+   * clone plays it the other way, so a divergence shows up whichever path built
+   * the position it started from.
    */
   it('is interchangeable ply by ply, in either direction', () => {
     const s = newGame(7);
     const picker = new Rng(0xa11ce);
     let swaps = 0;
+    let explained = 0;
     while (!s.isTerminal && swaps < PLY_CAP) {
       const action = pick(s, picker);
       const other = clone(s);
-      apply(s, action);
-      applyExplained(other, action);
+      // Alternate which entry point advances the game and which one the clone
+      // checks it against.
+      if (swaps % 2 === 0) {
+        apply(s, action);
+        applyExplained(other, action);
+        explained++;
+      } else {
+        applyExplained(s, action);
+        apply(other, action);
+      }
       expect(toCanonical(other), `ply ${swaps} diverged`).toEqual(toCanonical(s));
       swaps++;
     }
     expect(s.isTerminal).toBe(true);
     expect(swaps).toBeGreaterThan(40);
+    // Both directions really were exercised, and the game really was built by
+    // both entry points rather than by one of them.
+    expect(explained).toBeGreaterThan(20);
+    expect(swaps - explained).toBeGreaterThan(20);
   });
 });
 

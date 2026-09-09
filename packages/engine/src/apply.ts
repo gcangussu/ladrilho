@@ -6,11 +6,11 @@ import type { AzulState, Player, RoundScoring } from './types.js';
 
 /**
  * Plays one ply, including any round or game transition it triggers [E1-21].
- * Mutates `s`.
+ * Mutates `s`, returns nothing [S7-2].
  *
  * An out-of-range or illegal action throws and leaves the state untouched
- * [E1-14]: everything is validated before a single tile moves, because a
- * half-applied state is a defect rather than an outcome.
+ * [E1-14]. The validation that makes that true is in {@link ply} below, which
+ * is the one implementation both entry points share.
  */
 export function apply(s: AzulState, action: number): void {
   ply(s, action, false);
@@ -35,6 +35,10 @@ export function applyExplained(s: AzulState, action: number): RoundScoring | nul
 /**
  * The one implementation of a ply [S7-3]. `explain` is the only difference
  * between the two entry points above, and it reaches nothing but `endRound`.
+ *
+ * Everything is validated before a single tile moves [E1-14], because a
+ * half-applied state is a defect rather than an outcome — which is also why
+ * neither entry point can return a partial record [S7-5].
  */
 function ply(s: AzulState, action: number, explain: boolean): RoundScoring | null {
   if (s.isTerminal) throw new Error('game is over');
