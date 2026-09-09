@@ -12,6 +12,10 @@ TypeScript implementation of the board game Azul, delivered in three roadmap ste
    player (spec 0004), the arena (0005), and the interface seam (0006). The search runs in a
    worker; `packages/ui` reaches it only through `src/opponent.ts`.
 
+Since the three steps, one thing has been added across two of them: the engine reports how it
+scored a round (`applyExplained`, spec 0007) and the interface shows it. `apply` is untouched and
+is still what the vectors and the bot drive.
+
 The repo is a **pnpm monorepo**. Check what is actually on disk before assuming a package is
 present.
 

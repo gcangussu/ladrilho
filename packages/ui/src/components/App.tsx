@@ -141,20 +141,6 @@ export function App(): JSX.Element {
         <GameOver game={game()} names={names()} bonuses={view().scoring?.bonuses ?? null} />
       </Show>
 
-      {/* The workings of the last round, for as long as it is the last round
-          [U3-82]. Unlike the transition marking of [U3-43] this does not clear
-          on the next ply — reading a round's arithmetic takes longer than a
-          ply does. */}
-      <Show when={view().scoring}>
-        {(scoring) => (
-          <Scoring
-            scoring={scoring()}
-            names={names()}
-            playerNames={['Player 1', 'Player 2']}
-          />
-        )}
-      </Show>
-
       <Displays
         game={game()}
         names={names()}
@@ -185,6 +171,20 @@ export function App(): JSX.Element {
           destinations={destinations(1)}
         />
       </div>
+
+      {/* The workings of the last round, for as long as it is the last round
+          [U3-82]. Unlike the transition marking of [U3-43] this does not clear
+          on the next ply — reading a round's arithmetic takes longer than a
+          ply does. */}
+      <Show when={view().scoring}>
+        {(scoring) => (
+          <Scoring
+            scoring={scoring()}
+            names={names()}
+            playerNames={['Player 1', 'Player 2']}
+          />
+        )}
+      </Show>
 
       {/* A fresh seed, never the one in the URL [U3-47]. */}
       <button type="button" class="new-game" onClick={() => startNewGame()}>

@@ -2,7 +2,7 @@
 title: Scoring explained
 author: Gabriel Cangussu
 date: 2026-09-05
-status: pending
+status: done
 summary: >
   Show how a score was arrived at — which tiles earned what when a round is
   scored, what the floor cost, and what the end-of-game bonuses came to —

@@ -2,7 +2,7 @@
 title: Scoring explained
 author: Gabriel Cangussu
 date: 2026-09-08
-status: accepted
+status: implemented
 intent: 0004 — Scoring explained
 prefix: S7
 depends-on: 0001 — Engine core, 0003 — Web interface
