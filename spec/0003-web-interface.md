@@ -364,8 +364,10 @@ type Selection = { source: number; color: Color } | null;
 - **[U3-46]** The end of a game MUST show each player's completed row, column and colour counts,
   and MUST NOT compute the bonus arithmetic of [0001 E1-38] from them. It MUST also itemise what
   each count earned, read from the bonus half of the record ([0007 S7-19], [0007 S7-22]) and from
-  nothing else — the interface still performs no bonus arithmetic. Where there is no record to
-  read, the counts stand alone as they did before.
+  nothing else — the interface still performs no bonus arithmetic. Where there is a record, the
+  counts MUST be read from it too, rather than from `AzulJSON`: one fact, one source, or the two
+  answers on one line are free to disagree. Where there is no record, the counts stand alone as
+  they did before.
 - **[U3-47]** A terminal position has no legal actions ([0001 E1-11]), so every move control MUST
   be unavailable, and the only offer MUST be a new game. That new game MUST take a freshly
   generated seed per [U3-13], never the one in the URL.

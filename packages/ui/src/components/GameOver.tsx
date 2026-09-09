@@ -34,6 +34,21 @@ export function GameOver(props: {
     if (props.game.outcome === 0) return 'A draw.';
     return props.game.outcome === 1 ? 'Player 1 wins.' : 'Player 2 wins.';
   };
+  /**
+   * The three counts, from the record where there is one.
+   *
+   * One fact, one source. Taking the counts from `AzulJSON` while taking the
+   * points beside them from the record would put two answers to the same
+   * question on one line, and they would silently disagree the moment anything
+   * published a record from a different position than the one on screen.
+   */
+  const counts = (p: number): { rows: number; cols: number; colors: number } => {
+    const bonuses = props.bonuses;
+    const player = props.game.players[p];
+    return bonuses === null
+      ? { rows: player.completedRows, cols: player.completedCols, colors: player.completedColors }
+      : { rows: bonuses[p].rows, cols: bonuses[p].cols, colors: bonuses[p].colors };
+  };
   return (
     <section class="game-over" aria-label="Final result">
       <h2>Game over</h2>
@@ -47,9 +62,8 @@ export function GameOver(props: {
         <For each={props.game.players} keyed={false}>
           {(player, p) => (
             <li>
-              Player {p + 1}: {player().score} points, {player().completedRows} completed rows,{' '}
-              {player().completedCols} completed columns, {player().completedColors} completed
-              colours
+              Player {p + 1}: {player().score} points, {counts(p).rows} completed rows,{' '}
+              {counts(p).cols} completed columns, {counts(p).colors} completed colours
               <Show when={props.bonuses}>
                 {(bonuses) => (
                   <span class="bonus-breakdown">
