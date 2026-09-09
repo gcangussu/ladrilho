@@ -2,7 +2,7 @@
 title: Web interface
 author: Gabriel Cangussu
 date: 2026-09-03
-status: pending
+status: done
 summary: >
   A web page where you can actually play Azul: see the factories, the middle, and
   both boards, take tiles by clicking them, and watch the scoring happen — with the

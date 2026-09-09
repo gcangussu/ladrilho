@@ -2,7 +2,7 @@
 title: Computer opponent
 author: Gabriel Cangussu
 date: 2026-09-03
-status: pending
+status: done
 summary: >
   An opponent to play against when there's nobody else around — one that runs
   inside the same web page, thinks for a couple of seconds, and is genuinely

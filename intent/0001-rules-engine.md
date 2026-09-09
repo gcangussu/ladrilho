@@ -2,7 +2,7 @@
 title: Rules engine
 author: Gabriel Cangussu
 date: 2026-09-03
-status: pending
+status: done
 summary: >
   A trustworthy referee for two-player Azul: it knows every rule, decides which
   moves are allowed, plays them out, keeps score, and declares a winner — with no
