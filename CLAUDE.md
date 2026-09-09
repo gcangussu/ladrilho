@@ -40,6 +40,36 @@ reasoned about correctly in prose — a horizon check that passed with the horiz
 anytime check that passed under the bug it named, a sign check standing on the one position where
 its subject is invisible. Mutate the code, watch the test fail, then keep it.
 
+## Mutation testing
+
+**Mutation** here means deliberately breaking the source for a moment — flipping a sign, deleting
+a clamp, adding a bonus twice — to watch one specific test go red, then restoring it. It has
+nothing to do with the in-place state mutation `packages/engine` talks about everywhere else.
+
+It is how "a test that claims to catch something specific is worth nothing until it has been seen
+to fail" is actually carried out, and three rules separate evidence from theatre:
+
+- **Confirm the mutation landed.** If the anchor you edit no longer matches — a refactor
+  reindented it, the code moved to another function — nothing breaks, the suite stays green, and
+  you read that as "my check misses this" when in truth you never broke anything. Assert the anchor
+  matched *before* writing the file.
+- **Mutate a copy, not the tree.** `git archive HEAD` into a scratch directory. `git checkout --`
+  compares against the index, so a mutation that reached the index reverts to itself and reports a
+  clean tree; that is how one got committed here, in a commit whose message said it only touched a
+  stylesheet.
+- **Re-run a recorded mutation when the code it names moves.** [0007 S7-31] keeps mutation records
+  beside the assertions they justify, naming a function and a line. A record pointing at code that
+  has since moved is worse than no record: the next person finds nothing to mutate and concludes
+  the table was fiction.
+
+And the rule the mutations kept proving: **a check whose description outruns its behaviour is the
+defect, not the gap it misses.** [0001 E1-71] shipped claiming it would fail on a second
+implementation of the fusion rule "anywhere in `packages/engine/src`", and review defeated it three
+times running. What fixed it was not the fourth clause but the sentence — it now claims only the
+forms it plausibly catches, and requires every clause to carry the sources it rejects as fixtures,
+so coverage is legible rather than asserted. Read that twice about any requirement saying what a
+test MUST fail on.
+
 ## Intent and spec
 
 - `intent/` — plain-language documents saying what we want and why, written before the code. Never
