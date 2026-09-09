@@ -62,7 +62,8 @@ h2 {
 
 .status,
 .player-board,
-.game-over {
+.game-over,
+.scoring {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 0.5rem;
@@ -367,4 +368,55 @@ h2 {
 .new-game {
   justify-self: start;
   padding: 0.5rem 1rem;
+}
+
+/* How the last round scored [U3-82]. Two columns where there is room, one
+   where there is not, exactly as `.boards` is. */
+.scoring-players {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+}
+
+.scoring h2,
+.scoring h3,
+.scoring h4 {
+  margin: 0 0 0.35rem;
+}
+
+.scoring p {
+  margin: 0.15rem 0;
+}
+
+.placements,
+.rungs,
+.bonus-lines {
+  list-style: none;
+  margin: 0.25rem 0;
+  padding: 0;
+}
+
+.placement {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  justify-content: space-between;
+}
+
+.placement-points {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The ladder reads as a ladder: one entry per slot charged [U3-85]. */
+.rungs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.rung {
+  border: 1px solid var(--line);
+  border-radius: 0.25rem;
+  font-size: 0.85em;
+  padding: 0.1rem 0.35rem;
 }
