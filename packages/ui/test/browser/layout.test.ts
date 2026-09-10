@@ -223,6 +223,8 @@ const height = (el: HTMLElement): number => Math.round(el.getBoundingClientRect(
  * | `.pattern-lines`: `align-items: flex-end` → `flex-start` | [U3-88], both [U3-92] |
  * | `.board-play`: `nowrap` plus `@media (max-width: 900px) { flex-direction: column }` | [U3-89] alone |
  * | `.boards`: `minmax(min(100%, var(--board-width)))` → `min(100%, 20rem)` | [U3-94] alone |
+ * | `.board-play`: column gap `0.75rem` → `2rem`, `--board-width` not updated | [U3-94] |
+ * | `.player-board`: `padding: 0.75rem` → `2rem`, `--board-width` not updated | [U3-94], [U3-88], [U3-89] |
  * | `--tile: max(2.75rem, 44px)` → `2.75rem`, `.destination { min-height: 44px }` back | [U3-86] at 15px |
  *
  * Two are worth keeping for what they are rather than for what they break. The
@@ -231,6 +233,13 @@ const height = (el: HTMLElement): number => Math.round(el.getBoundingClientRect(
  * one is the layout as it actually shipped for a while: it looks right at 1280
  * and at 390 and is wrong across the whole band between, which is why it took a
  * person looking at the page to find it and why the sweep exists now.
+ *
+ * The last two answer the fair objection to `--board-width` — that it restates,
+ * far from where any of them is set, the tile count, the gap count, the column
+ * gap, the board's padding and its border. It does, and it is a derived value
+ * that can go stale. What these show is that it cannot go stale *quietly*:
+ * change one term and leave the `calc` alone, and [U3-94] reports it, because a
+ * board seated at a width it cannot use is exactly what the sweep looks for.
  *
  * The last row was recorded as failing *nothing*, on the reasoning that a px
  * floor beside a rem size diverges only at a root font-size the lane never
