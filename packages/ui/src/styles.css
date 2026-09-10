@@ -200,7 +200,7 @@ h2 {
 /*
  * The lines column is as wide as the floor line needs, and every pattern line
  * is pushed to its right-hand edge, so a line's filled end meets the wall's
- * left edge — which is where its tiles are going [U3-88]. The staircase this
+ * left edge — which is where its tiles are going [U3-92]. The staircase this
  * leaves is the printed board's own shape.
  *
  * A row is as wide as its own tiles and no wider. Full width would be a larger

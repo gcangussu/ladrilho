@@ -7,7 +7,8 @@ type Line = AzulJSONPlayer['patternLines'][number];
 
 /**
  * The tiles of one pattern line, filling from the right so a line's tiles sit
- * against the wall it feeds — which under [U3-88] is where the wall now is.
+ * against the wall it feeds [U3-92] — which under [U3-88] is where the wall
+ * now is, where there is room to put it there.
  *
  * A row's capacity is `capacity` as the engine reports it, not `r + 1` computed
  * here — the two agree, and the one that is not our arithmetic is the one to
