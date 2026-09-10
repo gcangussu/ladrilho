@@ -319,14 +319,14 @@ describe('a board that holds still', () => {
     }
   });
 
-  it.each(VIEWPORTS)('[U3-92] ends every pattern line on the edge nearest the wall, at $name',
+  it.each(VIEWPORTS)('[U3-92] ends every pattern line on one shared edge, at $name',
     async (viewport) => {
       const doc = await load(viewport.width, viewport.height);
-      // Both arrangements: this one holds stacked as well, where there is no
-      // wall beside the lines and the fill direction is the whole of the cue.
-      // Checking only that the lines sit left of the wall would pass on a
-      // column aligned the other way, whose five filled ends are then five
-      // different distances from the cells they feed.
+      // Both arrangements: this one holds stacked as well, where the wall is
+      // below rather than beside and "the edge nearer the wall" would have no
+      // referent — so the assertion is that the five agree, not where they
+      // agree. That the shared edge meets the wall's is [U3-88], at the one
+      // viewport where there is a wall beside them to meet.
       for (const who of ['Player 1', 'Player 2']) {
         const rights = patternRows(board(doc, who))
           .map((line) => Math.round(line.getBoundingClientRect().right));
