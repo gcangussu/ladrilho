@@ -268,7 +268,7 @@ describe('the end of a game', () => {
  * | `PlayerBoard`: move `<Wall>` back above the `<Show>` in `.board-play` | [U3-90] |
  * | `Destinations`: replace `<FloorSummary>` with its own `<p class="floor-summary">Floor line: {n} slots…` | [U3-87] |
  * | `PatternRow`: make the shown fallback a `<button>` instead of a `<div>` | [U3-91] |
- * | `FloorRow`: drop the `sr-only` name from the shown fallback | [U3-87] |
+ * | `FloorRow`: drop the `sr-only` name from the shown fallback | [U3-93] |
  *
  * The third is the one [U3-91] exists for: the rows are one component with a
  * nullable control, and that edit is a plausible slip rather than a contrivance.
@@ -289,7 +289,7 @@ describe('a board that holds still', () => {
     expect(said(null)).toContain('of 7 slots');
   });
 
-  it('[U3-87] names all six rows in both configurations, the same way', () => {
+  it('[U3-93] gives all six rows the same accessible name in both configurations', () => {
     const named = (destinations: DestinationApi | null): string[] => {
       const { container, unmount } = board({ destinations });
       // A control says its name in `aria-label`; a row that is only shown says

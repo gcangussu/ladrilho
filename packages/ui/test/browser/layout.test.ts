@@ -183,7 +183,17 @@ function wallRows(el: HTMLElement): HTMLElement[] {
   return [...wall!.children] as HTMLElement[];
 }
 
-/** The play area [U3-86] is about: the lines and the wall, and nothing else. */
+/**
+ * The play area [U3-86] is about: the lines and the wall, and nothing else.
+ *
+ * By class, and deliberately, which is the one place this file departs from the
+ * rule above — `.board-play` is the arrangement under test, so this is exactly
+ * the objection made against `.pattern-line`, one level up. The alternative is
+ * to give it `role="group"` and a name, and that is the reason not to: a board
+ * already announces three groups to a screen reader, and a fourth wrapping the
+ * other two would be a landmark that exists to be measured. The test takes the
+ * awkward selector so the board does not take the extra announcement.
+ */
 function playArea(el: HTMLElement): HTMLElement {
   const play = el.querySelector<HTMLElement>('.board-play');
   expect(play, 'no play area').not.toBeNull();
@@ -204,19 +214,20 @@ const height = (el: HTMLElement): number => Math.round(el.getBoundingClientRect(
  * | `.board-play`: `flex-wrap: wrap` → `nowrap` | [U3-89], and [U3-58] with it |
  * | `.pattern-lines`: `align-items: flex-end` → `flex-start` | [U3-88], both [U3-92] |
  * | `.board-play`: `nowrap` plus `@media (max-width: 900px) { flex-direction: column }` | [U3-89] alone |
- * | `--tile: max(2.75rem, 44px)` → `2.75rem`, `.destination { min-height: 44px }` back | **nothing** |
+ * | `--tile: max(2.75rem, 44px)` → `2.75rem`, `.destination { min-height: 44px }` back | [U3-86] at 15px |
  *
  * The media query is the one worth keeping. It is a working layout — side by
  * side at 1280, stacked at 844 — and it fails [U3-89] and nothing else, which
  * is what says the requirement is asserted rather than merely claimed. An
  * earlier version of that test asserted only stacking at 844, and this passes it.
  *
- * The last row is a record of a defect this lane *cannot* see, kept because a
- * reader would otherwise assume it could. `rem` resolves against a root nothing
- * in this stylesheet sets, so a px floor on one configuration and a rem size on
- * the other diverge only at a root font-size the lane never uses — measured at a
- * forced 15px root as 314 against 301. The fix is that there is now one size,
- * and no second floor for it to disagree with.
+ * The last row was recorded as failing *nothing*, on the reasoning that a px
+ * floor beside a rem size diverges only at a root font-size the lane never
+ * uses. That was wrong, and usefully so: the lane owns the document it
+ * measures and can set the root font-size itself. Recording a mutation that
+ * stays green is how a blind spot stays visible instead of passing for
+ * coverage — and this one turned out to be one line of test away from being no
+ * blind spot at all. It fails at 15px, where it measured 314 against 301.
  *
  * The first of those is why the ply assertion measures `.board-play`: against
  * the whole board section it stayed green, both boards being grid items that
@@ -261,6 +272,23 @@ describe('a board that holds still', () => {
       // under the very defect it names until the mutation of [U3-86] showed it
       // could not fail, which is what that record is for.
     });
+
+  /**
+   * The same requirement at a root font-size the browser did not pick.
+   *
+   * `rem` resolves against the root element, which this stylesheet never sets —
+   * so a control floored in pixels ([U3-59]) beside a tile sized in `rem` is two
+   * sizes that agree at 16px and nowhere else. It reads as untestable and is
+   * not: the lane owns the document it measures, and can simply say what the
+   * root font-size is.
+   */
+  it('[U3-86] is the same size to move as waiting at a root font-size of 15px', async () => {
+    const doc = await load(1280, 800);
+    doc.documentElement.style.fontSize = '15px';
+    expect(height(playArea(board(doc, 'Player 1')))).toBe(
+      height(playArea(board(doc, 'Player 2'))),
+    );
+  });
 
   it('[U3-88] lays every pattern line level with the wall row it feeds, at 1280 × 800', async () => {
     const doc = await load(1280, 800);
@@ -317,6 +345,17 @@ describe('a board that holds still', () => {
    * A media query cannot do that. Asserting only that 1280 is side by side and
    * 844 is stacked would pass under `@media (max-width: 900px)`, which is the
    * rule the requirement exists to forbid.
+   *
+   * Where the three numbers come from, so the next person can re-derive them
+   * rather than conclude they were invented. The two columns need
+   * `7 × --tile + 6 × --tile-gap` for the floor, `5 × --tile + 4 × --tile-gap`
+   * for the wall, and the gap between them — 327 + 233 + 12 = 572px. `.boards`
+   * seats two columns while `2 × 20rem + 0.75rem` fits, and gives each board
+   * `(row − gap) / 2` less its own padding and border. That is 596px of content
+   * at 1280, 378px at 844, and 610px at 660, where the row holds one board.
+   * Change `--tile`, `--tile-gap`, `.boards`' `20rem`, or either padding, and
+   * these three widths may stop being a witness — the requirement is that some
+   * such triple exists, so re-derive rather than assume the layout broke.
    */
   it('[U3-89] decides the arrangement from the board’s width, not the viewport’s', async () => {
     const sideBySide = async (width: number): Promise<boolean> => {

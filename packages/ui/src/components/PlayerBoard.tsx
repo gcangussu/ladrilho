@@ -29,8 +29,8 @@ function signed(n: number): string {
  * move, and only there: `dest` is a destination on the mover's own board
  * [0001 E1-6], so a second set under the opponent would be six controls that
  * can never be legal. The waiting player's lines are shown, not offered — and
- * a terminal board is that same configuration, `destinations` being null for
- * both, which is why [U3-86] needs only two cases and not three.
+ * so are a terminal board's, which is why [U3-86] has two configurations and
+ * never three: the shown one is every board that is not the mover's.
  *
  * What must not differ between the two is the room they take: the board grew
  * when the turn arrived and shrank when it left, and every ply moved the page

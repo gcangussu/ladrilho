@@ -3,7 +3,9 @@ title: Web interface
 author: Gabriel Cangussu
 date: 2026-09-05
 status: implemented
-intent: 0002 — Web interface, 0005 — A board that holds still, and lines up with itself
+intent:
+  - 0002 — Web interface
+  - 0005 — A board that holds still, and lines beside its wall
 prefix: U3
 depends-on: 0001 — Engine core, 0002 — Engine conformance vectors
 summary: >
@@ -459,7 +461,7 @@ engine's `RoundScoring` ([0007 S7-1]); none of them computes anything.
 
 ### A board that holds still, and lines beside its wall
 
-Serves *intent 0005 — A board that holds still, and lines up with itself*. Two properties of a
+Serves *intent 0005 — A board that holds still, and lines beside its wall*. Two properties of a
 player's board: whose turn it is does not change its size, and where there is room its lines sit
 level with the wall rows they feed.
 
@@ -469,8 +471,15 @@ level with the wall rows they feed.
 
   *The two were separate renderings whose heights agreed only by accident — they did not, so a
   board grew when the turn arrived and shrank when it left, and a ply moved the page under a
-  player who was still reading it. A waiting board and a terminal board are one configuration,
-  `destinations` being null for both.*
+  player who was still reading it. The shown configuration is every board that is not the board of
+  the player to move, which is the waiting board and the terminal board alike — so there are two
+  configurations here and never three.*
+
+  The sizes MUST agree at any root font-size, not only at the browser's default. *A control's
+  minimum is stated in pixels ([U3-59]) and a tile's size in `rem`; if the two are written
+  separately, one configuration is floored where the other is not and they part company at a root
+  nothing in the page sets. That is this requirement's own defect reached by another road, and the
+  [U3-73] lane can pose it — it owns the document it measures.*
 
   *Scoped to the play area, and to configuration rather than to time, because both wider claims
   are false. A board section cannot fail a size comparison at all: the two are grid items on one
@@ -481,9 +490,13 @@ level with the wall rows they feed.
 - **[U3-87]** The sentence a board states about its floor line ([U3-38]) MUST be produced by one
   function and rendered from it in both configurations. *(It was written twice, agreeing on the
   numbers and disagreeing on the words. Two spellings of one sentence are two lengths, and at some
-  board width two heights.)* Each of the six rows MUST also carry the name [U3-54] requires in both
-  configurations — as the control's `aria-label` where it is offered, and as text for assistive
-  technology where it is shown.
+  board width two heights.)*
+
+- **[U3-93]** Each of the six rows MUST have the same accessible name in both configurations. *(A
+  separate obligation from [U3-87] and a separate identifier, so a citation says which of the two
+  it covers. The technique differs between the configurations and is not prescribed here: what
+  [U3-54] requires is a name, and a row that is only shown has one to state as much as a row that
+  is offered.)*
 
 - **[U3-88]** At 1280 × 800 with both boards on screen, a board's lines MUST be to the left of its
   wall, and pattern line *r* MUST be **level** with wall row *r* — equal top edge and equal height
@@ -494,10 +507,17 @@ level with the wall rows they feed.
   on its own output: the implementation decides where there is room, so an implementation that
   never put them side by side would satisfy that reading completely.
 
-- **[U3-89]** The arrangement MUST be decided by the width the board is given and not by the
-  viewport's. Observably: there MUST be three viewport widths `w1 > w2 > w3` at which the
+- **[U3-89]** Where the two columns do not both fit the width the board is given, they MUST wrap
+  rather than overflow it. The choice MUST be decided by that width and not by the viewport's.
+
+  Observably, for the second half: there MUST be three viewport widths `w1 > w2 > w3` at which the
   arrangement is side by side, stacked, and side by side again — which no rule written in viewport
   widths can produce — and [U3-58] MUST hold at each.
+
+  *The first sentence is the rule and holds at every width, including the ones [U3-58] does not
+  name; the second is how a test tells the rule from a breakpoint that imitates it. Stated in terms
+  of what the columns need rather than of the arrangement, because "where the width admits both"
+  is decided by the layout under test and asserts nothing.*
 
   Today those are 1280, 844 and 660, because `.boards` gives each board 596, 378 and 610 CSS pixels
   of content at them: two boards share a row until the viewport is too narrow for two, and the
@@ -519,11 +539,15 @@ level with the wall rows they feed.
   board. It is the shape of [U3-42] and [U3-7]: an old requirement that held only because nothing
   had ever rendered a second one.*
 
-- **[U3-92]** In every arrangement the five pattern lines MUST share a right-hand edge, and it MUST
-  be the edge nearer the wall, so a line's most recently added tile is the one nearest the cell it
-  will feed. *(A requirement of its own rather than a clause of [U3-88], because it holds stacked
-  as well — where there is no wall beside the lines to fill toward, and the fill direction carries
-  the meaning on its own.)*
+- **[U3-92]** In every arrangement the five pattern lines MUST share a right-hand edge, so a line
+  fills toward one edge and its most recently added tile is always in the same place.
+
+  *A requirement of its own rather than a clause of [U3-88], because [U3-88] is pinned to
+  1280 × 800 and nothing would otherwise constrain fill direction at 844 — which is exactly where
+  the staircase is the only cue left. It says nothing about which edge is nearer the wall: stacked,
+  the wall is below rather than beside, and "nearer the wall" has no referent there. That the
+  shared edge meets the wall's is [U3-88], at the viewport where there is a wall beside it to
+  meet.*
 
 #### Two things this does not reach
 
@@ -613,11 +637,11 @@ budget.
   `sessionStorage`, `indexedDB`, `document.cookie`, `fetch`, `XMLHttpRequest`, `WebSocket` and
   `navigator.sendBeacon` replaced by throwing stubs — the way [0002 V2-31] treats [0001 E1-50].
   "No persistence" and "no network" are behaviour, and behaviour is testable.
-- **[U3-73]** The suite MUST check [U3-58], [U3-59], [U3-16], the positional half of [U3-81], and
-  [U3-86], [U3-88], [U3-89] and [U3-92] under Vitest browser mode with the Playwright provider, which the testing guide names for
-  real-browser needs. Layout requirements need a layout engine and a reload requirement needs a
-  reload; excusing them because jsdom has neither would excuse eight requirements that came
-  straight from an intent.
+- **[U3-73]** The suite MUST check [U3-58], [U3-59], [U3-16], the positional half of [U3-81],
+  and [U3-86], [U3-88], [U3-89] and [U3-92], under Vitest browser mode with the Playwright
+  provider, which the testing guide names for real-browser needs. Layout requirements need a
+  layout engine and a reload requirement needs a reload; excusing them because jsdom has neither
+  would excuse eight requirements that came straight from an intent.
 - **[U3-74]** The suite MUST assert that `packages/ui`'s `dependencies` are exactly `engine`, `bot`
   and the Solid v2 runtime [U3-10], and that the declared `vitest` range satisfies [U3-11]. An
   allowlist, not a judgement about which packages "carry the rules" — adding one is a spec change
@@ -723,7 +747,7 @@ documentation is right and this section is stale.
 - Intent [0003 — Computer opponent](../intent/0003-computer-opponent.md)
 - Intent [0004 — Scoring explained](../intent/0004-scoring-explained.md) — the two shortfalls
   above, handed on
-- Intent [0005 — A board that holds still, and lines up with itself](../intent/0005-a-board-that-holds-still.md)
+- Intent [0005 — A board that holds still, and lines beside its wall](../intent/0005-a-board-that-holds-still.md)
   — the layout requirements [U3-86] through [U3-92], and the two residues recorded beside them
 - Spec [0001 — Engine core](0001-engine-core.md)
 - Spec [0002 — Engine conformance vectors](0002-engine-conformance-vectors.md) — the traceability

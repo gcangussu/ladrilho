@@ -78,6 +78,10 @@ old one `superseded`, and set `supersedes` in the new one's frontmatter.
   (`0001-engine-core.md`). Numbers are identifiers, not priorities.
 - Spec numbers are their **own sequence** — spec 0002 is not "the spec for intent 0002". Each
   spec names the intent it serves in its `intent` field and refers to others by number and title.
+  A spec **may serve more than one intent** — a later intent that changes the same subject amends
+  the spec that owns it rather than starting a spec of cross-references. Where it does, `intent`
+  is a YAML list, because an intent's title is free to contain a comma and a comma-separated
+  string is then unparseable. The Index below names those specs by intent number alone.
 - Cite a requirement in the same spec as `[E1-14]`, and one in another spec as `[0001 E1-14]` —
   spec number inside the brackets, so a whole citation is one token a script can match with
   `\[(?:(\d{4}) )?([A-Z]+\d+-\d+)\]`. Prefixes are unique across specs, so the spec number is
@@ -119,7 +123,7 @@ Required fields: `title`, `author`, `date`, `status`, `intent`, `prefix`, `summa
 | --- | --- | --- | --- |
 | [0001 — Engine core](0001-engine-core.md) | implemented | 0001 — Rules engine | State, action encoding, rules, scoring, determinism, observation vector |
 | [0002 — Engine conformance vectors](0002-engine-conformance-vectors.md) | implemented | 0001 — Rules engine | How the engine is proven correct against the reference implementation |
-| [0003 — Web interface](0003-web-interface.md) | implemented | 0002 — Web interface, 0005 — A board that holds still, and lines up with itself | The hot-seat client: turn interaction, board presentation and layout, the engine seam, accessibility |
+| [0003 — Web interface](0003-web-interface.md) | implemented | 0002, 0005 | The hot-seat client: turn interaction, board presentation and layout, the engine seam, accessibility |
 | [0004 — Computer opponent](0004-computer-opponent.md) | implemented | 0003 — Computer opponent | The player: the information barrier, evaluation, search, difficulty tiers, determinism |
 | [0005 — Opponent strength](0005-opponent-strength.md) | implemented | 0003 — Computer opponent | How we know it plays well: the arena, the reference opponents, the ladder, the blunder audit |
 | [0006 — Opponent in the interface](0006-opponent-in-the-interface.md) | implemented | 0003 — Computer opponent | Where it runs and what you see: seating, the worker, the thinking state; amends 0003 |

@@ -1,5 +1,5 @@
 ---
-title: A board that holds still, and lines up with itself
+title: A board that holds still, and lines beside its wall
 author: Gabriel Cangussu
 date: 2026-09-09
 status: pending
@@ -9,7 +9,7 @@ summary: >
   the board stops jumping and you can see where your tiles are going.
 ---
 
-# A board that holds still, and lines up with itself
+# A board that holds still, and lines beside its wall
 
 ## The idea
 
