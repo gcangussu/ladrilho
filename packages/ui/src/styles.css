@@ -23,11 +23,15 @@
    * whose rows are the same height and whose gaps are the same width are level
    * by construction rather than by two numbers that have to be kept equal.
    *
-   * 2.75rem is 44px, which is also [U3-59]'s minimum for a control; a row is a
-   * control on the board of the player to move, so the size is load-bearing at
-   * both ends and `.destination` adds nothing to it.
+   * `max(2.75rem, 44px)` and not `2.75rem`, because [U3-59]'s minimum is in
+   * pixels and a row is a control on one board and not on the other. With the
+   * floor written on `.destination` as `min-height: 44px`, a root font-size
+   * under 16px pins the offered rows to 44 and lets the shown rows shrink with
+   * the rem — five rows, and the board grows when the turn arrives again. The
+   * floor belongs on the size both configurations share, where there is only
+   * one of it and `.destination` needs no minimum of its own.
    */
-  --tile: 2.75rem;
+  --tile: max(2.75rem, 44px);
   --tile-gap: 0.2rem;
   color-scheme: dark;
 }
@@ -155,10 +159,14 @@ h2 {
  * two level row for row [U3-88].
  *
  * `flex-wrap` and no breakpoint, because the decision [U3-89] describes is
- * about the width this board has been given and not about the viewport — the
- * same board is one of two columns at 1280 and the whole width at 844. Where
- * the two columns fit side by side they sit side by side; where they do not
- * they wrap, which is the stacked arrangement and needs no second rule.
+ * about the width this board has been given and not about the viewport. The
+ * two are not even in step: `.boards` gives each board 596px of content at a
+ * 1280 viewport and 378px at 844, and then 610px again at 660, where the
+ * boards stop sharing a row. So the arrangement goes side by side, stacked,
+ * side by side as the viewport narrows, and no rule written in viewport widths
+ * can produce that. Where the two columns fit side by side they sit side by
+ * side; where they do not they wrap, which is the stacked arrangement and
+ * needs no second rule.
  */
 .board-play {
   display: flex;
@@ -317,8 +325,6 @@ h2 {
  * 0.25rem of padding this replaces are the four pixels a turn used to cost.
  */
 .destination {
-  min-width: 44px;
-  min-height: 44px;
   padding: 0;
   background: var(--slot);
   border: 0;

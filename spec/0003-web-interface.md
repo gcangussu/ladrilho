@@ -3,7 +3,7 @@ title: Web interface
 author: Gabriel Cangussu
 date: 2026-09-05
 status: implemented
-intent: 0002 — Web interface
+intent: 0002 — Web interface, 0005 — A board that holds still, and lines up with itself
 prefix: U3
 depends-on: 0001 — Engine core, 0002 — Engine conformance vectors
 summary: >
@@ -457,47 +457,89 @@ engine's `RoundScoring` ([0007 S7-1]); none of them computes anything.
 - **[U3-60]** Both players' boards, the factories and the centre SHOULD be visible at once,
   without scrolling, at 1280 × 800.
 
-### A board that holds still
+### A board that holds still, and lines beside its wall
 
-Serves *intent 0005 — A board that holds still*. Two properties of a player's board: it does not
-change size when the turn passes, and where there is room its lines sit level with the wall rows
-they feed.
+Serves *intent 0005 — A board that holds still, and lines up with itself*. Two properties of a
+player's board: whose turn it is does not change its size, and where there is room its lines sit
+level with the wall rows they feed.
 
-- **[U3-86]** A board's **play area** — its five pattern lines, its floor line and its wall — MUST
-  occupy the same box whether that player is to move, is waiting, or the game has ended. Its size
-  MUST depend on the space the board is given and on nothing else; in particular not on whose turn
-  it is.
+- **[U3-86]** Whether a player is to move MUST NOT change the size of that player's **play
+  area** — its five pattern lines, its floor line and its wall. The offered configuration of
+  [U3-79] and the shown configuration MUST occupy the same box for the same board.
 
-  *The offered rows of [U3-79] and the shown rows they replace were two independent renderings, and
-  their heights agreed only by accident — they did not. A turn passing therefore resized both
-  boards and moved the page under a player who had just moved. The requirement is on the box, not
-  on what fills it: a waiting board and a terminal board are the same configuration, since
-  `destinations` is null for both.*
+  *The two were separate renderings whose heights agreed only by accident — they did not, so a
+  board grew when the turn arrived and shrank when it left, and a ply moved the page under a
+  player who was still reading it. A waiting board and a terminal board are one configuration,
+  `destinations` being null for both.*
 
-- **[U3-87]** Whatever a board states in words about its floor line ([U3-38]) MUST be stated in
-  both configurations and worded identically in both. *(It was worded one way beside the controls
-  and another beside the display. Two spellings of one sentence are two lengths, and at some board
-  width two heights.)*
+  *Scoped to the play area, and to configuration rather than to time, because both wider claims
+  are false. A board section cannot fail a size comparison at all: the two are grid items on one
+  row and `align-items: stretch` gives them a common height whatever they hold. And the header
+  carries the score delta of [U3-43], which appears on a transition ply and is as long as its
+  number. What the play area still admits is recorded under* Two things this does not reach *below.*
 
-- **[U3-88]** Where the board's own width admits both side by side, pattern line *r* and wall row
-  *r* MUST be **level** — equal top edge and equal height — for every `r ∈ 0..NUM_ROWS-1`, with the
-  pattern lines to the left of the wall and filling toward it, so a line's most recently added tile
-  is the one nearest the cell it will feed.
+- **[U3-87]** The sentence a board states about its floor line ([U3-38]) MUST be produced by one
+  function and rendered from it in both configurations. *(It was written twice, agreeing on the
+  numbers and disagreeing on the words. Two spellings of one sentence are two lengths, and at some
+  board width two heights.)* Each of the six rows MUST also carry the name [U3-54] requires in both
+  configurations — as the control's `aria-label` where it is offered, and as text for assistive
+  technology where it is shown.
 
-  *Levelness MUST hold in both configurations of [U3-86], which is most of why that requirement is
-  worth having: a control that is taller than the row it stands in cannot be level with anything.*
+- **[U3-88]** At 1280 × 800 with both boards on screen, a board's lines MUST be to the left of its
+  wall, and pattern line *r* MUST be **level** with wall row *r* — equal top edge and equal height
+  — for every `r ∈ 0..NUM_ROWS-1`, in both configurations of [U3-86]. The floor line feeds no wall
+  row and is exempt.
 
-- **[U3-89]** Where the board's own width does not admit both, the lines and the wall MUST stack,
-  and [U3-58] MUST continue to hold. The choice MUST be made from the width the board is given, not
-  from a viewport width. *(A board is one of two columns at 1280 and the full width at 844, so the
-  same board is two different widths at one viewport size and one width at another. A rule written
-  in viewport widths gets the boundary wrong at exactly the sizes it was written for.)*
+  A named viewport rather than "wherever there is room", which would be a requirement conditioned
+  on its own output: the implementation decides where there is room, so an implementation that
+  never put them side by side would satisfy that reading completely.
 
-- **[U3-90]** A board's document order MUST follow its visual order: the pattern lines and the
-  floor before the wall. *(They exchange places under [U3-88]. The [U3-79] controls are in the
-  lines, so a document that still led with the wall would put the tab order and the reading order
-  behind the eye by one column.)*
+- **[U3-89]** The arrangement MUST be decided by the width the board is given and not by the
+  viewport's. Observably: there MUST be three viewport widths `w1 > w2 > w3` at which the
+  arrangement is side by side, stacked, and side by side again — which no rule written in viewport
+  widths can produce — and [U3-58] MUST hold at each.
 
+  Today those are 1280, 844 and 660, because `.boards` gives each board 596, 378 and 610 CSS pixels
+  of content at them: two boards share a row until the viewport is too narrow for two, and the
+  board then gets the whole width back. The three widths are an instance, not the requirement; what
+  is required is that such a triple exists.
+
+- **[U3-90]** The pattern lines and the floor MUST precede the wall in document order, in both
+  arrangements. *(Side by side that is also the visual order, so reading order follows the eye;
+  stacked the two coincide anyway. The [U3-79] controls are in the lines, so a document that led
+  with the wall would put the tab order a column behind.)*
+
+- **[U3-91]** A board in the shown configuration MUST render no control: no button, nothing
+  focusable, and nothing carrying the roving marker of [U3-53].
+
+  *The six rows are one component taking a nullable control, which is what makes [U3-86] hold by
+  construction — and one careless edit away from emitting controls on both boards. That would
+  double the universe [U3-79] defines and make [U3-61]'s "no more, no fewer" false; and the group
+  is found by first match in document order, so [U3-57] would restore focus to the other player's
+  board. It is the shape of [U3-42] and [U3-7]: an old requirement that held only because nothing
+  had ever rendered a second one.*
+
+- **[U3-92]** In every arrangement the five pattern lines MUST share a right-hand edge, and it MUST
+  be the edge nearer the wall, so a line's most recently added tile is the one nearest the cell it
+  will feed. *(A requirement of its own rather than a clause of [U3-88], because it holds stacked
+  as well — where there is no wall beside the lines to fill toward, and the fill direction carries
+  the meaning on its own.)*
+
+#### Two things this does not reach
+
+Recorded rather than narrowed, in the manner of *Scope* above.
+
+*Intent 0005* asks that the two boards be the same height as each other at every point in the
+game. [U3-86] does not give that, and no arrangement of these components would: a play area
+contains the floor line's sentence, whose numbers are the two players' own — "0 of 7 slots,
+penalty 0" against "10 of 7 slots, penalty -14 (plus 3 beyond the last slot, costing nothing)" —
+and at a narrow board width the longer one wraps and the shorter does not. [U3-87] keeps that from
+ever being a difference in *wording*; it cannot keep it from being a difference in numbers.
+
+It also asks that taking a turn move nothing on the page except the tiles that moved. The score
+delta of [U3-43] is outside the play area, appears on a transition ply, and is as wide as its
+number, so a board's header is a size the game moves. Both residues are small, both are visible
+only where a board is narrow, and neither is the defect the intent was written about.
 
 ## Invariants
 
@@ -570,10 +612,10 @@ budget.
   `navigator.sendBeacon` replaced by throwing stubs — the way [0002 V2-31] treats [0001 E1-50].
   "No persistence" and "no network" are behaviour, and behaviour is testable.
 - **[U3-73]** The suite MUST check [U3-58], [U3-59], [U3-16], the positional half of [U3-81], and
-  [U3-86], [U3-88] and [U3-89] under Vitest browser mode with the Playwright provider, which the testing guide names for
+  [U3-86], [U3-88], [U3-89] and [U3-92] under Vitest browser mode with the Playwright provider, which the testing guide names for
   real-browser needs. Layout requirements need a layout engine and a reload requirement needs a
-  reload; excusing them because jsdom has neither would excuse four requirements that came
-  straight from the intent.
+  reload; excusing them because jsdom has neither would excuse eight requirements that came
+  straight from an intent.
 - **[U3-74]** The suite MUST assert that `packages/ui`'s `dependencies` are exactly `engine`, `bot`
   and the Solid v2 runtime [U3-10], and that the declared `vitest` range satisfies [U3-11]. An
   allowlist, not a judgement about which packages "carry the rules" — adding one is a spec change
@@ -679,8 +721,8 @@ documentation is right and this section is stale.
 - Intent [0003 — Computer opponent](../intent/0003-computer-opponent.md)
 - Intent [0004 — Scoring explained](../intent/0004-scoring-explained.md) — the two shortfalls
   above, handed on
-- Intent [0005 — A board that holds still](../intent/0005-a-board-that-holds-still.md) — the
-  layout requirements [U3-86] through [U3-90]
+- Intent [0005 — A board that holds still, and lines up with itself](../intent/0005-a-board-that-holds-still.md)
+  — the layout requirements [U3-86] through [U3-92], and the two residues recorded beside them
 - Spec [0001 — Engine core](0001-engine-core.md)
 - Spec [0002 — Engine conformance vectors](0002-engine-conformance-vectors.md) — the traceability
   doctrine [U3-76] mirrors, and [0002 V2-31]'s exemption categories

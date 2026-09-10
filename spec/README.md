@@ -119,7 +119,7 @@ Required fields: `title`, `author`, `date`, `status`, `intent`, `prefix`, `summa
 | --- | --- | --- | --- |
 | [0001 — Engine core](0001-engine-core.md) | implemented | 0001 — Rules engine | State, action encoding, rules, scoring, determinism, observation vector |
 | [0002 — Engine conformance vectors](0002-engine-conformance-vectors.md) | implemented | 0001 — Rules engine | How the engine is proven correct against the reference implementation |
-| [0003 — Web interface](0003-web-interface.md) | implemented | 0002 — Web interface | The hot-seat client: turn interaction, board presentation, the engine seam, accessibility |
+| [0003 — Web interface](0003-web-interface.md) | implemented | 0002 — Web interface, 0005 — A board that holds still, and lines up with itself | The hot-seat client: turn interaction, board presentation and layout, the engine seam, accessibility |
 | [0004 — Computer opponent](0004-computer-opponent.md) | implemented | 0003 — Computer opponent | The player: the information barrier, evaluation, search, difficulty tiers, determinism |
 | [0005 — Opponent strength](0005-opponent-strength.md) | implemented | 0003 — Computer opponent | How we know it plays well: the arena, the reference opponents, the ladder, the blunder audit |
 | [0006 — Opponent in the interface](0006-opponent-in-the-interface.md) | implemented | 0003 — Computer opponent | Where it runs and what you see: seating, the worker, the thinking state; amends 0003 |

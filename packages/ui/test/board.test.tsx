@@ -284,6 +284,40 @@ describe('a board that holds still', () => {
     expect(said(null)).toContain('of 7 slots');
   });
 
+  it('[U3-87] names all six rows in both configurations, the same way', () => {
+    const named = (destinations: DestinationApi | null): string[] => {
+      const { container, unmount } = board({ destinations });
+      // A control says its name in `aria-label`; a row that is only shown says
+      // it in text for assistive technology. Both, in row order.
+      const rows = [
+        ...container.querySelectorAll('[data-row], .floor-row'),
+      ] as HTMLElement[];
+      // The row's own name and not its whole text: a shown row also contains a
+      // name per tile, and a floor row the visible penalty ladder.
+      const out = rows.map(
+        (row) =>
+          row.getAttribute('aria-label') ?? row.querySelector('.sr-only')?.textContent ?? '',
+      );
+      unmount();
+      return out;
+    };
+    const offered = named({ available: () => false, onChoose: () => {} });
+    expect(offered).toHaveLength(NUM_ROWS + 1);
+    expect(offered[NUM_ROWS], 'the floor row is unnamed').toContain('floor line');
+    expect(named(null)).toEqual(offered);
+  });
+
+  it('[U3-91] renders no control on a board that is shown rather than offered', () => {
+    const { container } = board({ destinations: null, toMove: false });
+    // Not "no destination controls" but no controls at all: the rows are one
+    // component with a nullable control, so the way this fails is that the
+    // shown board starts emitting the offered board's buttons.
+    expect(container.querySelectorAll('button')).toHaveLength(0);
+    expect(container.querySelectorAll('[data-roving]')).toHaveLength(0);
+    expect(container.querySelectorAll('[tabindex]')).toHaveLength(0);
+    expect(container.querySelectorAll('[data-group="destinations"]')).toHaveLength(0);
+  });
+
   it('[U3-90] puts the lines and the floor before the wall, offered or shown', () => {
     for (const destinations of [offered, null]) {
       const { container, unmount } = board({ destinations });

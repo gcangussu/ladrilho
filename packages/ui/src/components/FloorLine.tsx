@@ -100,17 +100,26 @@ export function FloorRow(props: {
   const tiles = (): JSX.Element => (
     <FloorTiles floor={props.floor} marker={props.marker} names={props.names} />
   );
+  const label = (): string => floorLineName(props.occupied, props.penalty);
   return (
     <Show
       when={props.control}
-      fallback={<div class="floor-row">{tiles()}</div>}
+      fallback={
+        // The same name the offered row carries as its `aria-label`, said the
+        // same way [U3-87] — a row that is shown rather than offered still has
+        // to say what it is [U3-54], and `PatternRow`'s shown form does.
+        <div class="floor-row">
+          <span class="sr-only">{label()}</span>
+          {tiles()}
+        </div>
+      }
     >
       {(control) => (
         <button
           type="button"
           data-roving="true"
           class="floor-row destination"
-          aria-label={floorLineName(props.occupied, props.penalty)}
+          aria-label={label()}
           aria-disabled={control().available ? 'false' : 'true'}
           tabindex={control().tabindex}
           onClick={() => control().onChoose()}

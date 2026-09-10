@@ -202,7 +202,14 @@ const height = (el: HTMLElement): number => Math.round(el.getBoundingClientRect(
  * | `.destination`: `padding: 0` → `0.25rem`, `border: 0` → `2px solid var(--line)` | both [U3-86] |
  * | `.lines, .pattern-lines, .wall`: drop `.wall` from the selector | [U3-88] |
  * | `.board-play`: `flex-wrap: wrap` → `nowrap` | [U3-89], and [U3-58] with it |
- * | `.pattern-lines`: `align-items: flex-end` → `flex-start` | [U3-88] |
+ * | `.pattern-lines`: `align-items: flex-end` → `flex-start` | [U3-92] |
+ * | `:root`: `--tile: max(2.75rem, 44px)` → `2.75rem`, with `.destination { min-height: 44px }` back | nothing — see below |
+ *
+ * That last one is a record of a defect the lane *cannot* see, kept because a
+ * reader would otherwise assume it could. `rem` resolves against a root nothing
+ * in this stylesheet sets, so a px floor on one configuration and a rem size on
+ * the other diverge only at a root font-size the browser lane never uses. The
+ * fix is that there is one size and no second floor.
  *
  * The first of those is why the ply assertion measures `.board-play`: against
  * the whole board section it stayed green, both boards being grid items that
@@ -248,7 +255,7 @@ describe('a board that holds still', () => {
       // could not fail, which is what that record is for.
     });
 
-  it('[U3-88] lays every pattern line level with the wall row it feeds, at a laptop', async () => {
+  it('[U3-88] lays every pattern line level with the wall row it feeds, at 1280 × 800', async () => {
     const doc = await load(1280, 800);
 
     // Both configurations: the board of the player to move, whose rows are the
@@ -269,31 +276,60 @@ describe('a board that holds still', () => {
         levels.map(() => [0, 0]),
       );
 
-      // Level, and filling toward the wall: every line ends on the same edge,
-      // and that edge is the wall's. Checking only that the lines are somewhere
-      // to the left would pass on a column of rows aligned the other way, whose
-      // filled ends are then five different distances from the cells they feed.
-      const rights = lines.map((line) => Math.round(line.getBoundingClientRect().right));
+      // Beside the wall, not merely somewhere to its left.
+      const right = Math.round(lines[NUM_ROWS - 1].getBoundingClientRect().right);
       const wallLeft = Math.round(wall[0].getBoundingClientRect().left);
-      expect([...new Set(rights)], `${who}: the lines do not share a right edge`).toHaveLength(1);
-      expect(rights[0], `${who}: the lines are not left of the wall`).toBeLessThanOrEqual(wallLeft);
-      expect(wallLeft - rights[0], `${who}: the lines are not beside the wall`).toBeLessThan(44);
+      expect(right, `${who}: the lines are not left of the wall`).toBeLessThanOrEqual(wallLeft);
+      expect(wallLeft - right, `${who}: the lines are not beside the wall`).toBeLessThan(44);
     }
   });
 
-  it('[U3-89] stacks the lines and the wall where the board is too narrow', async () => {
-    const doc = await load(844, 390);
-    for (const who of ['Player 1', 'Player 2']) {
-      const el = board(doc, who);
-      const lines = patternRows(el)[0].getBoundingClientRect();
-      const wall = wallRows(el)[0].getBoundingClientRect();
-      expect(Math.round(wall.top), `${who}: the wall did not wrap below the lines`).toBeGreaterThan(
-        Math.round(lines.top),
-      );
-      expect(Math.round(wall.left), `${who}: the wall did not wrap below the lines`).toBeLessThan(
-        Math.round(lines.right),
-      );
-    }
+  it.each(VIEWPORTS)('[U3-92] ends every pattern line on the edge nearest the wall, at $name',
+    async (viewport) => {
+      const doc = await load(viewport.width, viewport.height);
+      // Both arrangements: this one holds stacked as well, where there is no
+      // wall beside the lines and the fill direction is the whole of the cue.
+      // Checking only that the lines sit left of the wall would pass on a
+      // column aligned the other way, whose five filled ends are then five
+      // different distances from the cells they feed.
+      for (const who of ['Player 1', 'Player 2']) {
+        const rights = patternRows(board(doc, who))
+          .map((line) => Math.round(line.getBoundingClientRect().right));
+        expect(rights, who).toHaveLength(NUM_ROWS);
+        expect([...new Set(rights)], `${who}: the lines do not share a right edge`).toHaveLength(1);
+      }
+    });
+
+  /**
+   * The arrangement is not monotonic in viewport width, and that is the point
+   * [U3-89] rests on. `.boards` seats two boards on one row until the viewport
+   * is too narrow for two, and the board then gets the whole width back — so as
+   * the viewport narrows the board gets wider once, and the arrangement goes
+   * side by side, stacked, side by side.
+   *
+   * A media query cannot do that. Asserting only that 1280 is side by side and
+   * 844 is stacked would pass under `@media (max-width: 900px)`, which is the
+   * rule the requirement exists to forbid.
+   */
+  it('[U3-89] decides the arrangement from the board’s width, not the viewport’s', async () => {
+    const sideBySide = async (width: number): Promise<boolean> => {
+      const doc = await load(width, 800);
+      const el = board(doc, 'Player 1');
+      const level =
+        Math.round(patternRows(el)[0].getBoundingClientRect().top) ===
+        Math.round(wallRows(el)[0].getBoundingClientRect().top);
+      // [U3-58] holds at each of the three, side by side or stacked.
+      expect(doc.documentElement.scrollWidth, `${width}px scrolls sideways`)
+        .toBeLessThanOrEqual(doc.documentElement.clientWidth);
+      frame?.remove();
+      frame = null;
+      return level;
+    };
+
+    expect(
+      [await sideBySide(1280), await sideBySide(844), await sideBySide(660)],
+      'side by side, stacked, side by side as the viewport narrows',
+    ).toEqual([true, false, true]);
   });
 });
 

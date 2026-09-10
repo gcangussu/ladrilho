@@ -1,5 +1,5 @@
 ---
-title: A board that holds still
+title: A board that holds still, and lines up with itself
 author: Gabriel Cangussu
 date: 2026-09-09
 status: pending
@@ -9,7 +9,7 @@ summary: >
   the board stops jumping and you can see where your tiles are going.
 ---
 
-# A board that holds still
+# A board that holds still, and lines up with itself
 
 ## The idea
 
@@ -64,3 +64,9 @@ played before.
   the borders are all as they were.
 - Moving the factories or the middle. This is about a player's own board.
 - Animating anything. If the board holds still there is nothing to animate.
+
+## Open questions
+
+- On a screen too narrow to put the lines beside the wall, which goes on top? Today the wall is
+  above and this asks for them side by side where there is room; it does not say what the narrow
+  screen should look like afterwards, and there is a case for either order.
