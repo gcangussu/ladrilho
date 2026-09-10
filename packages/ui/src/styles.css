@@ -33,6 +33,18 @@
    */
   --tile: max(2.75rem, 44px);
   --tile-gap: 0.2rem;
+  /*
+   * What one board needs to hold its play area side by side [U3-94]: the lines
+   * column is seven tiles and six gaps, the wall five and four, plus the gap
+   * between the two columns, the board's own padding and its border.
+   *
+   * Derived rather than measured, so it follows `--tile` and `--tile-gap`
+   * instead of going stale beside them. `.boards` uses it as the width below
+   * which it stops seating two boards on a row — a board squeezed under this
+   * is a board whose lines and wall come apart, and two boards are worth less
+   * than that.
+   */
+  --board-width: calc(12 * var(--tile) + 10 * var(--tile-gap) + 0.75rem + 1.5rem + 2px);
   color-scheme: dark;
 }
 
@@ -91,10 +103,20 @@ h2 {
   margin: 0.15rem 0;
 }
 
+/*
+ * Two boards on a row only where two boards fit whole [U3-94].
+ *
+ * The minimum was 20rem, which is a size a board can be but not a size a board
+ * wants: between about 660 and 1230 CSS pixels the row held two boards, each
+ * too narrow for its own lines and wall, so both play areas came apart while
+ * the layout had the option of stacking the boards and giving each one enough.
+ * Seeing both boards at once is [U3-60], a SHOULD; a line level with the wall
+ * row it feeds is [U3-88], and it wins.
+ */
 .boards {
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--board-width)), 1fr));
 }
 
 .player-board.to-move {
@@ -159,14 +181,14 @@ h2 {
  * two level row for row [U3-88].
  *
  * `flex-wrap` and no breakpoint, because the decision [U3-89] describes is
- * about the width this board has been given and not about the viewport. The
- * two are not even in step: `.boards` gives each board 596px of content at a
- * 1280 viewport and 378px at 844, and then 610px again at 660, where the
- * boards stop sharing a row. So the arrangement goes side by side, stacked,
- * side by side as the viewport narrows, and no rule written in viewport widths
- * can produce that. Where the two columns fit side by side they sit side by
- * side; where they do not they wrap, which is the stacked arrangement and
- * needs no second rule.
+ * about the width this board has been given and not about the viewport. Where
+ * the two columns fit side by side they sit side by side; where they do not
+ * they wrap, which is the stacked arrangement and needs no second rule.
+ *
+ * The two are not the same question even though `--board-width` now keeps them
+ * mostly in step: what the columns ask for is in `rem`, so at a fixed viewport
+ * a larger root font-size wraps them and a smaller one does not. That is what
+ * [U3-89] is asserted on, and what a breakpoint cannot imitate.
  */
 .board-play {
   display: flex;

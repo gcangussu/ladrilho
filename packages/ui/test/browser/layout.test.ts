@@ -183,6 +183,14 @@ function wallRows(el: HTMLElement): HTMLElement[] {
   return [...wall!.children] as HTMLElement[];
 }
 
+/** Are this board's lines and wall on one row, or has the wall wrapped below? */
+function sideBySide(el: HTMLElement): boolean {
+  return (
+    Math.round(patternRows(el)[0].getBoundingClientRect().top) ===
+    Math.round(wallRows(el)[0].getBoundingClientRect().top)
+  );
+}
+
 /**
  * The play area [U3-86] is about: the lines and the wall, and nothing else.
  *
@@ -214,12 +222,15 @@ const height = (el: HTMLElement): number => Math.round(el.getBoundingClientRect(
  * | `.board-play`: `flex-wrap: wrap` → `nowrap` | [U3-89], and [U3-58] with it |
  * | `.pattern-lines`: `align-items: flex-end` → `flex-start` | [U3-88], both [U3-92] |
  * | `.board-play`: `nowrap` plus `@media (max-width: 900px) { flex-direction: column }` | [U3-89] alone |
+ * | `.boards`: `minmax(min(100%, var(--board-width)))` → `min(100%, 20rem)` | [U3-94] alone |
  * | `--tile: max(2.75rem, 44px)` → `2.75rem`, `.destination { min-height: 44px }` back | [U3-86] at 15px |
  *
- * The media query is the one worth keeping. It is a working layout — side by
- * side at 1280, stacked at 844 — and it fails [U3-89] and nothing else, which
- * is what says the requirement is asserted rather than merely claimed. An
- * earlier version of that test asserted only stacking at 844, and this passes it.
+ * Two are worth keeping for what they are rather than for what they break. The
+ * media query is a working layout, and it fails [U3-89] and nothing else, which
+ * is what says that requirement is asserted rather than claimed. The `.boards`
+ * one is the layout as it actually shipped for a while: it looks right at 1280
+ * and at 390 and is wrong across the whole band between, which is why it took a
+ * person looking at the page to find it and why the sweep exists now.
  *
  * The last row was recorded as failing *nothing*, on the reasoning that a px
  * floor beside a rem size diverges only at a root font-size the lane never
@@ -342,40 +353,75 @@ describe('a board that holds still', () => {
    * the viewport narrows the board gets wider once, and the arrangement goes
    * side by side, stacked, side by side.
    *
-   * A media query cannot do that. Asserting only that 1280 is side by side and
-   * 844 is stacked would pass under `@media (max-width: 900px)`, which is the
-   * rule the requirement exists to forbid.
+   * The witness holds the viewport still and changes the root font-size.
    *
-   * Where the three numbers come from, so the next person can re-derive them
-   * rather than conclude they were invented. The two columns need
-   * `7 × --tile + 6 × --tile-gap` for the floor, `5 × --tile + 4 × --tile-gap`
-   * for the wall, and the gap between them — 327 + 233 + 12 = 572px. `.boards`
-   * seats two columns while `2 × 20rem + 0.75rem` fits, and gives each board
-   * `(row − gap) / 2` less its own padding and border. That is 596px of content
-   * at 1280, 378px at 844, and 610px at 660, where the row holds one board.
-   * Change `--tile`, `--tile-gap`, `.boards`' `20rem`, or either padding, and
-   * these three widths may stop being a witness — the requirement is that some
-   * such triple exists, so re-derive rather than assume the layout broke.
+   * `--tile` and `--tile-gap` are in `rem`, so a larger root makes the two
+   * columns ask for more room while the viewport gives exactly as much as
+   * before. Nothing a media query can see has changed, and the arrangement
+   * changes anyway. 1280 × 800 is side by side at 16px and stacked at 36px;
+   * the numbers are an instance, and any pair that straddles the boundary
+   * does — the two columns need `12 × --tile + 10 × --tile-gap + 0.75rem`, so
+   * the boundary moves with them.
+   *
+   * This replaces an earlier witness: the arrangement used to go side by side,
+   * stacked, side by side as the viewport narrowed, which a media query also
+   * cannot produce. That was a symptom of the defect [U3-94] names — boards
+   * seated two-to-a-row at widths where neither could hold its play area — and
+   * fixing it made the arrangement monotonic in viewport width.
    */
   it('[U3-89] decides the arrangement from the board’s width, not the viewport’s', async () => {
-    const sideBySide = async (width: number): Promise<boolean> => {
+    const doc = await load(1280, 800);
+    const atRoot = (size: string): boolean => {
+      doc.documentElement.style.fontSize = size;
+      return sideBySide(board(doc, 'Player 1'));
+    };
+    expect(
+      [atRoot('16px'), atRoot('36px')],
+      'one viewport, two root font-sizes, and the arrangement did not change',
+    ).toEqual([true, false]);
+  });
+
+  /**
+   * Which of the two things that want the same pixels gives way.
+   *
+   * Between roughly 660 and 1230 the row could seat two boards or it could
+   * leave each board wide enough to keep its lines beside its wall, and not
+   * both. It was seating two, so both play areas came apart at every width in
+   * that band while stacking the boards would have left both whole. Both
+   * boards at once is [U3-60] and a SHOULD; level rows are [U3-88] and a MUST.
+   */
+  it('[U3-94] stacks the boards rather than letting a play area come apart', async () => {
+    const seen: string[] = [];
+    for (const width of [1400, 1232, 1231, 1000, 844, 700, 622, 600, 390]) {
       const doc = await load(width, 800);
-      const el = board(doc, 'Player 1');
-      const level =
-        Math.round(patternRows(el)[0].getBoundingClientRect().top) ===
-        Math.round(wallRows(el)[0].getBoundingClientRect().top);
-      // [U3-58] holds at each of the three, side by side or stacked.
+      const one = board(doc, 'Player 1');
+      const two = board(doc, 'Player 2');
+      const boardsShareARow =
+        Math.round(one.getBoundingClientRect().top) === Math.round(two.getBoundingClientRect().top);
+      const play = sideBySide(one);
+
       expect(doc.documentElement.scrollWidth, `${width}px scrolls sideways`)
         .toBeLessThanOrEqual(doc.documentElement.clientWidth);
+      // The one arrangement that is never right: two boards on a row, each too
+      // narrow to use the room it was given.
+      expect(
+        boardsShareARow && !play,
+        `at ${width}px the boards share a row and the play area is stacked anyway`,
+      ).toBe(false);
+
+      seen.push(`${boardsShareARow ? 'row' : 'stacked'}/${play ? 'side' : 'stacked'}`);
       frame?.remove();
       frame = null;
-      return level;
-    };
+    }
 
-    expect(
-      [await sideBySide(1280), await sideBySide(844), await sideBySide(660)],
-      'side by side, stacked, side by side as the viewport narrows',
-    ).toEqual([true, false, true]);
+    // Both sides of the trade must actually occur in the sweep, or the
+    // assertion above is true of a layout that never seats two boards at all
+    // and of one whose play area never comes apart.
+    expect(seen, 'the sweep never seated two boards').toContain('row/side');
+    expect(seen, 'the sweep never stacked the boards').toContain('stacked/side');
+    expect(seen, 'the sweep never reached a width too narrow for either').toContain(
+      'stacked/stacked',
+    );
   });
 });
 

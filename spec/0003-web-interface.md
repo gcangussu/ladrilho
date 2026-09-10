@@ -510,19 +510,24 @@ level with the wall rows they feed.
 - **[U3-89]** Where the two columns do not both fit the width the board is given, they MUST wrap
   rather than overflow it. The choice MUST be decided by that width and not by the viewport's.
 
-  Observably, for the second half: there MUST be three viewport widths `w1 > w2 > w3` at which the
-  arrangement is side by side, stacked, and side by side again — which no rule written in viewport
-  widths can produce — and [U3-58] MUST hold at each.
+  Observably, for the second half: at one fixed viewport there MUST be two root font-sizes that
+  give different arrangements. A rule written in viewport widths cannot tell them apart, because
+  nothing about the viewport differs — what differs is how much room the columns ask for, `--tile`
+  and `--tile-gap` being in `rem`. Today 1280 × 800 is side by side at a 16px root and stacked at
+  36px.
 
   *The first sentence is the rule and holds at every width, including the ones [U3-58] does not
   name; the second is how a test tells the rule from a breakpoint that imitates it. Stated in terms
   of what the columns need rather than of the arrangement, because "where the width admits both"
   is decided by the layout under test and asserts nothing.*
 
-  Today those are 1280, 844 and 660, because `.boards` gives each board 596, 378 and 610 CSS pixels
-  of content at them: two boards share a row until the viewport is too narrow for two, and the
-  board then gets the whole width back. The three widths are an instance, not the requirement; what
-  is required is that such a triple exists.
+  *This observable replaces one that no longer exists. The arrangement used to go side by side,
+  stacked, side by side as the viewport narrowed — which no viewport rule can produce, and which
+  was a fine witness while it lasted. It lasted because of the defect [U3-94] fixes: `.boards`
+  seated two boards on a row at widths where neither could hold its play area, and the board got
+  its width back only once the row gave up on two. With that fixed the arrangement is monotonic in
+  viewport width, and a breakpoint could imitate it at one root font-size — hence a witness that
+  holds the viewport still instead.*
 
 - **[U3-90]** The pattern lines and the floor MUST precede the wall in document order, in both
   arrangements. *(Side by side that is also the visual order, so reading order follows the eye;
@@ -538,6 +543,17 @@ level with the wall rows they feed.
   is found by first match in document order, so [U3-57] would restore focus to the other player's
   board. It is the shape of [U3-42] and [U3-7]: an old requirement that held only because nothing
   had ever rendered a second one.*
+
+- **[U3-94]** The two boards MUST share a row only where each of them is wide enough to hold its
+  play area side by side. Where the width will not pay for both, the boards MUST stack and keep
+  their lines beside their walls.
+
+  *Both boards on screen at once is [U3-60], and a `SHOULD`; a pattern line level with the wall row
+  it feeds is [U3-88], and a `MUST`. They compete for the same pixels between roughly 660 and 1230,
+  and the row was winning: two boards were seated whenever each could have 20rem, which is a width
+  a board can be given but not one it can use, so both play areas came apart while stacking the
+  boards would have left both intact. The minimum a board is seated at is now the width its play
+  area needs, derived from the tile size rather than written down beside it.*
 
 - **[U3-92]** In every arrangement the five pattern lines MUST share a right-hand edge, so a line
   fills toward one edge and its most recently added tile is always in the same place.
@@ -638,10 +654,10 @@ budget.
   `navigator.sendBeacon` replaced by throwing stubs — the way [0002 V2-31] treats [0001 E1-50].
   "No persistence" and "no network" are behaviour, and behaviour is testable.
 - **[U3-73]** The suite MUST check [U3-58], [U3-59], [U3-16], the positional half of [U3-81],
-  and [U3-86], [U3-88], [U3-89] and [U3-92], under Vitest browser mode with the Playwright
+  and [U3-86], [U3-88], [U3-89], [U3-92] and [U3-94], under Vitest browser mode with the Playwright
   provider, which the testing guide names for real-browser needs. Layout requirements need a
   layout engine and a reload requirement needs a reload; excusing them because jsdom has neither
-  would excuse eight requirements that came straight from an intent.
+  would excuse nine requirements that came straight from an intent.
 - **[U3-74]** The suite MUST assert that `packages/ui`'s `dependencies` are exactly `engine`, `bot`
   and the Solid v2 runtime [U3-10], and that the declared `vitest` range satisfies [U3-11]. An
   allowlist, not a judgement about which packages "carry the rules" — adding one is a spec change
