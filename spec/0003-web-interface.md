@@ -530,11 +530,13 @@ level with the wall rows they feed.
 Recorded rather than narrowed, in the manner of *Scope* above.
 
 *Intent 0005* asks that the two boards be the same height as each other at every point in the
-game. [U3-86] does not give that, and no arrangement of these components would: a play area
-contains the floor line's sentence, whose numbers are the two players' own — "0 of 7 slots,
-penalty 0" against "10 of 7 slots, penalty -14 (plus 3 beyond the last slot, costing nothing)" —
-and at a narrow board width the longer one wraps and the shorter does not. [U3-87] keeps that from
-ever being a difference in *wording*; it cannot keep it from being a difference in numbers.
+game. [U3-86] does not give that. A play area contains the floor line's sentence, whose numbers
+are the two players' own — "0 of 7 slots, penalty 0" against "10 of 7 slots, penalty -14 (plus 3
+beyond the last slot, costing nothing)" — and at a narrow board width the longer one wraps and the
+shorter does not. [U3-87] keeps that from ever being a difference in *wording*; it cannot keep it
+from being a difference in numbers. It is reachable — reserve the sentence a fixed height, or move
+it out of the play area — but both change what the board shows in order to fix what it measures,
+and neither is asked for here.
 
 It also asks that taking a turn move nothing on the page except the tiles that moved. The score
 delta of [U3-43] is outside the play area, appears on a transition ply, and is as wide as its
