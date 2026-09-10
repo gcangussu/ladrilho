@@ -202,14 +202,21 @@ const height = (el: HTMLElement): number => Math.round(el.getBoundingClientRect(
  * | `.destination`: `padding: 0` → `0.25rem`, `border: 0` → `2px solid var(--line)` | both [U3-86] |
  * | `.lines, .pattern-lines, .wall`: drop `.wall` from the selector | [U3-88] |
  * | `.board-play`: `flex-wrap: wrap` → `nowrap` | [U3-89], and [U3-58] with it |
- * | `.pattern-lines`: `align-items: flex-end` → `flex-start` | [U3-92] |
- * | `:root`: `--tile: max(2.75rem, 44px)` → `2.75rem`, with `.destination { min-height: 44px }` back | nothing — see below |
+ * | `.pattern-lines`: `align-items: flex-end` → `flex-start` | [U3-88], both [U3-92] |
+ * | `.board-play`: `nowrap` plus `@media (max-width: 900px) { flex-direction: column }` | [U3-89] alone |
+ * | `--tile: max(2.75rem, 44px)` → `2.75rem`, `.destination { min-height: 44px }` back | **nothing** |
  *
- * That last one is a record of a defect the lane *cannot* see, kept because a
+ * The media query is the one worth keeping. It is a working layout — side by
+ * side at 1280, stacked at 844 — and it fails [U3-89] and nothing else, which
+ * is what says the requirement is asserted rather than merely claimed. An
+ * earlier version of that test asserted only stacking at 844, and this passes it.
+ *
+ * The last row is a record of a defect this lane *cannot* see, kept because a
  * reader would otherwise assume it could. `rem` resolves against a root nothing
  * in this stylesheet sets, so a px floor on one configuration and a rem size on
- * the other diverge only at a root font-size the browser lane never uses. The
- * fix is that there is one size and no second floor.
+ * the other diverge only at a root font-size the lane never uses — measured at a
+ * forced 15px root as 314 against 301. The fix is that there is now one size,
+ * and no second floor for it to disagree with.
  *
  * The first of those is why the ply assertion measures `.board-play`: against
  * the whole board section it stayed green, both boards being grid items that

@@ -267,6 +267,11 @@ describe('the end of a game', () => {
  * | --- | --- |
  * | `PlayerBoard`: move `<Wall>` back above the `<Show>` in `.board-play` | [U3-90] |
  * | `Destinations`: replace `<FloorSummary>` with its own `<p class="floor-summary">Floor line: {n} slots…` | [U3-87] |
+ * | `PatternRow`: make the shown fallback a `<button>` instead of a `<div>` | [U3-91] |
+ * | `FloorRow`: drop the `sr-only` name from the shown fallback | [U3-87] |
+ *
+ * The third is the one [U3-91] exists for: the rows are one component with a
+ * nullable control, and that edit is a plausible slip rather than a contrivance.
  */
 describe('a board that holds still', () => {
   /** A board of the player to move, offering rows nothing has selected for yet. */
