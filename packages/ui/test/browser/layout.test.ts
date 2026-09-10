@@ -433,7 +433,19 @@ describe('a board that holds still', () => {
    * leave each board wide enough to keep its lines beside its wall, and not
    * both. It was seating two, so both play areas came apart at every width in
    * that band while stacking the boards would have left both whole. Both
-   * boards at once is [U3-60] and a SHOULD; level rows are [U3-88] and a MUST.
+   * boards at once is [U3-60] and a SHOULD; level rows are [U3-88] and a MUST
+   * — though [U3-88] is pinned to 1280 × 800 and did not reach this band, so
+   * nothing was violated here and this is a judgement rather than a deduction.
+   *
+   * 1232 and 622 are the two boundary widths, and they sit on zero slack: a
+   * pixel either way flips the arrangement. That is deliberate and it cannot
+   * make this test flaky, because nothing is asserted *about* a particular
+   * width. The per-width assertion is the invariant `!(row && !side)`, which
+   * holds on both sides of a flip; the three `toContain` checks need each
+   * combination to appear *somewhere* in the sweep, and 1400, 1000 and 390
+   * supply all three on their own. The boundary probes are there to exercise
+   * the transition, not to pin it — if you ever want to pin it, assert the
+   * width itself and expect to maintain the number.
    */
   it('[U3-94] stacks the boards rather than letting a play area come apart', async () => {
     const seen: string[] = [];
