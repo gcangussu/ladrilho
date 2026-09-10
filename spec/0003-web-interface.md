@@ -544,17 +544,6 @@ level with the wall rows they feed.
   board. It is the shape of [U3-42] and [U3-7]: an old requirement that held only because nothing
   had ever rendered a second one.*
 
-- **[U3-94]** The two boards MUST share a row only where each of them is wide enough to hold its
-  play area side by side. Where the width will not pay for both, the boards MUST stack and keep
-  their lines beside their walls.
-
-  *Both boards on screen at once is [U3-60], and a `SHOULD`; a pattern line level with the wall row
-  it feeds is [U3-88], and a `MUST`. They compete for the same pixels between roughly 660 and 1230,
-  and the row was winning: two boards were seated whenever each could have 20rem, which is a width
-  a board can be given but not one it can use, so both play areas came apart while stacking the
-  boards would have left both intact. The minimum a board is seated at is now the width its play
-  area needs, derived from the tile size rather than written down beside it.*
-
 - **[U3-92]** In every arrangement the five pattern lines MUST share a right-hand edge, so a line
   fills toward one edge and its most recently added tile is always in the same place.
 
@@ -564,6 +553,21 @@ level with the wall rows they feed.
   the wall is below rather than beside, and "nearer the wall" has no referent there. That the
   shared edge meets the wall's is [U3-88], at the viewport where there is a wall beside it to
   meet.*
+
+- **[U3-94]** The two boards MUST NOT share a row while either board's play area is stacked. Where
+  the width will not seat two boards each wide enough for its lines beside its wall, the boards
+  MUST stack instead.
+
+  A prohibition, because the positive form overclaims at the bottom of the range: below the width
+  *one* whole board needs, no arrangement keeps a play area together, the boards are stacked
+  anyway, and this requirement has nothing left to give. [U3-89] is what applies there.
+
+  *Both boards on screen at once is [U3-60], and a `SHOULD`; a pattern line level with the wall row
+  it feeds is [U3-88], and a `MUST`. They compete for the same pixels between roughly 660 and 1230,
+  and the row was winning: two boards were seated whenever each could have 20rem, which is a width
+  a board can be given but not one it can use, so both play areas came apart while stacking the
+  boards would have left both intact. The minimum a board is seated at is now the width its play
+  area needs, derived from the tile size rather than written down beside it.*
 
 #### Two things this does not reach
 
