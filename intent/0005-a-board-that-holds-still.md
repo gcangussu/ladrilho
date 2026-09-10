@@ -2,7 +2,7 @@
 title: A board that holds still, and lines beside its wall
 author: Gabriel Cangussu
 date: 2026-09-09
-status: pending
+status: done
 summary: >
   A player's board should keep the same shape whether it is that player's turn
   or not, and the rows you fill should sit level with the rows they feed, so
