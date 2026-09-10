@@ -699,26 +699,38 @@ budget.
   allowlist, not a judgement about which packages "carry the rules" — adding one is a spec change
   to [U3-7]. *(Widened by [0006 W6-28].)*
 - **[U3-75]** The suite MUST include a source check over the **TypeScript** in `packages/ui/src`
-  — `.ts` and `.tsx`, which is what it reads — using the module layout of [U3-78], that fails on: a module-level numeric table of length 5, 7 or 25; either penalty
-  ladder; any `%` expression whose right operand is `5` or `NUM_COLORS`; and the action multipliers
-  `30` and `6` in arithmetic ([U3-49]); `clone`, `structuredClone` or `fromCanonical` followed by
-  `apply` ([U3-50]); `apply` called outside the state module ([U3-18]); the state binding imported
-  under `src/components/` ([U3-1]); a read of `tilesLeft` in the state module ([U3-40]); and
-  `import(` or an absolute `http(s)` URL in a string literal or JSX attribute — comments excepted,
+  — `.ts` and `.tsx` — using the module layout of [U3-78], that fails on: a module-level numeric
+  table of length 5, 7 or 25; either penalty ladder; any `%` expression whose right operand is `5`
+  or `NUM_COLORS`; and the action multipliers `30` and `6` in arithmetic ([U3-49]); `clone`,
+  `structuredClone` or `fromCanonical` followed by `apply` ([U3-50]); `apply` called outside the
+  state module ([U3-18]); the state binding imported under `src/components/` ([U3-1]); a read of
+  `tilesLeft` in the state module ([U3-40]); and `import(` or an absolute `http(s)` URL in a
+  string literal or JSX attribute — comments excepted,
   since [U3-10] sends implementers to the Solid docs by URL ([U3-8]).
+
+  The **stylesheet** MUST additionally be read for the absolute-`http(s)`-URL clause, and for that
+  clause alone.
 
   "The TypeScript in `src`" and not "`src`", because the difference became load-bearing. `.css` was
   always outside the walk and it never mattered until [U3-94] put `7 * var(--tile) + 6 *
   var(--tile-gap)` in the stylesheet — the first engine-derived count in `packages/ui/src`, in the
-  one file the check cannot see. Widening the walk was the first instinct and is wrong: the
-  action-multiplier clause matches `6 *` there, and that `6` is six gaps between seven tiles, so
-  the check would fail on a true statement. A clause cannot be added to fix that without teaching
-  it CSS. So the sentence is corrected instead, which is [0001 E1-71]'s lesson — a check whose
-  description outruns its behaviour is the defect, and the fix is the sentence.
+  one file the check could not see. Widening the walk *whole* is wrong, and measurably so: the
+  action-multiplier clause matches the `6 *` there, where the `6` is six gaps between seven tiles,
+  so the check would fail on a true statement, and no clause fixes that without teaching it CSS.
+  That half is [0001 E1-71]'s lesson — a check whose description outruns its behaviour is the
+  defect, and the fix is the sentence.
 
-  What actually covers those counts is [U3-94]: a stylesheet whose idea of the columns is smaller
-  than the components' seats a board at a width it cannot use, and the sweep reports it. That holds
-  in the direction that matters and not in the other, which is stated where the records are.
+  The URL clause is the exception because it needs no CSS understanding: an absolute URL means
+  there what it means in a string literal, and a stylesheet is the likeliest place in the package
+  to write one — `url(https://…)`, `@import`, `@font-face`. None of the three goes through `fetch`,
+  so [U3-72]'s throwing stubs never see them; the browser's own loader does the fetching. "No
+  network request at runtime" ([U3-8]) is too load-bearing to leave that corner unwatched, and the
+  clause MUST be shown to reject all three shapes.
+
+  What covers the counts is not this check but [U3-94]: a stylesheet whose idea of the columns is
+  smaller than the components' seats a board at a width it cannot use, and the sweep reports it.
+  That holds in the direction that matters and not in the other, which is stated where the records
+  are.
 
   Both `apply` clauses MUST match `applyExplained` too: `/\bapply\s*\(/` does not, so as
   written they silently stopped covering the entry point `submit` takes ([U3-18]). The matcher is

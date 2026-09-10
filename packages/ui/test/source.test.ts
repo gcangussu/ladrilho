@@ -78,13 +78,13 @@ function stripComments(text: string): string {
   return out;
 }
 
-function sources(): Source[] {
+function sources(match = /\.tsx?$/): Source[] {
   const out: Source[] = [];
   const walk = (dir: string): void => {
     for (const entry of readdirSync(dir).sort()) {
       const path = join(dir, entry);
       if (statSync(path).isDirectory()) walk(path);
-      else if (/\.tsx?$/.test(entry)) {
+      else if (match.test(entry)) {
         out.push({ file: relative(SRC, path), code: stripComments(readFileSync(path, 'utf8')) });
       }
     }
@@ -247,6 +247,41 @@ const CLAUSES: Clause[] = [
 ];
 
 const src = sources();
+const styles = sources(/\.css$/);
+
+/**
+ * The stylesheet, for the one clause that means the same thing there [U3-75].
+ *
+ * The rest of the check reads TypeScript and would be wrong about CSS — the
+ * action-multiplier clause matches `6 * var(--tile-gap)`, where the 6 is six
+ * gaps between seven tiles. But an absolute URL means exactly what it means in
+ * a string literal, and a stylesheet is the likeliest place in the package to
+ * write one: `background: url(https://…)`, `@import`, `@font-face`. None of
+ * those goes through `fetch`, so [U3-72]'s throwing stubs never see them —
+ * the browser's own loader fetches them — and "no network request at runtime"
+ * ([U3-8]) is too load-bearing a claim to leave that corner unwatched.
+ *
+ * `stripComments` is written for `//` and `/* … *\/`; CSS has only the second,
+ * so it is a superset and safe here.
+ */
+describe('the stylesheet, for the clause that carries over', () => {
+  it('[U3-8] [U3-75] loads no asset from an absolute URL', () => {
+    expect(styles.length, 'no stylesheet was found to check').toBeGreaterThan(0);
+    expect(matches(styles, /https?:\/\//g)).toEqual([]);
+  });
+
+  // The clause above is a matcher, and a matcher is worth nothing until it has
+  // been seen to reject something. These are the three shapes it is for.
+  it('[U3-75] rejects the ways a stylesheet reaches the network', () => {
+    for (const code of [
+      '.a { background: url(https://example.com/tile.png); }',
+      "@import url('https://fonts.example.com/x.css');",
+      "@font-face { src: url(https://example.com/f.woff2); }",
+    ]) {
+      expect(matches([{ file: 'bad.css', code }], /https?:\/\//g), code).not.toEqual([]);
+    }
+  });
+});
 
 describe('the module layout the check runs against', () => {
   /**

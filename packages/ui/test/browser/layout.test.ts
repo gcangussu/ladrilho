@@ -424,6 +424,15 @@ describe('a board that holds still', () => {
     expect(sideBySide(board(doc, 'Player 1')), 'the columns did not wrap').toBe(false);
     expect(doc.documentElement.scrollWidth, 'the columns overflowed instead of wrapping')
       .toBeLessThanOrEqual(doc.documentElement.clientWidth);
+
+    // This and [U3-58] both read `scrollWidth` on the document, and that only
+    // sees an overflow that reaches the document. `body { overflow-x: hidden }`
+    // does not hide it — `overflow: hidden` still makes a programmatically
+    // scrollable box, which is why the `nowrap` mutation fails this and [U3-58]
+    // together. What would hide it is `overflow: hidden` on anything *between*
+    // a board's columns and the document — `.board-play`, `.boards`, `.app` —
+    // which would clip the overflow before it arrived and turn both green on a
+    // layout that overflows. Don't add one without replacing these checks.
   });
 
   /**
