@@ -54,7 +54,7 @@ Every intent carries a `status`:
 | `done` | The intent has been realised. The document is left as-is — a record of what we wanted, not of what shipped. |
 | `discarded` | We decided not to do it, or it stopped being relevant. Keep the file and add a line saying why. |
 
-Intents are **not deleted and not rewritten after the fact**. If an idea changes
+Intents are **not deleted and not completely rewritten after the fact**. If an idea changes
 substantially, mark the old one `discarded` and write a new intent that references it. The
 value of the directory is the trail, including the turns we didn't take.
 
