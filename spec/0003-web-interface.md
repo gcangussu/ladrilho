@@ -569,6 +569,12 @@ level with the wall rows they feed.
   boards would have left both intact. The minimum a board is seated at is now the width its play
   area needs, derived from the tile size rather than written down beside it.*
 
+  This is visible at 844 × 390, one of [U3-58]'s two named viewports. The two boards shared a row
+  there and both play areas were broken; they stack now and both are whole, so a player scrolls
+  past one board to reach the other instead of seeing both at a glance. [U3-58] still holds — it
+  asks for no horizontal scroll, and there is none — and [U3-60] names only 1280 × 800, where the
+  two boards still share a row. The trade is deliberate and is the one this requirement makes.
+
 #### Two things this does not reach
 
 Recorded rather than narrowed, in the manner of *Scope* above.
