@@ -28,7 +28,16 @@ function signed(n: number): string {
  * The six destination controls of [U3-79] live on the board of the player to
  * move, and only there: `dest` is a destination on the mover's own board
  * [0001 E1-6], so a second set under the opponent would be six controls that
- * can never be legal. The waiting player's lines are shown, not offered.
+ * can never be legal. The waiting player's lines are shown, not offered — and
+ * a terminal board is that same configuration, `destinations` being null for
+ * both, which is why [U3-86] needs only two cases and not three.
+ *
+ * What must not differ between the two is the room they take: the board grew
+ * when the turn arrived and shrank when it left, and every ply moved the page
+ * under a player who was still reading it. `PatternRow` and `FloorRow` are one
+ * component each for that reason, and [U3-91] is the tripwire — the rows take a
+ * nullable control, so a shown board that starts emitting buttons is one edit
+ * away and would break [U3-61] and [U3-57] rather than anything visible here.
  */
 export function PlayerBoard(props: {
   name: string;
