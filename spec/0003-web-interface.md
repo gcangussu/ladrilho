@@ -562,12 +562,23 @@ level with the wall rows they feed.
   *one* whole board needs, no arrangement keeps a play area together, the boards are stacked
   anyway, and this requirement has nothing left to give. [U3-89] is what applies there.
 
-  *Both boards on screen at once is [U3-60], and a `SHOULD`; a pattern line level with the wall row
-  it feeds is [U3-88], and a `MUST`. They compete for the same pixels between roughly 660 and 1230,
-  and the row was winning: two boards were seated whenever each could have 20rem, which is a width
-  a board can be given but not one it can use, so both play areas came apart while stacking the
-  boards would have left both intact. The minimum a board is seated at is now the width its play
-  area needs, derived from the tile size rather than written down beside it.*
+  *This is a new policy and not a keyword contest, though it is tempting to write it as one. It is
+  true that both boards at once is [U3-60] and a `SHOULD` while a level pattern line is [U3-88] and
+  a `MUST` — but [U3-88] is pinned to 1280 × 800, so it did not apply anywhere in the band where
+  the two compete. At 1231 the requirement that applied was [U3-89], and the old layout satisfied
+  it exactly: the columns did not fit, so they wrapped. Nothing was violated. That is why thirteen
+  mutation records missed this and a person looking at the page did not — no test was asleep, there
+  was no requirement to break.*
+
+  *What was wrong is a judgement the spec had not made: in that band the layout had two
+  arrangements available and took the one that is worse on every axis the intent names, to keep a
+  `SHOULD`. [U3-94] is where that judgement is written down, and the minimum a board is seated at
+  is now the width its play area needs rather than a round number.*
+
+  *[U3-88] and [U3-94] together are the whole of levelness: [U3-94] is the general rule — a board
+  is never seated at a width that breaks its play area — and [U3-88] is the anchored instance that
+  makes it decidable at a named viewport. Neither is the story on its own, and [U3-88]'s
+  1280 × 800 is not the extent of the guarantee.*
 
   This is visible at 844 × 390, one of [U3-58]'s two named viewports. The two boards shared a row
   there and both play areas were broken; they stack now and both are whole, so a player scrolls
@@ -575,7 +586,15 @@ level with the wall rows they feed.
   asks for no horizontal scroll, and there is none — and [U3-60] names only 1280 × 800, where the
   two boards still share a row. The trade is deliberate and is the one this requirement makes.
 
-#### Two things this does not reach
+  It also puts [U3-60] within reach of the root font-size at that viewport, which it was not
+  before. `--board-width` grows with `--tile`, so two boards stop fitting 1280 once the root passes
+  about 16.6px: measured, they share a row at 16.5px and stack at 17px. Before this the minimum was
+  20rem and two boards needed 692px of 1254 at a 17px root, which never came close. [U3-60] is a
+  `SHOULD` and exempt from traceability, so nothing will report this — but a player whose browser
+  defaults to 17px will see the boards stop sitting side by side on a laptop, and the reason should
+  be findable when they say so.
+
+#### Three things this does not reach
 
 Recorded rather than narrowed, in the manner of *Scope* above.
 
@@ -592,6 +611,13 @@ It also asks that taking a turn move nothing on the page except the tiles that m
 delta of [U3-43] is outside the play area, appears on a transition ply, and is as wide as its
 number, so a board's header is a size the game moves. Both residues are small, both are visible
 only where a board is narrow, and neither is the defect the intent was written about.
+
+The third is [U3-94]'s own price, and it is vertical. Below 1232 the boards stack, so on a short
+landscape viewport — 844 × 390 among them — the second board is a scroll away rather than beside
+the first. [U3-58] is about horizontal scroll and holds; [U3-60] names only 1280 × 800; the intent
+says nothing about vertical scrolling either way. It is recorded because it is the visible cost of
+[U3-94] rather than an oversight, and because the alternative was two boards neither of which could
+be read.
 
 ## Invariants
 
@@ -672,14 +698,27 @@ budget.
   and the Solid v2 runtime [U3-10], and that the declared `vitest` range satisfies [U3-11]. An
   allowlist, not a judgement about which packages "carry the rules" — adding one is a spec change
   to [U3-7]. *(Widened by [0006 W6-28].)*
-- **[U3-75]** The suite MUST include a source check over `packages/ui/src`, using the module layout
-  of [U3-78], that fails on: a module-level numeric table of length 5, 7 or 25; either penalty
+- **[U3-75]** The suite MUST include a source check over the **TypeScript** in `packages/ui/src`
+  — `.ts` and `.tsx`, which is what it reads — using the module layout of [U3-78], that fails on: a module-level numeric table of length 5, 7 or 25; either penalty
   ladder; any `%` expression whose right operand is `5` or `NUM_COLORS`; and the action multipliers
   `30` and `6` in arithmetic ([U3-49]); `clone`, `structuredClone` or `fromCanonical` followed by
   `apply` ([U3-50]); `apply` called outside the state module ([U3-18]); the state binding imported
   under `src/components/` ([U3-1]); a read of `tilesLeft` in the state module ([U3-40]); and
   `import(` or an absolute `http(s)` URL in a string literal or JSX attribute — comments excepted,
   since [U3-10] sends implementers to the Solid docs by URL ([U3-8]).
+
+  "The TypeScript in `src`" and not "`src`", because the difference became load-bearing. `.css` was
+  always outside the walk and it never mattered until [U3-94] put `7 * var(--tile) + 6 *
+  var(--tile-gap)` in the stylesheet — the first engine-derived count in `packages/ui/src`, in the
+  one file the check cannot see. Widening the walk was the first instinct and is wrong: the
+  action-multiplier clause matches `6 *` there, and that `6` is six gaps between seven tiles, so
+  the check would fail on a true statement. A clause cannot be added to fix that without teaching
+  it CSS. So the sentence is corrected instead, which is [0001 E1-71]'s lesson — a check whose
+  description outruns its behaviour is the defect, and the fix is the sentence.
+
+  What actually covers those counts is [U3-94]: a stylesheet whose idea of the columns is smaller
+  than the components' seats a board at a width it cannot use, and the sweep reports it. That holds
+  in the direction that matters and not in the other, which is stated where the records are.
 
   Both `apply` clauses MUST match `applyExplained` too: `/\bapply\s*\(/` does not, so as
   written they silently stopped covering the entry point `submit` takes ([U3-18]). The matcher is

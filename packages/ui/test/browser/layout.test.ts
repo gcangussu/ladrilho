@@ -222,9 +222,11 @@ const height = (el: HTMLElement): number => Math.round(el.getBoundingClientRect(
  * | `.board-play`: `flex-wrap: wrap` → `nowrap` | [U3-89], and [U3-58] with it |
  * | `.pattern-lines`: `align-items: flex-end` → `flex-start` | [U3-88], both [U3-92] |
  * | `.board-play`: `nowrap` plus `@media (max-width: 900px) { flex-direction: column }` | [U3-89] alone |
+ * | `.board-play`: `nowrap` plus `@media (max-width: 56.25rem)` — a **rem** breakpoint | [U3-89] alone |
  * | `.boards`: `minmax(min(100%, var(--board-width)))` → `min(100%, 20rem)` | [U3-94] alone |
- * | `.board-play`: column gap `0.75rem` → `2rem`, `--board-width` not updated | [U3-94] |
- * | `.player-board`: `padding: 0.75rem` → `2rem`, `--board-width` not updated | [U3-94], [U3-88], [U3-89] |
+ * | `--lines-width`: `7 * --tile + 6 * --tile-gap` → `6 * … + 5 * …` (under-measures) | [U3-94] |
+ * | `--lines-width`: → `8 * … + 7 * …` (over-measures) | **nothing** — see below |
+ * | `--panel-pad`: `0.75rem` → `2rem` | **nothing** — see below |
  * | `--tile: max(2.75rem, 44px)` → `2.75rem`, `.destination { min-height: 44px }` back | [U3-86] at 15px |
  *
  * Two are worth keeping for what they are rather than for what they break. The
@@ -234,12 +236,25 @@ const height = (el: HTMLElement): number => Math.round(el.getBoundingClientRect(
  * and at 390 and is wrong across the whole band between, which is why it took a
  * person looking at the page to find it and why the sweep exists now.
  *
- * The last two answer the fair objection to `--board-width` — that it restates,
- * far from where any of them is set, the tile count, the gap count, the column
- * gap, the board's padding and its border. It does, and it is a derived value
- * that can go stale. What these show is that it cannot go stale *quietly*:
- * change one term and leave the `calc` alone, and [U3-94] reports it, because a
- * board seated at a width it cannot use is exactly what the sweep looks for.
+ * The rem breakpoint is worth its row on its own. It is the mutation a reader
+ * reaches for on being told a root font-size defeats a media query — and it
+ * fails [U3-89], because a rem in a media query resolves against the initial
+ * font-size and not against a declaration. Recorded so nobody has to rediscover
+ * that the hard way.
+ *
+ * The last three are about `--board-width`, which restates what the two columns
+ * are made of. Two of them stay green, and both greens are the point.
+ *
+ * `--panel-pad` is *used* by `--board-width` rather than copied into it, so
+ * moving it moves both together and there is no drift to catch — that class of
+ * staleness was removed by composing the value instead of summing it, and the
+ * green says so. What is still genuinely written twice is the tile and gap
+ * counts of each column, and those are caught **in one direction only**: a
+ * stylesheet that under-measures seats a board at a width it cannot use and
+ * [U3-94] reports it, while one that over-measures merely stacks the boards
+ * sooner than it needed to, which costs [U3-60] — a SHOULD, exempt from
+ * traceability, and so watched by nothing. The asymmetry is benign and is
+ * stated here rather than left to be discovered.
  *
  * The last row was recorded as failing *nothing*, on the reasoning that a px
  * floor beside a rem size diverges only at a root font-size the lane never
@@ -369,8 +384,19 @@ describe('a board that holds still', () => {
    * before. Nothing a media query can see has changed, and the arrangement
    * changes anyway. 1280 × 800 is side by side at 16px and stacked at 36px;
    * the numbers are an instance, and any pair that straddles the boundary
-   * does — the two columns need `12 × --tile + 10 × --tile-gap + 0.75rem`, so
-   * the boundary moves with them.
+   * does — the two columns need `--lines-width + --play-gap + --wall-width`,
+   * so the boundary moves with them.
+   *
+   * A rem-denominated breakpoint does not defeat this, and the reason is not
+   * obvious enough to leave unwritten. Media Queries Level 4 §1.3: relative
+   * units in a media query resolve against the **initial** font-size — the UA
+   * default or the user's preference — and never against a declaration, so
+   * that "units are never based on results of declarations". Setting
+   * `documentElement.style.fontSize` is a declaration, so
+   * `@media (max-width: 56.25rem)` sits exactly where it sat and answers the
+   * same at both roots. Verified in this browser: `matchMedia` on that query
+   * returns false at a 16px root and false at a 36px one. Do not "simplify"
+   * this test back to something a breakpoint can pass.
    *
    * This replaces an earlier witness: the arrangement used to go side by side,
    * stacked, side by side as the viewport narrowed, which a media query also
@@ -388,6 +414,16 @@ describe('a board that holds still', () => {
       [atRoot('16px'), atRoot('36px')],
       'one viewport, two root font-sizes, and the arrangement did not change',
     ).toEqual([true, false]);
+
+    // The rule half of [U3-89], asserted here rather than borrowed: where the
+    // two columns do not fit, they wrap *rather than overflow*. The 36px root
+    // above is a width they do not fit, so this is the case to check it in —
+    // it was standing on the `scrollWidth` check inside [U3-94]'s sweep, which
+    // is filed under another requirement's identifier.
+    doc.documentElement.style.fontSize = '36px';
+    expect(sideBySide(board(doc, 'Player 1')), 'the columns did not wrap').toBe(false);
+    expect(doc.documentElement.scrollWidth, 'the columns overflowed instead of wrapping')
+      .toBeLessThanOrEqual(doc.documentElement.clientWidth);
   });
 
   /**

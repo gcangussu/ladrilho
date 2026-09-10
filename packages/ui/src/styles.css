@@ -33,18 +33,31 @@
    */
   --tile: max(2.75rem, 44px);
   --tile-gap: 0.2rem;
+  /* The gap between a board's two columns, and a panel's padding and border. */
+  --play-gap: 0.75rem;
+  --panel-pad: 0.75rem;
+  --panel-border: 1px;
+
   /*
-   * What one board needs to hold its play area side by side [U3-94]: the lines
-   * column is seven tiles and six gaps, the wall five and four, plus the gap
-   * between the two columns, the board's own padding and its border.
+   * What one board needs to hold its play area side by side [U3-94]: the two
+   * columns, the gap between them, and the board's own padding and border.
    *
-   * Derived rather than measured, so it follows `--tile` and `--tile-gap`
-   * instead of going stale beside them. `.boards` uses it as the width below
-   * which it stops seating two boards on a row — a board squeezed under this
-   * is a board whose lines and wall come apart, and two boards are worth less
-   * than that.
+   * Composed from the parts rather than restated as one sum, so the gap, the
+   * padding and the border are *used* here and set in one place each — they
+   * cannot drift from this. What is genuinely written twice is the tile and
+   * gap counts of each column, which the components lay out and this measures;
+   * those the [U3-94] sweep catches, in the direction that matters.
+   *
+   * `.boards` uses `--board-width` as the width below which it stops seating
+   * two boards on a row: a board squeezed under it is a board whose lines and
+   * wall come apart, and two boards are worth less than that.
    */
-  --board-width: calc(12 * var(--tile) + 10 * var(--tile-gap) + 0.75rem + 1.5rem + 2px);
+  --lines-width: calc(7 * var(--tile) + 6 * var(--tile-gap));
+  --wall-width: calc(5 * var(--tile) + 4 * var(--tile-gap));
+  --board-width: calc(
+    var(--lines-width) + var(--play-gap) + var(--wall-width) + 2 * var(--panel-pad) +
+      2 * var(--panel-border)
+  );
   color-scheme: dark;
 }
 
@@ -93,9 +106,9 @@ h2 {
 .game-over,
 .scoring {
   background: var(--panel);
-  border: 1px solid var(--line);
+  border: var(--panel-border) solid var(--line);
   border-radius: 0.5rem;
-  padding: 0.75rem;
+  padding: var(--panel-pad);
 }
 
 .status p,
@@ -194,7 +207,7 @@ h2 {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
-  gap: 0.6rem 0.75rem;
+  gap: 0.6rem var(--play-gap);
   margin: 0.5rem 0;
 }
 
