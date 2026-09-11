@@ -1,0 +1,22 @@
+{
+  "name": "ai-bot",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The expert: a port of a published AlphaZero-style Azul player (spec 0008).",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "engine": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
+  }
+}

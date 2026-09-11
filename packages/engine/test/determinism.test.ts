@@ -149,6 +149,39 @@ describe('the shuffle seam [E1-61]', () => {
     expect(toCanonical(a)).toEqual(toCanonical(b));
   });
 
+  it('[E1-72] reaches a clone, which recycles once with its own index and spares its source', () => {
+    // The configuration [0008 A8-22] drives on every simulation: a state built
+    // with an injected shuffle, cloned, and the clone applied across a lid
+    // recycle. The seam's other cases all drive states nobody cloned.
+    const calls: { bag: Color[]; index: number }[] = [];
+    const source = newGame(3, (bag, index) => {
+      calls.push({ bag: bag.slice(), index });
+      bag.sort((a, b) => a - b);
+    });
+    // Four refills after the opening deal empty the 80 tiles left in the bag,
+    // so the next refill recycles.
+    while (source.roundIndex < 4) playFloor(source, 1);
+    expect(source.bag.length).toBe(0);
+    calls.length = 0;
+    const before = toCanonical(source);
+
+    const child = clone(source);
+    while (child.roundIndex < 5) playFloor(child, 1);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].index).toBe(before.shufflesUsed);
+    expect(child.shufflesUsed).toBe(before.shufflesUsed + 1);
+    // The bag handed over is the recycled lid: everything the refill then
+    // dealt, plus whatever it left in the bag.
+    const recycled = [0, 0, 0, 0, 0];
+    for (const c of calls[0].bag) recycled[c]++;
+    const afterDeal = [0, 0, 0, 0, 0];
+    for (const c of child.bag) afterDeal[c]++;
+    for (const f of child.factories) for (let c = 0; c < NUM_COLORS; c++) afterDeal[c] += f[c];
+    expect(recycled).toEqual(afterDeal);
+    expect(toCanonical(source)).toEqual(before);
+  });
+
   it('is accepted by fromCanonical too, which does not shuffle on load', () => {
     const v = gameVectors()[0];
     let calls = 0;

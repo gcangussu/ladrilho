@@ -431,6 +431,18 @@ Assertable after every ply, and checked by the property tests in *0002*.
   `newGame` returns a state with `shufflesUsed === 1` (the opening shuffle), and `fromCanonical`
   returns whatever the snapshot carried.
 
+  *(Widened by [0008 A8-22].)* One production caller does not pass a seed: `ai-bot` passes a
+  shuffle derived from bag counts alone, the original's universe draw. It is still a pure function
+  of `(bag, index)`, so sharing it by reference across `clone` is sound.
+- **[E1-72]** The engine suite MUST include a case in which a **clone** of a state built with an
+  injected shuffle recycles the lid during a later `apply`. It MUST assert that the shuffle is
+  called exactly once, with the recycled bag and the clone's `shufflesUsed`, and that the source
+  state is unaffected.
+
+  *Added by [0008 A8-22], under CLAUDE.md's new-caller rule. Until then the seam had been driven
+  only by the conformance harness replaying recorded orders into states it never clones; the
+  expert's search drives it through `clone` on every simulation.*
+
 ## Interfaces
 
 ```ts
