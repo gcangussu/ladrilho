@@ -19,15 +19,33 @@
  * comparison.
  */
 
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { exp, softmaxInPlace, tanh } from '../src/exp.js';
 
-/** The double whose high word is `hi` and low word 0. */
-function fromHighWord(hi: number): number {
+/** The double with these two 32-bit words. */
+function fromWords(hi: number, lo = 0): number {
   const view = new DataView(new ArrayBuffer(8));
   view.setUint32(0, hi);
-  view.setUint32(4, 0);
+  view.setUint32(4, lo);
   return view.getFloat64(0);
+}
+
+const fromHighWord = (hi: number): number => fromWords(hi);
+
+/** `const NAME = <number>;` as written in `src/exp.ts`. */
+function sourceConstants(): Map<string, number> {
+  const source = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'exp.ts'),
+    'utf8',
+  );
+  const found = new Map<string, number>();
+  for (const match of source.matchAll(/^const (\w+) = (-?[\d.e+-]+);$/gm)) {
+    found.set(match[1], Number(match[2]));
+  }
+  return found;
 }
 
 /** Distance in representable doubles, for the 1-ulp claim. */
@@ -100,6 +118,36 @@ describe('exp [A8-49]', () => {
     }
   });
 
+  it('[A8-49] carries every fdlibm constant to the last bit', () => {
+    // `e_exp.c` writes each of these as a hex bit pattern beside its decimal.
+    // A decimal is what TypeScript can hold, so what is checked is that our
+    // decimal *is* that bit pattern — a truncated coefficient is a different
+    // polynomial, and the sweep above cannot see the difference.
+    const EXPECTED: [string, number, number][] = [
+      ['LN2_HI', 0x3fe62e42, 0xfee00000],
+      ['LN2_LO', 0x3dea39ef, 0x35793c76],
+      ['INVLN2', 0x3ff71547, 0x652b82fe],
+      ['P1', 0x3fc55555, 0x5555553e],
+      ['P2', 0xbf66c16c, 0x16bebd93],
+      ['P3', 0x3f11566a, 0xaf25de2c],
+      ['P4', 0xbebbbd41, 0xc5d26bf1],
+      ['P5', 0x3e663769, 0x72bea4d0],
+      ['O_THRESHOLD', 0x40862e42, 0xfefa39ef],
+      ['U_THRESHOLD', 0xc0874910, 0xd52d3051],
+      ['TWOM1000', 0x01700000, 0],
+      ['HUGE_GATE', 0x40862e42, 0],
+      ['HALF_LN2', 0x3fd62e43, 0],
+      ['THREE_HALVES_LN2', 0x3ff0a2b2, 0],
+      ['TINY', 0x3e300000, 0],
+    ];
+    const source = sourceConstants();
+    for (const [name, hi, lo] of EXPECTED) {
+      expect(source.has(name), `src/exp.ts declares no ${name}`).toBe(true);
+      expect(source.get(name), `${name} is not fdlibm's constant`).toBe(fromWords(hi, lo));
+    }
+    expect(source.size).toBeGreaterThanOrEqual(EXPECTED.length);
+  });
+
   it('[A8-49] uses the constants fdlibm names, bit for bit', () => {
     // Each is a high-word comparison in `e_exp.c`, written here as a value.
     expect(709.7822265625).toBe(fromHighWord(0x40862e42)); // |x| >= this: the gate
@@ -130,6 +178,19 @@ describe('tanh and the softmax, built from exp [A8-49], [A8-13]', () => {
     expect([...logits].reduce((a, b) => a + b)).toBeCloseTo(1, 15);
     // Ratios are what a softmax is: unaffected by the shift it subtracts.
     expect(logits[4] / logits[0]).toBeCloseTo(exp(3.25 - 1.5), 12);
+  });
+
+  it('[A8-13] the softmax survives logits that would overflow exp', () => {
+    // The maximum has to come off before `exp`: without it `exp(800)` is
+    // Infinity, the sum is Infinity, and every probability is NaN or 0. The
+    // network's logits are small today, and nothing bounds them in writing.
+    const logits = new Float64Array([800, 799, -1e8, 798.5]);
+    softmaxInPlace(logits);
+    for (const p of logits) expect(Number.isFinite(p)).toBe(true);
+    expect([...logits].reduce((a, b) => a + b)).toBeCloseTo(1, 15);
+    expect(logits[0]).toBeGreaterThan(logits[1]);
+    expect(logits[1] / logits[0]).toBeCloseTo(exp(-1), 12);
+    expect(logits[2]).toBe(0);
   });
 
   it('[A8-13] the softmax is unchanged by adding a constant to every logit', () => {
