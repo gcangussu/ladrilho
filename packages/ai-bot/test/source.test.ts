@@ -16,6 +16,9 @@
  * - anything `stripComments` misreads: it knows strings and comments but not
  *   regular-expression literals, so a `/'/` in src would derail it (there is
  *   none today);
+ * - a property hung on an exported function (`f.cache = new Map()` at column
+ *   0 is not a declaration, and the runtime check below passes any function
+ *   without looking at its own keys);
  * - a rule re-implemented from permitted fields, which is what the fixture
  *   checks against the original are for.
  *
@@ -69,10 +72,27 @@ function stripComments(text: string): string {
   return out;
 }
 
+/**
+ * A long base64 literal: the generated weights ([A8-15]), which are data, not
+ * code.
+ *
+ * Blanked before the clauses run. 600 KB of base64 contains `Date` and `fetch`
+ * and every other short word sooner or later, sometimes with `+` or `/` either
+ * side of it, which is a word boundary — so left in, a clause would eventually
+ * fail on a payload that means nothing, and the fix would be to weaken the
+ * clause. The literal is checked for what it must be instead: base64 and
+ * nothing else.
+ */
+const BASE64_PAYLOAD = /'[A-Za-z0-9+/=]{1000,}'/g;
+
+function scannable(text: string): string {
+  return stripComments(text).replace(BASE64_PAYLOAD, "''");
+}
+
 const FILES = readdirSync(SRC)
   .filter((f) => f.endsWith('.ts'))
   .sort()
-  .map((file) => ({ file, code: stripComments(readFileSync(join(SRC, file), 'utf8')) }));
+  .map((file) => ({ file, code: scannable(readFileSync(join(SRC, file), 'utf8')) }));
 
 /** A clause: what it forbids, why, and a source it exists to reject. */
 interface Clause {
@@ -184,7 +204,25 @@ const CLAUSES: Clause[] = [
 describe('the source check [A8-43]', () => {
   it('[A8-43] reads the sources it is meant to', () => {
     expect(FILES.map((f) => f.file)).toContain('board.ts');
+    expect(FILES.map((f) => f.file)).toContain('weights.ts');
     expect(FILES.length).toBeGreaterThan(3);
+  });
+
+  it('[A8-43] blanks the weights payload, and only the payload', () => {
+    const raw = readFileSync(join(SRC, 'weights.ts'), 'utf8');
+    expect(raw.length).toBeGreaterThan(100_000);
+    const scanned = FILES.find((f) => f.file === 'weights.ts')!.code;
+    // What is left is the table and the exports, all of it still scanned.
+    expect(scanned.length).toBeLessThan(20_000);
+    expect(scanned).toMatch(/export const TENSORS = Object\.freeze\(\[/);
+    expect(scanned).toMatch(/WEIGHTS_BASE64 =\n?\s*''/);
+    // The payload really is base64 and nothing else, which is what lets it be
+    // blanked rather than read.
+    const payload = raw.match(BASE64_PAYLOAD);
+    expect(payload).toHaveLength(1);
+    expect(payload![0].slice(1, -1)).toMatch(/^[A-Za-z0-9+/]+={0,2}$/);
+    // And a clause still catches a violation written outside the payload.
+    expect(scannable("const S = 'AAAA';\nlet x = 1;\n")).toMatch(/^(?:export\s+)?let\s/m);
   });
 
   for (const clause of CLAUSES) {

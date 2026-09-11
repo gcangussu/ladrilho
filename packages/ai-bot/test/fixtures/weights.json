@@ -1,0 +1,584 @@
+{
+ "commit": "5d6d1f129b76659837f6afd6fb082e8da57e5428",
+ "checkpoint": "azul/pretrained.pt",
+ "checkpointSha256": "7d2fbf9203e46837668cd5b8f7bb29b7ea6f9e500f25f148c79e0038a76fe2f9",
+ "omittedSuffix": "num_batches_tracked",
+ "count": 117919,
+ "versions": {
+  "python": "3.12.8",
+  "numpy": "2.2.6",
+  "numba": "0.61.2",
+  "torch": "2.2.2",
+  "onnx": "1.22.0",
+  "onnxruntime": "1.23.2"
+ },
+ "stateDict": [
+  {
+   "name": "lowvalue",
+   "shape": [
+    1
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "first_layer.linear.weight",
+   "shape": [
+    23,
+    23
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "first_layer.norm.weight",
+   "shape": [
+    23
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "first_layer.norm.bias",
+   "shape": [
+    23
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "first_layer.norm.running_mean",
+   "shape": [
+    23
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "first_layer.norm.running_var",
+   "shape": [
+    23
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "first_layer.norm.num_batches_tracked",
+   "shape": [],
+   "dtype": "torch.int64"
+  },
+  {
+   "name": "trunk.0.expand.linear.weight",
+   "shape": [
+    115,
+    23
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "trunk.0.expand.norm.weight",
+   "shape": [
+    115
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "trunk.0.expand.norm.bias",
+   "shape": [
+    115
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "trunk.0.expand.norm.running_mean",
+   "shape": [
+    115
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "trunk.0.expand.norm.running_var",
+   "shape": [
+    115
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "trunk.0.expand.norm.num_batches_tracked",
+   "shape": [],
+   "dtype": "torch.int64"
+  },
+  {
+   "name": "trunk.0.depthwise.linear.weight",
+   "shape": [
+    6,
+    6
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "trunk.0.depthwise.norm.weight",
+   "shape": [
+    115
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "trunk.0.depthwise.norm.bias",
+   "shape": [
+    115
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "trunk.0.depthwise.norm.running_mean",
+   "shape": [
+    115
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "trunk.0.depthwise.norm.running_var",
+   "shape": [
+    115
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "trunk.0.depthwise.norm.num_batches_tracked",
+   "shape": [],
+   "dtype": "torch.int64"
+  },
+  {
+   "name": "trunk.0.se.fc1.weight",
+   "shape": [
+    32,
+    115
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "trunk.0.se.fc1.bias",
+   "shape": [
+    32
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "trunk.0.se.fc2.weight",
+   "shape": [
+    115,
+    32
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "trunk.0.se.fc2.bias",
+   "shape": [
+    115
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "trunk.0.project.linear.weight",
+   "shape": [
+    23,
+    115
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "trunk.0.project.norm.weight",
+   "shape": [
+    23
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "trunk.0.project.norm.bias",
+   "shape": [
+    23
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "trunk.0.project.norm.running_mean",
+   "shape": [
+    23
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "trunk.0.project.norm.running_var",
+   "shape": [
+    23
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "trunk.0.project.norm.num_batches_tracked",
+   "shape": [],
+   "dtype": "torch.int64"
+  },
+  {
+   "name": "output_layers_PI.0.expand.linear.weight",
+   "shape": [
+    115,
+    23
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_PI.0.expand.norm.weight",
+   "shape": [
+    115
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_PI.0.expand.norm.bias",
+   "shape": [
+    115
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_PI.0.expand.norm.running_mean",
+   "shape": [
+    115
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_PI.0.expand.norm.running_var",
+   "shape": [
+    115
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_PI.0.expand.norm.num_batches_tracked",
+   "shape": [],
+   "dtype": "torch.int64"
+  },
+  {
+   "name": "output_layers_PI.0.depthwise.linear.weight",
+   "shape": [
+    6,
+    6
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_PI.0.depthwise.norm.weight",
+   "shape": [
+    115
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_PI.0.depthwise.norm.bias",
+   "shape": [
+    115
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_PI.0.depthwise.norm.running_mean",
+   "shape": [
+    115
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_PI.0.depthwise.norm.running_var",
+   "shape": [
+    115
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_PI.0.depthwise.norm.num_batches_tracked",
+   "shape": [],
+   "dtype": "torch.int64"
+  },
+  {
+   "name": "output_layers_PI.0.se.fc1.weight",
+   "shape": [
+    32,
+    115
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_PI.0.se.fc1.bias",
+   "shape": [
+    32
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_PI.0.se.fc2.weight",
+   "shape": [
+    115,
+    32
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_PI.0.se.fc2.bias",
+   "shape": [
+    115
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_PI.0.project.linear.weight",
+   "shape": [
+    46,
+    115
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_PI.0.project.norm.weight",
+   "shape": [
+    46
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_PI.0.project.norm.bias",
+   "shape": [
+    46
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_PI.0.project.norm.running_mean",
+   "shape": [
+    46
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_PI.0.project.norm.running_var",
+   "shape": [
+    46
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_PI.0.project.norm.num_batches_tracked",
+   "shape": [],
+   "dtype": "torch.int64"
+  },
+  {
+   "name": "output_layers_PI.2.weight",
+   "shape": [
+    180,
+    276
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_PI.2.bias",
+   "shape": [
+    180
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_PI.4.weight",
+   "shape": [
+    180,
+    180
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_PI.4.bias",
+   "shape": [
+    180
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_V.0.expand.linear.weight",
+   "shape": [
+    46,
+    23
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_V.0.expand.norm.weight",
+   "shape": [
+    46
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_V.0.expand.norm.bias",
+   "shape": [
+    46
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_V.0.expand.norm.running_mean",
+   "shape": [
+    46
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_V.0.expand.norm.running_var",
+   "shape": [
+    46
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_V.0.expand.norm.num_batches_tracked",
+   "shape": [],
+   "dtype": "torch.int64"
+  },
+  {
+   "name": "output_layers_V.0.depthwise.linear.weight",
+   "shape": [
+    6,
+    6
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_V.0.depthwise.norm.weight",
+   "shape": [
+    46
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_V.0.depthwise.norm.bias",
+   "shape": [
+    46
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_V.0.depthwise.norm.running_mean",
+   "shape": [
+    46
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_V.0.depthwise.norm.running_var",
+   "shape": [
+    46
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_V.0.depthwise.norm.num_batches_tracked",
+   "shape": [],
+   "dtype": "torch.int64"
+  },
+  {
+   "name": "output_layers_V.0.se.fc1.weight",
+   "shape": [
+    16,
+    46
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_V.0.se.fc1.bias",
+   "shape": [
+    16
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_V.0.se.fc2.weight",
+   "shape": [
+    46,
+    16
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_V.0.se.fc2.bias",
+   "shape": [
+    46
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_V.0.project.linear.weight",
+   "shape": [
+    23,
+    46
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_V.0.project.norm.weight",
+   "shape": [
+    23
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_V.0.project.norm.bias",
+   "shape": [
+    23
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_V.0.project.norm.running_mean",
+   "shape": [
+    23
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_V.0.project.norm.running_var",
+   "shape": [
+    23
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_V.0.project.norm.num_batches_tracked",
+   "shape": [],
+   "dtype": "torch.int64"
+  },
+  {
+   "name": "output_layers_V.2.weight",
+   "shape": [
+    2,
+    138
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_V.2.bias",
+   "shape": [
+    2
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_V.4.weight",
+   "shape": [
+    2,
+    2
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "output_layers_V.4.bias",
+   "shape": [
+    2
+   ],
+   "dtype": "torch.float32"
+  }
+ ]
+}

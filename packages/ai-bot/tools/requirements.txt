@@ -1,0 +1,21 @@
+# The pinned environment for every tool here [A8-34].
+#
+# NumPy MUST be 2.x: [A8-50] reproduces the original's arithmetic under NumPy
+# 2's scalar promotion (NEP 50), which keeps a node's `Qs` in float32. Under
+# NumPy 1.x the same expression promotes to float64 and the original plays
+# differently. `numba` is pinned to a release that supports it.
+#
+# torch stops at 2.2.2 on macOS x86_64, which is the last release with a wheel
+# for it. That build was compiled against NumPy 1, so `tensor.numpy()` raises
+# here; nothing in these tools uses it. Loading the checkpoint, exporting to
+# ONNX and running inference through onnxruntime all work, and inference is
+# what `GenericNNetWrapper` selects and what the original plays through.
+numpy==2.2.6
+numba==0.61.2
+llvmlite==0.44.0
+torch==2.2.2
+torchvision==0.17.2
+onnx==1.22.0
+onnxruntime==1.23.2
+colorama==0.4.6
+tqdm==4.67.1

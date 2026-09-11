@@ -2,3 +2,6 @@ node_modules/
 dist/
 *.tsbuildinfo
 .vitest/
+packages/ai-bot/tools/.venv/
+packages/ai-bot/tools/.upstream/
+packages/ai-bot/tools/.work/

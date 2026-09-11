@@ -9,7 +9,9 @@
   },
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "weights": "bash tools/venv.sh tools/export_weights.py",
+    "fixtures": "node tools/export-positions.mjs && bash tools/venv.sh tools/generate_fixtures.py"
   },
   "dependencies": {
     "engine": "workspace:*"
@@ -17,6 +19,8 @@
   "devDependencies": {
     "@types/node": "^26.4.1",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.0"
+    "vitest": "^5.0.0",
+    "bot": "workspace:*",
+    "esbuild": "^0.28.2"
   }
 }

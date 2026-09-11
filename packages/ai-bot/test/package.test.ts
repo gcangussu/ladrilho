@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { manifest } from './support/fixtures.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -24,9 +25,8 @@ describe('the package [A8-1], [A8-48]', () => {
     expect(existsSync(file)).toBe(true);
     const text = readFileSync(file);
     expect(text.toString('utf8')).toMatch(/^MIT License\n\nCopyright \(c\) 2018 Surag Nair\n/);
-    // The sha256 of upstream's LICENSE at the pinned commit.
-    expect(createHash('sha256').update(text).digest('hex')).toBe(
-      '032f110f14ced6c9199c4f1650baa30be60982d883184c1310c7455493e3e5eb',
-    );
+    // Against the sha256 [A8-34] recorded from the pinned checkout's own
+    // LICENSE, not a constant written down twice.
+    expect(createHash('sha256').update(text).digest('hex')).toBe(manifest().licenseSha256);
   });
 });

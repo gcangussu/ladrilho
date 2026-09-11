@@ -1,0 +1,2413 @@
+{
+ "upstream": {
+  "repository": "https://github.com/cestpasphoto/alpha-zero-general.git",
+  "commit": "5d6d1f129b76659837f6afd6fb082e8da57e5428"
+ },
+ "checkpoint": {
+  "path": "azul/pretrained.pt",
+  "sha256": "7d2fbf9203e46837668cd5b8f7bb29b7ea6f9e500f25f148c79e0038a76fe2f9"
+ },
+ "licenseSha256": "032f110f14ced6c9199c4f1650baa30be60982d883184c1310c7455493e3e5eb",
+ "versions": {
+  "python": "3.12.8",
+  "numpy": "2.2.6",
+  "numba": "0.61.2",
+  "torch": "2.2.2",
+  "onnx": "1.22.0",
+  "onnxruntime": "1.23.2"
+ },
+ "constants": {
+  "numMCTSSims": 100,
+  "cpuct": 0.5,
+  "fpu": 0.05,
+  "forcedPlayouts": true,
+  "universes": 1,
+  "nn_version": 84,
+  "temperature": [
+   1.25,
+   0.8
+  ],
+  "k": 0.5,
+  "EPS": 1e-08,
+  "NAN": -42.0,
+  "universeSeed": 31416,
+  "drawValue": 0.009999999776482582,
+  "drawValueDtype": "float32"
+ },
+ "initialBoard": [
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  16,
+  17,
+  16,
+  16,
+  15,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+  1,
+  1,
+  1,
+  1,
+  0,
+  1,
+  0,
+  1,
+  0,
+  2,
+  0,
+  0,
+  0,
+  1,
+  2,
+  1,
+  0,
+  3,
+  0,
+  0,
+  0,
+  1,
+  0,
+  0,
+  2,
+  1,
+  1,
+  0,
+  0,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  0,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0
+ ],
+ "games": [
+  {
+   "id": "steady-easy",
+   "seed": 20260911,
+   "players": [
+    "steady",
+    "easy"
+   ],
+   "actions": [
+    19,
+    31,
+    86,
+    126,
+    93,
+    158,
+    153,
+    165,
+    174,
+    172,
+    0,
+    43,
+    175,
+    78,
+    105,
+    158,
+    172,
+    131,
+    179,
+    165,
+    155,
+    72,
+    12,
+    43,
+    157,
+    128,
+    178,
+    112,
+    170,
+    153,
+    178,
+    1,
+    48,
+    96,
+    79,
+    166,
+    134,
+    170,
+    177,
+    161,
+    154,
+    25,
+    127,
+    30,
+    84,
+    166,
+    177,
+    113,
+    173,
+    161
+   ],
+   "deals": [
+    {
+     "ply": 9,
+     "bagBefore": 80
+    },
+    {
+     "ply": 20,
+     "bagBefore": 60
+    },
+    {
+     "ply": 30,
+     "bagBefore": 40
+    },
+    {
+     "ply": 40,
+     "bagBefore": 20
+    }
+   ]
+  },
+  {
+   "id": "sharp-steady",
+   "seed": 20260912,
+   "players": [
+    "sharp:20000",
+    "steady"
+   ],
+   "actions": [
+    48,
+    79,
+    2,
+    144,
+    99,
+    159,
+    163,
+    176,
+    173,
+    43,
+    90,
+    18,
+    164,
+    87,
+    154,
+    147,
+    159,
+    155,
+    169,
+    167,
+    4,
+    132,
+    81,
+    105,
+    42,
+    157,
+    169,
+    155,
+    6,
+    97,
+    56,
+    144,
+    151,
+    87,
+    178,
+    166,
+    161,
+    170,
+    0,
+    121,
+    55,
+    66,
+    170,
+    166,
+    118,
+    177,
+    173,
+    155,
+    161
+   ],
+   "deals": [
+    {
+     "ply": 8,
+     "bagBefore": 80
+    },
+    {
+     "ply": 19,
+     "bagBefore": 60
+    },
+    {
+     "ply": 27,
+     "bagBefore": 40
+    },
+    {
+     "ply": 37,
+     "bagBefore": 20
+    }
+   ]
+  },
+  {
+   "id": "easy-random",
+   "seed": 20260913,
+   "players": [
+    "easy",
+    "random:31337"
+   ],
+   "actions": [
+    1,
+    65,
+    96,
+    33,
+    176,
+    172,
+    166,
+    132,
+    161,
+    179,
+    173,
+    7,
+    89,
+    42,
+    152,
+    159,
+    108,
+    166,
+    142,
+    158,
+    173,
+    167,
+    7,
+    133,
+    63,
+    48,
+    156,
+    164,
+    92,
+    164,
+    155,
+    177,
+    98,
+    79,
+    5,
+    54,
+    153,
+    122,
+    179,
+    165,
+    172,
+    160,
+    65,
+    2,
+    124,
+    55,
+    169,
+    90,
+    165,
+    160,
+    174,
+    173
+   ],
+   "deals": [
+    {
+     "ply": 10,
+     "bagBefore": 80
+    },
+    {
+     "ply": 21,
+     "bagBefore": 60
+    },
+    {
+     "ply": 31,
+     "bagBefore": 40
+    },
+    {
+     "ply": 41,
+     "bagBefore": 20
+    }
+   ]
+  },
+  {
+   "id": "random-0",
+   "seed": 19910101,
+   "players": [
+    "random:19910101",
+    "random:19910102"
+   ],
+   "actions": [
+    65,
+    135,
+    38,
+    11,
+    108,
+    176,
+    165,
+    155,
+    169,
+    157,
+    66,
+    13,
+    154,
+    177,
+    95,
+    174,
+    131,
+    160,
+    47,
+    163,
+    173,
+    179,
+    101,
+    10,
+    150,
+    131,
+    67,
+    35,
+    161,
+    151,
+    167,
+    173,
+    59,
+    173,
+    144,
+    95,
+    17,
+    65,
+    164,
+    173,
+    151,
+    179,
+    161,
+    68,
+    17,
+    117,
+    143,
+    30,
+    155,
+    173,
+    167,
+    179,
+    161,
+    79,
+    50,
+    154,
+    160,
+    167,
+    102,
+    17,
+    147,
+    162,
+    177,
+    161,
+    170,
+    5,
+    113,
+    125,
+    152,
+    178,
+    167,
+    48,
+    81,
+    173,
+    160,
+    164,
+    155
+   ],
+   "deals": [
+    {
+     "ply": 9,
+     "bagBefore": 80
+    },
+    {
+     "ply": 21,
+     "bagBefore": 60
+    },
+    {
+     "ply": 31,
+     "bagBefore": 40
+    },
+    {
+     "ply": 42,
+     "bagBefore": 20
+    },
+    {
+     "ply": 52,
+     "bagBefore": 0
+    },
+    {
+     "ply": 64,
+     "bagBefore": 57
+    }
+   ]
+  },
+  {
+   "id": "random-1",
+   "seed": 20014830,
+   "players": [
+    "random:20014830",
+    "random:20014831"
+   ],
+   "actions": [
+    93,
+    88,
+    161,
+    24,
+    157,
+    55,
+    172,
+    129,
+    167,
+    155,
+    174,
+    41,
+    11,
+    62,
+    102,
+    142,
+    159,
+    162,
+    152,
+    172,
+    179,
+    17,
+    46,
+    145,
+    93,
+    71,
+    179,
+    150,
+    173,
+    159,
+    167,
+    37,
+    149,
+    95,
+    167,
+    87,
+    28,
+    179,
+    173,
+    167,
+    161,
+    155,
+    131,
+    107,
+    89,
+    53,
+    153,
+    168,
+    156,
+    19,
+    153,
+    179,
+    157,
+    167,
+    108,
+    23,
+    137,
+    76,
+    173,
+    156,
+    37,
+    166,
+    153,
+    179
+   ],
+   "deals": [
+    {
+     "ply": 10,
+     "bagBefore": 80
+    },
+    {
+     "ply": 20,
+     "bagBefore": 60
+    },
+    {
+     "ply": 30,
+     "bagBefore": 40
+    },
+    {
+     "ply": 41,
+     "bagBefore": 20
+    },
+    {
+     "ply": 53,
+     "bagBefore": 0
+    }
+   ]
+  },
+  {
+   "id": "random-41",
+   "seed": 24203990,
+   "players": [
+    "random:24203990",
+    "random:24203991"
+   ],
+   "actions": [
+    2,
+    137,
+    114,
+    153,
+    76,
+    164,
+    157,
+    34,
+    179,
+    168,
+    123,
+    72,
+    7,
+    163,
+    119,
+    33,
+    173,
+    167,
+    156,
+    179,
+    95,
+    87,
+    155,
+    24,
+    173,
+    53,
+    150,
+    177,
+    139,
+    157,
+    179,
+    164,
+    137,
+    27,
+    96,
+    71,
+    49,
+    163,
+    173,
+    150,
+    179,
+    161,
+    53,
+    155,
+    80,
+    145,
+    94,
+    167,
+    154,
+    17,
+    171,
+    179,
+    161,
+    5,
+    40,
+    167,
+    173,
+    152,
+    149,
+    161,
+    89,
+    91,
+    163,
+    173,
+    160,
+    29,
+    59,
+    63,
+    113,
+    173,
+    179,
+    131,
+    175,
+    167,
+    171,
+    155,
+    161,
+    106,
+    85,
+    152,
+    161,
+    123,
+    53,
+    161,
+    171,
+    179,
+    29,
+    166,
+    22,
+    159,
+    95,
+    35,
+    134,
+    161,
+    89,
+    151,
+    179,
+    170,
+    164,
+    160,
+    12,
+    48,
+    89,
+    135,
+    170,
+    165,
+    101,
+    161,
+    155,
+    170
+   ],
+   "deals": [
+    {
+     "ply": 9,
+     "bagBefore": 80
+    },
+    {
+     "ply": 19,
+     "bagBefore": 60
+    },
+    {
+     "ply": 31,
+     "bagBefore": 40
+    },
+    {
+     "ply": 41,
+     "bagBefore": 20
+    },
+    {
+     "ply": 52,
+     "bagBefore": 0
+    },
+    {
+     "ply": 64,
+     "bagBefore": 55
+    },
+    {
+     "ply": 76,
+     "bagBefore": 35
+    },
+    {
+     "ply": 87,
+     "bagBefore": 15
+    },
+    {
+     "ply": 99,
+     "bagBefore": 52
+    }
+   ]
+  }
+ ],
+ "records": [
+  {
+   "game": "steady-easy",
+   "ply": 0
+  },
+  {
+   "game": "steady-easy",
+   "ply": 1
+  },
+  {
+   "game": "steady-easy",
+   "ply": 2
+  },
+  {
+   "game": "steady-easy",
+   "ply": 3
+  },
+  {
+   "game": "steady-easy",
+   "ply": 4
+  },
+  {
+   "game": "steady-easy",
+   "ply": 5
+  },
+  {
+   "game": "steady-easy",
+   "ply": 6
+  },
+  {
+   "game": "steady-easy",
+   "ply": 7
+  },
+  {
+   "game": "steady-easy",
+   "ply": 8
+  },
+  {
+   "game": "steady-easy",
+   "ply": 9
+  },
+  {
+   "game": "steady-easy",
+   "ply": 10
+  },
+  {
+   "game": "steady-easy",
+   "ply": 11
+  },
+  {
+   "game": "steady-easy",
+   "ply": 12
+  },
+  {
+   "game": "steady-easy",
+   "ply": 13
+  },
+  {
+   "game": "steady-easy",
+   "ply": 14
+  },
+  {
+   "game": "steady-easy",
+   "ply": 15
+  },
+  {
+   "game": "steady-easy",
+   "ply": 16
+  },
+  {
+   "game": "steady-easy",
+   "ply": 17
+  },
+  {
+   "game": "steady-easy",
+   "ply": 18
+  },
+  {
+   "game": "steady-easy",
+   "ply": 19
+  },
+  {
+   "game": "steady-easy",
+   "ply": 20
+  },
+  {
+   "game": "steady-easy",
+   "ply": 21
+  },
+  {
+   "game": "steady-easy",
+   "ply": 22
+  },
+  {
+   "game": "steady-easy",
+   "ply": 23
+  },
+  {
+   "game": "steady-easy",
+   "ply": 24
+  },
+  {
+   "game": "steady-easy",
+   "ply": 25
+  },
+  {
+   "game": "steady-easy",
+   "ply": 26
+  },
+  {
+   "game": "steady-easy",
+   "ply": 27
+  },
+  {
+   "game": "steady-easy",
+   "ply": 28
+  },
+  {
+   "game": "steady-easy",
+   "ply": 29
+  },
+  {
+   "game": "steady-easy",
+   "ply": 30
+  },
+  {
+   "game": "steady-easy",
+   "ply": 31
+  },
+  {
+   "game": "steady-easy",
+   "ply": 32
+  },
+  {
+   "game": "steady-easy",
+   "ply": 33
+  },
+  {
+   "game": "steady-easy",
+   "ply": 34
+  },
+  {
+   "game": "steady-easy",
+   "ply": 35
+  },
+  {
+   "game": "steady-easy",
+   "ply": 36
+  },
+  {
+   "game": "steady-easy",
+   "ply": 37
+  },
+  {
+   "game": "steady-easy",
+   "ply": 38
+  },
+  {
+   "game": "steady-easy",
+   "ply": 39
+  },
+  {
+   "game": "steady-easy",
+   "ply": 40
+  },
+  {
+   "game": "steady-easy",
+   "ply": 41
+  },
+  {
+   "game": "steady-easy",
+   "ply": 42
+  },
+  {
+   "game": "steady-easy",
+   "ply": 43
+  },
+  {
+   "game": "steady-easy",
+   "ply": 44
+  },
+  {
+   "game": "steady-easy",
+   "ply": 45
+  },
+  {
+   "game": "steady-easy",
+   "ply": 46
+  },
+  {
+   "game": "steady-easy",
+   "ply": 47
+  },
+  {
+   "game": "steady-easy",
+   "ply": 48
+  },
+  {
+   "game": "steady-easy",
+   "ply": 49
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 0
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 1
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 2
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 3
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 4
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 5
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 6
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 7
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 8
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 9
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 10
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 11
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 12
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 13
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 14
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 15
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 16
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 17
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 18
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 19
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 20
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 21
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 22
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 23
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 24
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 25
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 26
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 27
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 28
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 29
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 30
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 31
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 32
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 33
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 34
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 35
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 36
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 37
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 38
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 39
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 40
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 41
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 42
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 43
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 44
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 45
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 46
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 47
+  },
+  {
+   "game": "sharp-steady",
+   "ply": 48
+  },
+  {
+   "game": "easy-random",
+   "ply": 0
+  },
+  {
+   "game": "easy-random",
+   "ply": 1
+  },
+  {
+   "game": "easy-random",
+   "ply": 2
+  },
+  {
+   "game": "easy-random",
+   "ply": 3
+  },
+  {
+   "game": "easy-random",
+   "ply": 4
+  },
+  {
+   "game": "easy-random",
+   "ply": 5
+  },
+  {
+   "game": "easy-random",
+   "ply": 6
+  },
+  {
+   "game": "easy-random",
+   "ply": 7
+  },
+  {
+   "game": "easy-random",
+   "ply": 8
+  },
+  {
+   "game": "easy-random",
+   "ply": 9
+  },
+  {
+   "game": "easy-random",
+   "ply": 10
+  },
+  {
+   "game": "easy-random",
+   "ply": 11
+  },
+  {
+   "game": "easy-random",
+   "ply": 12
+  },
+  {
+   "game": "easy-random",
+   "ply": 13
+  },
+  {
+   "game": "easy-random",
+   "ply": 14
+  },
+  {
+   "game": "easy-random",
+   "ply": 15
+  },
+  {
+   "game": "easy-random",
+   "ply": 16
+  },
+  {
+   "game": "easy-random",
+   "ply": 17
+  },
+  {
+   "game": "easy-random",
+   "ply": 18
+  },
+  {
+   "game": "easy-random",
+   "ply": 19
+  },
+  {
+   "game": "easy-random",
+   "ply": 20
+  },
+  {
+   "game": "easy-random",
+   "ply": 21
+  },
+  {
+   "game": "easy-random",
+   "ply": 22
+  },
+  {
+   "game": "easy-random",
+   "ply": 23
+  },
+  {
+   "game": "easy-random",
+   "ply": 24
+  },
+  {
+   "game": "easy-random",
+   "ply": 25
+  },
+  {
+   "game": "easy-random",
+   "ply": 26
+  },
+  {
+   "game": "easy-random",
+   "ply": 27
+  },
+  {
+   "game": "easy-random",
+   "ply": 28
+  },
+  {
+   "game": "easy-random",
+   "ply": 29
+  },
+  {
+   "game": "easy-random",
+   "ply": 30
+  },
+  {
+   "game": "easy-random",
+   "ply": 31
+  },
+  {
+   "game": "easy-random",
+   "ply": 32
+  },
+  {
+   "game": "easy-random",
+   "ply": 33
+  },
+  {
+   "game": "easy-random",
+   "ply": 34
+  },
+  {
+   "game": "easy-random",
+   "ply": 35
+  },
+  {
+   "game": "easy-random",
+   "ply": 36
+  },
+  {
+   "game": "easy-random",
+   "ply": 37
+  },
+  {
+   "game": "easy-random",
+   "ply": 38
+  },
+  {
+   "game": "easy-random",
+   "ply": 39
+  },
+  {
+   "game": "easy-random",
+   "ply": 40
+  },
+  {
+   "game": "easy-random",
+   "ply": 41
+  },
+  {
+   "game": "easy-random",
+   "ply": 42
+  },
+  {
+   "game": "easy-random",
+   "ply": 43
+  },
+  {
+   "game": "easy-random",
+   "ply": 44
+  },
+  {
+   "game": "easy-random",
+   "ply": 45
+  },
+  {
+   "game": "easy-random",
+   "ply": 46
+  },
+  {
+   "game": "easy-random",
+   "ply": 47
+  },
+  {
+   "game": "easy-random",
+   "ply": 48
+  },
+  {
+   "game": "easy-random",
+   "ply": 49
+  },
+  {
+   "game": "easy-random",
+   "ply": 50
+  },
+  {
+   "game": "easy-random",
+   "ply": 51
+  },
+  {
+   "game": "random-0",
+   "ply": 0
+  },
+  {
+   "game": "random-0",
+   "ply": 1
+  },
+  {
+   "game": "random-0",
+   "ply": 2
+  },
+  {
+   "game": "random-0",
+   "ply": 3
+  },
+  {
+   "game": "random-0",
+   "ply": 4
+  },
+  {
+   "game": "random-0",
+   "ply": 5
+  },
+  {
+   "game": "random-0",
+   "ply": 6
+  },
+  {
+   "game": "random-0",
+   "ply": 7
+  },
+  {
+   "game": "random-0",
+   "ply": 8
+  },
+  {
+   "game": "random-0",
+   "ply": 9
+  },
+  {
+   "game": "random-0",
+   "ply": 10
+  },
+  {
+   "game": "random-0",
+   "ply": 11
+  },
+  {
+   "game": "random-0",
+   "ply": 12
+  },
+  {
+   "game": "random-0",
+   "ply": 13
+  },
+  {
+   "game": "random-0",
+   "ply": 14
+  },
+  {
+   "game": "random-0",
+   "ply": 15
+  },
+  {
+   "game": "random-0",
+   "ply": 16
+  },
+  {
+   "game": "random-0",
+   "ply": 17
+  },
+  {
+   "game": "random-0",
+   "ply": 18
+  },
+  {
+   "game": "random-0",
+   "ply": 19
+  },
+  {
+   "game": "random-0",
+   "ply": 20
+  },
+  {
+   "game": "random-0",
+   "ply": 21
+  },
+  {
+   "game": "random-0",
+   "ply": 22
+  },
+  {
+   "game": "random-0",
+   "ply": 23
+  },
+  {
+   "game": "random-0",
+   "ply": 24
+  },
+  {
+   "game": "random-0",
+   "ply": 25
+  },
+  {
+   "game": "random-0",
+   "ply": 26
+  },
+  {
+   "game": "random-0",
+   "ply": 27
+  },
+  {
+   "game": "random-0",
+   "ply": 28
+  },
+  {
+   "game": "random-0",
+   "ply": 29
+  },
+  {
+   "game": "random-0",
+   "ply": 30
+  },
+  {
+   "game": "random-0",
+   "ply": 31
+  },
+  {
+   "game": "random-0",
+   "ply": 32
+  },
+  {
+   "game": "random-0",
+   "ply": 33
+  },
+  {
+   "game": "random-0",
+   "ply": 34
+  },
+  {
+   "game": "random-0",
+   "ply": 35
+  },
+  {
+   "game": "random-0",
+   "ply": 36
+  },
+  {
+   "game": "random-0",
+   "ply": 37
+  },
+  {
+   "game": "random-0",
+   "ply": 38
+  },
+  {
+   "game": "random-0",
+   "ply": 39
+  },
+  {
+   "game": "random-0",
+   "ply": 40
+  },
+  {
+   "game": "random-0",
+   "ply": 41
+  },
+  {
+   "game": "random-0",
+   "ply": 42
+  },
+  {
+   "game": "random-0",
+   "ply": 43
+  },
+  {
+   "game": "random-0",
+   "ply": 44
+  },
+  {
+   "game": "random-0",
+   "ply": 45
+  },
+  {
+   "game": "random-0",
+   "ply": 46
+  },
+  {
+   "game": "random-0",
+   "ply": 47
+  },
+  {
+   "game": "random-0",
+   "ply": 48
+  },
+  {
+   "game": "random-0",
+   "ply": 49
+  },
+  {
+   "game": "random-0",
+   "ply": 50
+  },
+  {
+   "game": "random-0",
+   "ply": 51
+  },
+  {
+   "game": "random-0",
+   "ply": 52
+  },
+  {
+   "game": "random-0",
+   "ply": 53
+  },
+  {
+   "game": "random-0",
+   "ply": 54
+  },
+  {
+   "game": "random-0",
+   "ply": 55
+  },
+  {
+   "game": "random-0",
+   "ply": 56
+  },
+  {
+   "game": "random-0",
+   "ply": 57
+  },
+  {
+   "game": "random-0",
+   "ply": 58
+  },
+  {
+   "game": "random-0",
+   "ply": 59
+  },
+  {
+   "game": "random-0",
+   "ply": 60
+  },
+  {
+   "game": "random-0",
+   "ply": 61
+  },
+  {
+   "game": "random-0",
+   "ply": 62
+  },
+  {
+   "game": "random-0",
+   "ply": 63
+  },
+  {
+   "game": "random-0",
+   "ply": 64
+  },
+  {
+   "game": "random-0",
+   "ply": 65
+  },
+  {
+   "game": "random-0",
+   "ply": 66
+  },
+  {
+   "game": "random-0",
+   "ply": 67
+  },
+  {
+   "game": "random-0",
+   "ply": 68
+  },
+  {
+   "game": "random-0",
+   "ply": 69
+  },
+  {
+   "game": "random-0",
+   "ply": 70
+  },
+  {
+   "game": "random-0",
+   "ply": 71
+  },
+  {
+   "game": "random-0",
+   "ply": 72
+  },
+  {
+   "game": "random-0",
+   "ply": 73
+  },
+  {
+   "game": "random-0",
+   "ply": 74
+  },
+  {
+   "game": "random-0",
+   "ply": 75
+  },
+  {
+   "game": "random-0",
+   "ply": 76
+  },
+  {
+   "game": "random-1",
+   "ply": 0
+  },
+  {
+   "game": "random-1",
+   "ply": 1
+  },
+  {
+   "game": "random-1",
+   "ply": 2
+  },
+  {
+   "game": "random-1",
+   "ply": 3
+  },
+  {
+   "game": "random-1",
+   "ply": 4
+  },
+  {
+   "game": "random-1",
+   "ply": 5
+  },
+  {
+   "game": "random-1",
+   "ply": 6
+  },
+  {
+   "game": "random-1",
+   "ply": 7
+  },
+  {
+   "game": "random-1",
+   "ply": 8
+  },
+  {
+   "game": "random-1",
+   "ply": 9
+  },
+  {
+   "game": "random-1",
+   "ply": 10
+  },
+  {
+   "game": "random-1",
+   "ply": 11
+  },
+  {
+   "game": "random-1",
+   "ply": 12
+  },
+  {
+   "game": "random-1",
+   "ply": 13
+  },
+  {
+   "game": "random-1",
+   "ply": 14
+  },
+  {
+   "game": "random-1",
+   "ply": 15
+  },
+  {
+   "game": "random-1",
+   "ply": 16
+  },
+  {
+   "game": "random-1",
+   "ply": 17
+  },
+  {
+   "game": "random-1",
+   "ply": 18
+  },
+  {
+   "game": "random-1",
+   "ply": 19
+  },
+  {
+   "game": "random-1",
+   "ply": 20
+  },
+  {
+   "game": "random-1",
+   "ply": 21
+  },
+  {
+   "game": "random-1",
+   "ply": 22
+  },
+  {
+   "game": "random-1",
+   "ply": 23
+  },
+  {
+   "game": "random-1",
+   "ply": 24
+  },
+  {
+   "game": "random-1",
+   "ply": 25
+  },
+  {
+   "game": "random-1",
+   "ply": 26
+  },
+  {
+   "game": "random-1",
+   "ply": 27
+  },
+  {
+   "game": "random-1",
+   "ply": 28
+  },
+  {
+   "game": "random-1",
+   "ply": 29
+  },
+  {
+   "game": "random-1",
+   "ply": 30
+  },
+  {
+   "game": "random-1",
+   "ply": 31
+  },
+  {
+   "game": "random-1",
+   "ply": 32
+  },
+  {
+   "game": "random-1",
+   "ply": 33
+  },
+  {
+   "game": "random-1",
+   "ply": 34
+  },
+  {
+   "game": "random-1",
+   "ply": 35
+  },
+  {
+   "game": "random-1",
+   "ply": 36
+  },
+  {
+   "game": "random-1",
+   "ply": 37
+  },
+  {
+   "game": "random-1",
+   "ply": 38
+  },
+  {
+   "game": "random-1",
+   "ply": 39
+  },
+  {
+   "game": "random-1",
+   "ply": 40
+  },
+  {
+   "game": "random-1",
+   "ply": 41
+  },
+  {
+   "game": "random-1",
+   "ply": 42
+  },
+  {
+   "game": "random-1",
+   "ply": 43
+  },
+  {
+   "game": "random-1",
+   "ply": 44
+  },
+  {
+   "game": "random-1",
+   "ply": 45
+  },
+  {
+   "game": "random-1",
+   "ply": 46
+  },
+  {
+   "game": "random-1",
+   "ply": 47
+  },
+  {
+   "game": "random-1",
+   "ply": 48
+  },
+  {
+   "game": "random-1",
+   "ply": 49
+  },
+  {
+   "game": "random-1",
+   "ply": 50
+  },
+  {
+   "game": "random-1",
+   "ply": 51
+  },
+  {
+   "game": "random-1",
+   "ply": 52
+  },
+  {
+   "game": "random-1",
+   "ply": 53
+  },
+  {
+   "game": "random-1",
+   "ply": 54
+  },
+  {
+   "game": "random-1",
+   "ply": 55
+  },
+  {
+   "game": "random-1",
+   "ply": 56
+  },
+  {
+   "game": "random-1",
+   "ply": 57
+  },
+  {
+   "game": "random-1",
+   "ply": 58
+  },
+  {
+   "game": "random-1",
+   "ply": 59
+  },
+  {
+   "game": "random-1",
+   "ply": 60
+  },
+  {
+   "game": "random-1",
+   "ply": 61
+  },
+  {
+   "game": "random-1",
+   "ply": 62
+  },
+  {
+   "game": "random-1",
+   "ply": 63
+  },
+  {
+   "game": "random-41",
+   "ply": 0
+  },
+  {
+   "game": "random-41",
+   "ply": 1
+  },
+  {
+   "game": "random-41",
+   "ply": 2
+  },
+  {
+   "game": "random-41",
+   "ply": 3
+  },
+  {
+   "game": "random-41",
+   "ply": 4
+  },
+  {
+   "game": "random-41",
+   "ply": 5
+  },
+  {
+   "game": "random-41",
+   "ply": 6
+  },
+  {
+   "game": "random-41",
+   "ply": 7
+  },
+  {
+   "game": "random-41",
+   "ply": 8
+  },
+  {
+   "game": "random-41",
+   "ply": 9
+  },
+  {
+   "game": "random-41",
+   "ply": 10
+  },
+  {
+   "game": "random-41",
+   "ply": 11
+  },
+  {
+   "game": "random-41",
+   "ply": 12
+  },
+  {
+   "game": "random-41",
+   "ply": 13
+  },
+  {
+   "game": "random-41",
+   "ply": 14
+  },
+  {
+   "game": "random-41",
+   "ply": 15
+  },
+  {
+   "game": "random-41",
+   "ply": 16
+  },
+  {
+   "game": "random-41",
+   "ply": 17
+  },
+  {
+   "game": "random-41",
+   "ply": 18
+  },
+  {
+   "game": "random-41",
+   "ply": 19
+  },
+  {
+   "game": "random-41",
+   "ply": 20
+  },
+  {
+   "game": "random-41",
+   "ply": 21
+  },
+  {
+   "game": "random-41",
+   "ply": 22
+  },
+  {
+   "game": "random-41",
+   "ply": 23
+  },
+  {
+   "game": "random-41",
+   "ply": 24
+  },
+  {
+   "game": "random-41",
+   "ply": 25
+  },
+  {
+   "game": "random-41",
+   "ply": 26
+  },
+  {
+   "game": "random-41",
+   "ply": 27
+  },
+  {
+   "game": "random-41",
+   "ply": 28
+  },
+  {
+   "game": "random-41",
+   "ply": 29
+  },
+  {
+   "game": "random-41",
+   "ply": 30
+  },
+  {
+   "game": "random-41",
+   "ply": 31
+  },
+  {
+   "game": "random-41",
+   "ply": 32
+  },
+  {
+   "game": "random-41",
+   "ply": 33
+  },
+  {
+   "game": "random-41",
+   "ply": 34
+  },
+  {
+   "game": "random-41",
+   "ply": 35
+  },
+  {
+   "game": "random-41",
+   "ply": 36
+  },
+  {
+   "game": "random-41",
+   "ply": 37
+  },
+  {
+   "game": "random-41",
+   "ply": 38
+  },
+  {
+   "game": "random-41",
+   "ply": 39
+  },
+  {
+   "game": "random-41",
+   "ply": 40
+  },
+  {
+   "game": "random-41",
+   "ply": 41
+  },
+  {
+   "game": "random-41",
+   "ply": 42
+  },
+  {
+   "game": "random-41",
+   "ply": 43
+  },
+  {
+   "game": "random-41",
+   "ply": 44
+  },
+  {
+   "game": "random-41",
+   "ply": 45
+  },
+  {
+   "game": "random-41",
+   "ply": 46
+  },
+  {
+   "game": "random-41",
+   "ply": 47
+  },
+  {
+   "game": "random-41",
+   "ply": 48
+  },
+  {
+   "game": "random-41",
+   "ply": 49
+  },
+  {
+   "game": "random-41",
+   "ply": 50
+  },
+  {
+   "game": "random-41",
+   "ply": 51
+  },
+  {
+   "game": "random-41",
+   "ply": 52
+  },
+  {
+   "game": "random-41",
+   "ply": 53
+  },
+  {
+   "game": "random-41",
+   "ply": 54
+  },
+  {
+   "game": "random-41",
+   "ply": 55
+  },
+  {
+   "game": "random-41",
+   "ply": 56
+  },
+  {
+   "game": "random-41",
+   "ply": 57
+  },
+  {
+   "game": "random-41",
+   "ply": 58
+  },
+  {
+   "game": "random-41",
+   "ply": 59
+  },
+  {
+   "game": "random-41",
+   "ply": 60
+  },
+  {
+   "game": "random-41",
+   "ply": 61
+  },
+  {
+   "game": "random-41",
+   "ply": 62
+  },
+  {
+   "game": "random-41",
+   "ply": 63
+  },
+  {
+   "game": "random-41",
+   "ply": 64
+  },
+  {
+   "game": "random-41",
+   "ply": 65
+  },
+  {
+   "game": "random-41",
+   "ply": 66
+  },
+  {
+   "game": "random-41",
+   "ply": 67
+  },
+  {
+   "game": "random-41",
+   "ply": 68
+  },
+  {
+   "game": "random-41",
+   "ply": 69
+  },
+  {
+   "game": "random-41",
+   "ply": 70
+  },
+  {
+   "game": "random-41",
+   "ply": 71
+  },
+  {
+   "game": "random-41",
+   "ply": 72
+  },
+  {
+   "game": "random-41",
+   "ply": 73
+  },
+  {
+   "game": "random-41",
+   "ply": 74
+  },
+  {
+   "game": "random-41",
+   "ply": 75
+  },
+  {
+   "game": "random-41",
+   "ply": 76
+  },
+  {
+   "game": "random-41",
+   "ply": 77
+  },
+  {
+   "game": "random-41",
+   "ply": 78
+  },
+  {
+   "game": "random-41",
+   "ply": 79
+  },
+  {
+   "game": "random-41",
+   "ply": 80
+  },
+  {
+   "game": "random-41",
+   "ply": 81
+  },
+  {
+   "game": "random-41",
+   "ply": 82
+  },
+  {
+   "game": "random-41",
+   "ply": 83
+  },
+  {
+   "game": "random-41",
+   "ply": 84
+  },
+  {
+   "game": "random-41",
+   "ply": 85
+  },
+  {
+   "game": "random-41",
+   "ply": 86
+  },
+  {
+   "game": "random-41",
+   "ply": 87
+  },
+  {
+   "game": "random-41",
+   "ply": 88
+  },
+  {
+   "game": "random-41",
+   "ply": 89
+  },
+  {
+   "game": "random-41",
+   "ply": 90
+  },
+  {
+   "game": "random-41",
+   "ply": 91
+  },
+  {
+   "game": "random-41",
+   "ply": 92
+  },
+  {
+   "game": "random-41",
+   "ply": 93
+  },
+  {
+   "game": "random-41",
+   "ply": 94
+  },
+  {
+   "game": "random-41",
+   "ply": 95
+  },
+  {
+   "game": "random-41",
+   "ply": 96
+  },
+  {
+   "game": "random-41",
+   "ply": 97
+  },
+  {
+   "game": "random-41",
+   "ply": 98
+  },
+  {
+   "game": "random-41",
+   "ply": 99
+  },
+  {
+   "game": "random-41",
+   "ply": 100
+  },
+  {
+   "game": "random-41",
+   "ply": 101
+  },
+  {
+   "game": "random-41",
+   "ply": 102
+  },
+  {
+   "game": "random-41",
+   "ply": 103
+  },
+  {
+   "game": "random-41",
+   "ply": 104
+  },
+  {
+   "game": "random-41",
+   "ply": 105
+  },
+  {
+   "game": "random-41",
+   "ply": 106
+  },
+  {
+   "game": "random-41",
+   "ply": 107
+  },
+  {
+   "game": "random-41",
+   "ply": 108
+  },
+  {
+   "game": "random-41",
+   "ply": 109
+  }
+ ],
+ "files": {
+  "boards": {
+   "name": "boards.i8",
+   "stride": 138,
+   "type": "int8"
+  },
+  "masks": {
+   "name": "masks.u8",
+   "stride": 180,
+   "type": "uint8"
+  },
+  "policy": {
+   "name": "policy.f32",
+   "stride": 180,
+   "type": "float32"
+  },
+  "value": {
+   "name": "value.f32",
+   "stride": 2,
+   "type": "float32"
+  }
+ }
+}
