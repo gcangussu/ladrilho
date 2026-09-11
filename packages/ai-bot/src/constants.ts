@@ -3,8 +3,8 @@
  *
  * Read from the checkpoint's stored arguments and from `pit.py`, not chosen:
  * this package plays the way the original plays, and these are what that
- * means. [A8-34] records the same values from the original itself, and the
- * suite holds this table to that record.
+ * means. The fixture generator of [A8-34] records the same values from the
+ * original itself.
  */
 
 /** The settings `pit.py` plays the checkpoint with. */

@@ -23,10 +23,6 @@
   "include": [
     "src",
     "test",
-    "arena",
-    "bench",
-    "ladder",
-    "vitest.bench.config.ts",
-    "vitest.ladder.config.ts"
+    "vitest.config.ts"
   ]
 }

@@ -41,19 +41,41 @@ describe('the board [A8-8]', () => {
     for (const r of [11, 12, 13, 17, 18, 22]) expect(row(board, r)).toEqual([0, 0, 0, 0, 0, 0]);
   });
 
-  it('[A8-8] is from the perspective of the seat to move', () => {
+  it('[A8-8] is from the perspective of the seat to move, in every seat-owned row', () => {
     const s = newGame(7);
     // Seat 0 takes a display's first colour into its bottom pattern line.
     const take = legalActions(s).find((a) => a >= encodeAction(0, 0, 4) && a % 6 === 4)!;
     apply(s, take);
-    const position = toJSON(s);
-    expect(position.currentPlayer).toBe(1);
-    const board = encodeBoard(position);
-    const seat0 = position.players[0].patternLines;
-    // Seat 1 is "me" now, so seat 0's line lands in the "them" rows.
-    expect(row(board, 9)).toEqual([-1, -1, -1, -1, -1, 0]);
-    expect(row(board, 10)).toEqual([...seat0.map((l) => l.color), 0]);
-    expect(row(board, 12).slice(0, 5)).toEqual(seat0.map((l) => l.count));
+    expect(s.currentPlayer).toBe(1);
+    // Then make the two seats differ in everything a seat owns, so a row read
+    // from the wrong seat cannot come out right by coincidence.
+    const posed: AzulJSON = structuredClone(toJSON(s));
+    posed.players[0].score = 41;
+    posed.players[1].score = 9;
+    posed.players[0].wall[1][3] = 1;
+    posed.players[1].wall[3][0] = 1;
+    posed.players[1].patternLines[1] = { capacity: 2, color: 3, count: 1 };
+    posed.players[0].floor = [0, 2, 0, 0, 0];
+    posed.players[1].floor = [1, 0, 0, 0, 0];
+    posed.players[0].floorMarker = true;
+    posed.markerInCenter = false;
+
+    const board = encodeBoard(posed);
+    const [seat0, seat1] = posed.players;
+    const lines = (p: typeof seat0, colours: boolean): number[] =>
+      p.patternLines.map((l) => (colours ? l.color : l.count));
+    // Seat 1 is "me"; seat 0 is "them".
+    expect(row(board, 0)).toEqual([9, 41, 1, 0, 0, 0]);
+    expect(row(board, 9)).toEqual([...lines(seat1, true), 0]);
+    expect(row(board, 10)).toEqual([...lines(seat0, true), 1]);
+    expect(row(board, 11)).toEqual([...lines(seat1, false), 1]);
+    expect(row(board, 12)).toEqual([...lines(seat0, false), 3]);
+    for (let r = 0; r < 5; r++) {
+      expect(row(board, 13 + r), `my wall row ${r}`).toEqual([...seat1.wall[r], 0]);
+      expect(row(board, 18 + r), `their wall row ${r}`).toEqual([...seat0.wall[r], 0]);
+    }
+    expect(row(board, 16)).toEqual([1, 0, 0, 0, 0, 0]);
+    expect(row(board, 19)).toEqual([0, 0, 0, 1, 0, 0]);
     expect(row(board, 12)[4]).toBeGreaterThan(0);
   });
 

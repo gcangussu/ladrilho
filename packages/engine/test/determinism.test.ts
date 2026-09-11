@@ -171,10 +171,19 @@ describe('the shuffle seam [E1-61]', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].index).toBe(before.shufflesUsed);
     expect(child.shufflesUsed).toBe(before.shufflesUsed + 1);
-    // The bag handed over is the recycled lid: everything the refill then
-    // dealt, plus whatever it left in the bag.
+    // The bag handed over is the recycled lid. Floor-only play from the
+    // opening leaves every pattern line empty, so the lid at the recycle is
+    // exactly the lid before plus every tile on the table and the floors: the
+    // round's whole table went to the floors, and the floors to the lid.
     const recycled = [0, 0, 0, 0, 0];
     for (const c of calls[0].bag) recycled[c]++;
+    const lid = before.lid.slice();
+    for (let c = 0; c < NUM_COLORS; c++) {
+      lid[c] += before.center[c] + before.floor[0][c] + before.floor[1][c];
+      for (const f of before.factories) lid[c] += f[c];
+    }
+    expect(recycled).toEqual(lid);
+    // And it is the bag the refill then dealt from.
     const afterDeal = [0, 0, 0, 0, 0];
     for (const c of child.bag) afterDeal[c]++;
     for (const f of child.factories) for (let c = 0; c < NUM_COLORS; c++) afterDeal[c] += f[c];
