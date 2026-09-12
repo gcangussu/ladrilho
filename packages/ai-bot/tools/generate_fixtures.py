@@ -178,10 +178,12 @@ def record_sequences(mcts_module, game, net, work, settings, encode) -> list:
     # Whether the two builds of `pick_highest_UCB` ever choose differently,
     # over the recorded nodes. Evidence for the identical count files.
     nodes = [node for sequence in sequences for call in sequence["reference"] for node in call["nodes"]]
-    restore = install_reference(mcts_module, reference_functions)
-    reference_pick = mcts_module.pick_highest_UCB
-    restore()
-    agreement = pick_agreement(mcts_module.pick_highest_UCB, reference_pick, nodes[:400])
+    # Both dispatchers are in hand: installing the reference set here only to
+    # read one back would rebuild `get_next_best_action_and_canonical_state`
+    # over a jitclass, which is minutes of compilation for nothing.
+    agreement = pick_agreement(
+        mcts_module.pick_highest_UCB, reference_functions["pick_highest_UCB"], nodes[:400]
+    )
     return sequences, agreement
 
 

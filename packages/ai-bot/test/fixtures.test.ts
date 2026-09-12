@@ -88,7 +88,10 @@ describe('the opening board, against the original [A8-52]', () => {
     }
     expect(ours[3 * 6 + 5], 'the marker starts in the centre').toBe(theirs[3 * 6 + 5]);
     // And the rows a deal touches really do differ, so the exclusion above is
-    // not quietly excluding everything.
+    // not quietly excluding everything. They also churn in the manifest on
+    // every regeneration — `getInitBoard` deals from the original's own
+    // generator — which is noise in a diff, not the encoder moving: the rows
+    // compared above are byte-identical across regenerations.
     expect([...ours.slice(6, 9 * 6)]).not.toEqual(theirs.slice(6, 9 * 6));
   });
 });

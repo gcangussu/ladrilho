@@ -41,8 +41,10 @@ def build_reference(mcts_module):
     on-disk cache was warm. `verify=True` in {@link run_sequence} is what
     caught it and is the reason it exists; do not remove either.
 
-    Returns the dispatchers, already compiled on representative arguments so
-    nothing is left to compile later.
+    Returns the three dispatchers `MCTS.search` reaches directly, already
+    compiled on representative arguments. The fourth patched function,
+    `get_next_best_action_and_canonical_state`, is **not** covered — see
+    {@link install_reference} for why it cannot be.
     """
     reference = {
         name: njit(cache=False, fastmath=False, nogil=True)(getattr(mcts_module, name).py_func)
@@ -78,6 +80,14 @@ def install_reference(mcts_module, reference):
     `get_next_best_action_and_canonical_state` is rebuilt here rather than in
     {@link build_reference} because numba binds globals at compile time, and
     the global it needs is the reference `pick_highest_UCB` installed below.
+
+    So it is the one patched function outside that ordering guarantee: it
+    compiles after the as-shipped run has compiled its fastmath twin, and it is
+    the only one that calls `pick_highest_UCB` during a search. What stands in
+    for the guarantee there is measurement rather than ordering — the manifest
+    records that the two builds of `pick_highest_UCB` choose alike over the
+    recorded nodes ({@link pick_agreement}), and a cold-cache regeneration
+    reproduced every recorded byte.
     """
     shipped = {name: getattr(mcts_module, name) for name in PATCHED}
     for name, function in reference.items():
