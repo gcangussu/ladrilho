@@ -18,7 +18,7 @@ import { describe, expect, it } from 'vitest';
 import { createNetwork } from '../src/network.js';
 import { encodeBoard } from '../src/board.js';
 import { normalise, simulate, visitCounts, type Evaluator } from '../src/search.js';
-import { createSession } from '../src/session.js';
+import { createSession, networkEvaluator } from '../src/session.js';
 import { toTheirAction } from '../src/actions.js';
 import { universeRoot } from '../src/universe.js';
 import { apply, fromJSON, legalActions, newGame, outcome, toJSON, type AzulJSON } from 'engine';
@@ -53,9 +53,6 @@ function rootCounts(session: ReturnType<typeof createSession>, position: Paramet
 }
 
 describe('the search, against the reference search [A8-38]', () => {
-  let comparedCalls = 0;
-  let recordedCalls = 0;
-
   for (const sequence of SEQUENCES) {
     const label = `${sequence.game} seat ${sequence.seat} (${sequence.kind})`;
 
@@ -92,8 +89,6 @@ describe('the search, against the reference search [A8-38]', () => {
         // [A8-50]'s update has to land in the same place.
         expect(choice.value, `${label} call ${i} root Qs`).toBe(Math.fround(call.qs));
       }
-      comparedCalls += sequence.compared;
-      recordedCalls += sequence.calls.length;
     });
   }
 
@@ -102,11 +97,18 @@ describe('the search, against the reference search [A8-38]', () => {
     // because it is the answer to the spec's open question about the prefix
     // rule, and because a fraction that quietly fell would otherwise look the
     // same as a suite that passed.
+    //
+    // Counted from the fixtures here rather than accumulated by the tests
+    // above: a per-sequence failure would otherwise suppress its own
+    // contribution and drag this red as collateral, reporting one fault twice.
+    const comparedCalls = SEQUENCES.reduce((total, s) => total + s.compared, 0);
+    const recordedCalls = SEQUENCES.reduce((total, s) => total + s.calls.length, 0);
     const fraction = comparedCalls / recordedCalls;
     process.stdout.write(
       `[A8-38] compared ${comparedCalls} of ${recordedCalls} recorded calls (${(100 * fraction).toFixed(1)}%)\n`,
     );
-    expect(fraction).toBeGreaterThan(0.5);
+    // [A8-38] fails "if it is below one half", so exactly one half passes.
+    expect(fraction).toBeGreaterThanOrEqual(0.5);
   });
 
   it('[A8-38] cuts each sequence at the first deviation the tree carries', () => {
@@ -183,8 +185,15 @@ describe('one simulation, step by step [A8-18], [A8-20], [A8-10]', () => {
     // expands the root, and the forced-playout bound is still zero at i = 1.
     //
     // Mutation record [A8-44]: `>` replaced by `>=` in `select`
-    // (`src/search.ts`) — red here. The uniform-prior sequence of [A8-38] does
-    // not catch it, which is why this test exists.
+    // (`src/search.ts`) — red here, and red on [A8-38]'s uniform-prior
+    // sequence too, which is what the spec's table claims. An earlier record
+    // here said the uniform sequence missed it; that record was false. The
+    // mutation had been run with a `-t` filter naming a test whose title
+    // contains parentheses, vitest matched nothing, every test was skipped,
+    // and the run exited 0 — which reads exactly like a survivor. Nothing had
+    // been broken. This test is kept because it localises the failure to two
+    // simulations from a fresh root, where the comparison is the only thing
+    // deciding, rather than to a whole replayed game.
     const session = createSession(constant(0, 0), { simulations: 2 });
     const start = PLIES.changes;
     session.choose(start);
@@ -281,10 +290,17 @@ describe('the search with the real network [A8-39]', () => {
         total++;
         if (ours === call.shippedChosen) agreed++;
         else {
+          // Both sides' root visit counts, as [A8-39] requires — the counts
+          // themselves, over the actions either side visited, not a summary of
+          // them.
+          const mine = rootCounts(session, call.position);
+          const theirs = call.shipped;
+          const interesting = [...theirs.keys()].filter((a) => mine[a] > 0 || theirs[a] > 0);
           disagreements.push(
             `${sequence.game} seat ${sequence.seat} call ${i} (ply ${call.ply}): ` +
-              `ours ${ours} visits ${[...rootCounts(session, call.position)].filter((n) => n > 0).length} nonzero, ` +
-              `theirs ${call.shippedChosen}`,
+              `ours ${ours}, theirs ${call.shippedChosen}\n` +
+              `    ours   ${interesting.map((a) => `${a}:${mine[a]}`).join(' ')}\n` +
+              `    theirs ${interesting.map((a) => `${a}:${theirs[a]}`).join(' ')}`,
           );
         }
         if (call.chosen !== call.shippedChosen) referenceDisagreements++;
@@ -301,6 +317,41 @@ describe('the search with the real network [A8-39]', () => {
     // here that costs seconds rather than milliseconds, and the reason
     // [A8-46]'s budget is a `SHOULD`.
   }, 30_000);
+});
+
+describe('the network is wired to be normalised [A8-50], [A8-53]', () => {
+  it('[A8-50] the search normalises what the network returns, and that wire is declared', () => {
+    // `normalised: false` is the whole of the wiring. Declared `true`, the
+    // port would play unnormalised priors and every replay check above would
+    // still pass, because [A8-38] supplies priors already normalised and says
+    // so itself. So the flag is asserted directly...
+    expect(networkEvaluator(createNetwork()).normalised).toBe(false);
+
+    // ...and its meaning is asserted behaviourally: a policy scaled by three
+    // is the same distribution, and only if the search normalises does it play
+    // the same game as the pre-normalised one.
+    const scaled = (factor: number, normalised: boolean): Evaluator => ({
+      normalised,
+      evaluate(_board, legal) {
+        const policy = new Float32Array(180);
+        let count = 0;
+        for (const bit of legal) count += bit;
+        for (let a = 0; a < 180; a++) policy[a] = legal[a] === 1 ? factor / count : 0;
+        return { policy, value: new Float32Array([0.25, -0.25]) };
+      },
+    });
+    const start = SEQUENCES[0].calls[0].position;
+    const counts = (evaluator: Evaluator): number[] => {
+      const session = createSession(evaluator, { simulations: 40 });
+      session.choose(start);
+      return [...rootCounts(session, start)];
+    };
+    // Normalised by the search, against the same distribution handed over
+    // ready-made: the same search.
+    expect(counts(scaled(3, false))).toEqual(counts(scaled(1, true)));
+    // And handing it the unnormalised one while claiming otherwise is not.
+    expect(counts(scaled(3, true))).not.toEqual(counts(scaled(1, true)));
+  });
 });
 
 describe('normalisation [A8-53], and the number types [A8-50]', () => {
@@ -332,13 +383,29 @@ describe('normalisation [A8-53], and the number types [A8-50]', () => {
 
   it('[A8-50] records that a float64 Qs changed no visit count anywhere', () => {
     // [A8-44]'s row for "Qs kept in float64" is struck on exactly this
-    // evidence: the generator reran every sequence with a float64 `Qs` and
-    // found no call whose counts moved, so there is no witness to mutate
-    // against. The statement is the record.
-    const witnesses = manifest().sequences.map((s) => s.witness);
-    expect(witnesses.every((w) => w === null)).toBe(true);
+    // evidence: the generator reran every recorded sequence — the
+    // uniform-prior one included — with a float64 `Qs` and found no call whose
+    // counts moved, so there is no witness to mutate against. The statement is
+    // the record, and it is a measurement, not an argument.
+    const sequences = manifest().sequences;
+    expect(sequences.length).toBe(5);
+    expect(sequences.map((s) => s.witness).every((w) => w === null)).toBe(true);
     process.stdout.write(
-      `[A8-50] no float32 witness in ${witnesses.length} sequences: the float64-Qs mutation row is struck\n`,
+      `[A8-50] no float32 witness in ${sequences.length} sequences: the float64-Qs mutation row is struck\n`,
+    );
+  });
+
+  it('[A8-50] records that fastmath cannot reach selection over these nodes', () => {
+    // Why `seq-counts-reference.u16` and `seq-counts-shipped.u16` are
+    // byte-identical: the two builds of `pick_highest_UCB` choose the same
+    // action everywhere the generator could contrive to ask. Recorded so that
+    // the identical files are evidence rather than a coincidence — the
+    // generator's own `verify` covers normalisation only.
+    const agreement = manifest().pickAgreement;
+    expect(agreement.cases).toBeGreaterThan(1000);
+    expect(agreement.agreed).toBe(agreement.cases);
+    process.stdout.write(
+      `[A8-50] fastmath and non-fastmath selection agree on ${agreement.agreed}/${agreement.cases} cases\n`,
     );
   });
 });

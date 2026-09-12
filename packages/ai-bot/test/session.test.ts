@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { chooseMove } from 'bot';
+import { chooseMove, type Tier } from 'bot';
 import {
   apply,
   fromJSON,
@@ -159,14 +159,17 @@ describe('what a session refuses [A8-25], [A8-26], [A8-28], [A8-42]', () => {
   it('[A8-28] throws a TypeError on a simulations override that is not a positive integer', () => {
     for (const bad of [0, -1, 1.5, NaN, Infinity]) {
       expect(() => createSession(STUB, { simulations: bad }), `${bad}`).toThrow(TypeError);
+      // The spec names `createExpert`, which delegates; assert the name it
+      // names, not only the function underneath it.
+      expect(() => createExpert({ simulations: bad }), `createExpert ${bad}`).toThrow(TypeError);
     }
     expect(() => createSession(STUB, { simulations: 1 })).not.toThrow();
   });
 });
 
 describe('whole games [A8-27], [A8-40], [A8-41]', () => {
-  /** Plays a game out, `expert` on `seat`, `bot`'s easy tier opposite. */
-  function playGame(seed: number, seat: number, simulations: number): number[] {
+  /** Plays a game out, `expert` on `seat`, one of `bot`'s tiers opposite. */
+  function playGame(seed: number, seat: number, simulations: number, tier: Tier): number[] {
     const s: AzulState = newGame(seed);
     const expert = createExpert({ simulations });
     const actions: number[] = [];
@@ -176,7 +179,7 @@ describe('whole games [A8-27], [A8-40], [A8-41]', () => {
       const action =
         view.currentPlayer === seat
           ? expert.choose(view).action
-          : chooseMove(view, { tier: 'easy' }).action;
+          : chooseMove(view, tier === 'sharp' ? { tier, nodes: 2_000 } : { tier }).action;
       expect(view.legalActions).toContain(action);
       apply(s, action);
       actions.push(action);
@@ -187,11 +190,60 @@ describe('whole games [A8-27], [A8-40], [A8-41]', () => {
   }
 
   it('[A8-40] plays whole games against bot’s tiers, and they end', () => {
-    for (const [seed, seat] of [[101, 0], [202, 1]] as const) {
-      const actions = playGame(seed, seat, 4);
-      expect(actions.length).toBeGreaterThan(20);
+    // Each tier, not one of them: they choose differently, so they walk the
+    // expert through different positions.
+    for (const [seed, seat, tier] of [
+      [101, 0, 'easy'],
+      [202, 1, 'steady'],
+      [303, 0, 'sharp'],
+    ] as const) {
+      const actions = playGame(seed, seat, 4, tier);
+      expect(actions.length, `${tier} on seed ${seed}`).toBeGreaterThan(20);
     }
-  });
+  }, 60_000);
+
+  it('[A8-3] two sessions in one process, interleaved, do not influence each other', () => {
+    // Two sessions live at once whenever both seats are the computer, and
+    // nothing in this package held state between requests until this chunk.
+    // So: two games, each with a session on seat 0 and a fixed filler
+    // opposite, played first one after the other and then a ply at a time in
+    // lockstep. A table shared between sessions, or one carrying a node from
+    // the other's game, changes what the second game plays.
+    const seeds = [505, 606] as const;
+
+    /** One game, `simulations` per move, the expert on seat 0. */
+    function* game(seed: number): Generator<number, void, unknown> {
+      const s = newGame(seed);
+      const session = createExpert({ simulations: 4 });
+      let plies = 0;
+      while (!s.isTerminal && plies < 40) {
+        const view = toJSON(s);
+        if (view.currentPlayer === 0) {
+          const choice = session.choose(view);
+          yield choice.action;
+          apply(s, choice.action);
+        } else {
+          apply(s, legalActions(s)[0]);
+        }
+        plies++;
+      }
+    }
+
+    const alone = seeds.map((seed) => [...game(seed)]);
+    expect(alone[0].length).toBeGreaterThan(5);
+    expect(alone[0]).not.toEqual(alone[1]); // two different games, really
+
+    const running = seeds.map((seed) => game(seed));
+    const together: number[][] = [[], []];
+    for (let step = 0; step < alone[0].length + alone[1].length; step++) {
+      for (const [index, generator] of running.entries()) {
+        const next = generator.next();
+        if (!next.done) together[index].push(next.value);
+      }
+    }
+    expect(together[0]).toEqual(alone[0]);
+    expect(together[1]).toEqual(alone[1]);
+  }, 60_000);
 
   it('[A8-40] plays whole games against itself, one session per seat', () => {
     const s = newGame(303);
@@ -203,7 +255,7 @@ describe('whole games [A8-27], [A8-40], [A8-41]', () => {
       plies++;
     }
     expect(s.isTerminal).toBe(true);
-  });
+  }, 60_000);
 
   it('[A8-27] two fresh sessions given the same positions choose the same moves', () => {
     const replay = (): { action: number; value: number; rootVisits: number }[] => {

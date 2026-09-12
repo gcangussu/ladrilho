@@ -90,8 +90,10 @@ export function boardKey(board: Int8Array): string {
 export function normalise(policy: Float32Array): Float32Array {
   let total = 0;
   for (let a = 0; a < ACTIONS; a++) total = Math.fround(total + policy[a]);
+  // Storing into a Float32Array is itself the rounding to float32; the
+  // division is written plainly so it is clear where the one rounding is.
   const out = new Float32Array(ACTIONS);
-  for (let a = 0; a < ACTIONS; a++) out[a] = Math.fround(policy[a] / total);
+  for (let a = 0; a < ACTIONS; a++) out[a] = policy[a] / total;
   return out;
 }
 
@@ -217,10 +219,15 @@ export function simulate(
   return v;
 }
 
-/** A node's visit counts by their action, or `null` if it was never expanded. */
+/**
+ * A copy of a node's visit counts by their action, or `null` if it was never
+ * expanded. A copy because the table is the session's own bookkeeping: handing
+ * out the live array would make "it only grows, and only during `choose`"
+ * unenforceable.
+ */
 export function visitCounts(table: NodeTable, board: Int8Array): Int32Array | null {
   const node = table.get(boardKey(board));
-  return node === undefined ? null : node.Nsa;
+  return node === undefined ? null : Int32Array.from(node.Nsa);
 }
 
 /** What `choose` reads back from the root once the simulations are done. */

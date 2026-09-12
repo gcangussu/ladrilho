@@ -16,7 +16,7 @@
 import { toJSON, type AzulJSON } from 'engine';
 import { encodeBoard } from './board.js';
 import { EXPERT } from './constants.js';
-import { createNetwork } from './network.js';
+import { createNetwork, type Network } from './network.js';
 import { rootChoice, simulate, type Evaluator, type NodeTable } from './search.js';
 import { universeRoot } from './universe.js';
 
@@ -96,8 +96,20 @@ export function createSession(evaluator: Evaluator, options?: ExpertOptions): Se
   };
 }
 
+/**
+ * The checkpoint's network as an evaluator.
+ *
+ * `normalised: false` is the whole of the wiring that makes the search
+ * normalise what the network returns ([A8-50]), so it is named here rather
+ * than written inline: declared `true`, the port would play unnormalised
+ * priors and every replay check would still pass, because [A8-38] supplies its
+ * own already-normalised priors.
+ */
+export function networkEvaluator(network: Network): Evaluator {
+  return { evaluate: (board, legal) => network.evaluate(board, legal), normalised: false };
+}
+
 /** A session playing the checkpoint's network [A8-26]. */
 export function createExpert(options?: ExpertOptions): Expert {
-  const network = createNetwork();
-  return createSession({ evaluate: (board, legal) => network.evaluate(board, legal), normalised: false }, options);
+  return createSession(networkEvaluator(createNetwork()), options);
 }

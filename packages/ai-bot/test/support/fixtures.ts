@@ -34,6 +34,8 @@ export interface Manifest {
   games: FixtureGame[];
   /** Which of [A8-51]'s deals the corpus turned out to hold. */
   coverage: Record<string, boolean>;
+  /** Whether fastmath changes which action `pick_highest_UCB` returns. */
+  pickAgreement: { cases: number; agreed: number };
   sequences: {
     game: string;
     seat: number;

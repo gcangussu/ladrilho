@@ -81,7 +81,18 @@ def record_sequences(mcts_module, game, net, work, settings, encode) -> list:
     """
     from utils import dotdict
 
-    from sequences import UniformPrior, hook_predict, make_float64_qs, make_reference, run_sequence
+    from sequences import (
+        UniformPrior,
+        build_reference,
+        hook_predict,
+        install_reference,
+        make_float64_qs,
+        pick_agreement,
+        run_sequence,
+    )
+
+    # Before any fastmath code compiles in this process: see build_reference.
+    reference_functions = build_reference(mcts_module)
 
     args = dotdict(
         {
@@ -108,7 +119,7 @@ def record_sequences(mcts_module, game, net, work, settings, encode) -> list:
 
             shipped = run_sequence(game, mcts_module.MCTS(game, net, args), encode, positions, evaluated, False)
 
-            restore = make_reference(mcts_module)
+            restore = install_reference(mcts_module, reference_functions)
             reference = run_sequence(
                 game, mcts_module.MCTS(game, net, args), encode, positions, evaluated, verify=True
             )
@@ -132,19 +143,46 @@ def record_sequences(mcts_module, game, net, work, settings, encode) -> list:
             )
 
     # One sequence over the uniform-prior stub, which makes exact ties in `u`
-    # [A8-44]. Its priors are a rule, not a recording, so its nodes are not
-    # stored.
+    # [A8-44]. Recorded the same way as the others — verified, and rerun with a
+    # float64 `Qs` — rather than assumed: its priors are a rule, but its nodes
+    # and counts are a recording like any other.
     stub = UniformPrior()
     evaluated = hook_predict(stub)
-    restore = make_reference(mcts_module)
+    restore = install_reference(mcts_module, reference_functions)
     positions = positions_of[(SEQUENCE_GAMES[0], 0)]
-    uniform = run_sequence(game, mcts_module.MCTS(game, stub, args), encode, positions, evaluated)
+    uniform = run_sequence(
+        game, mcts_module.MCTS(game, stub, args), encode, positions, evaluated, verify=True
+    )
+    uniform64 = run_sequence(
+        game, make_float64_qs(mcts_module)(game, stub, args), encode, positions, evaluated, False
+    )
     restore()
     sequences.append(
-        {"game": SEQUENCE_GAMES[0], "seat": 0, "kind": "uniform", "shipped": uniform,
-         "reference": uniform, "witness": None}
+        {
+            "game": SEQUENCE_GAMES[0],
+            "seat": 0,
+            "kind": "uniform",
+            "shipped": uniform,
+            "reference": uniform,
+            "witness": next(
+                (
+                    i
+                    for i, (a, b) in enumerate(zip(uniform, uniform64))
+                    if not np.array_equal(a["counts"], b["counts"])
+                ),
+                None,
+            ),
+        }
     )
-    return sequences
+
+    # Whether the two builds of `pick_highest_UCB` ever choose differently,
+    # over the recorded nodes. Evidence for the identical count files.
+    nodes = [node for sequence in sequences for call in sequence["reference"] for node in call["nodes"]]
+    restore = install_reference(mcts_module, reference_functions)
+    reference_pick = mcts_module.pick_highest_UCB
+    restore()
+    agreement = pick_agreement(mcts_module.pick_highest_UCB, reference_pick, nodes[:400])
+    return sequences, agreement
 
 
 def main() -> None:
@@ -214,7 +252,7 @@ def main() -> None:
             }
         )
 
-    sequences = record_sequences(MCTS, game, net, work, settings, encode)
+    sequences, pick = record_sequences(MCTS, game, net, work, settings, encode)
 
     # The sequence files. Nodes are concatenated across every sequence that
     # records them, and a sequence names the range it owns; the variable-length
@@ -294,6 +332,7 @@ def main() -> None:
             for g in work["games"]
         ],
         "coverage": work["coverage"],
+        "pickAgreement": pick,
         "sequences": sequence_manifest,
         "records": index,
         "files": {

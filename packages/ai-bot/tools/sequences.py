@@ -26,24 +26,62 @@ import numpy as np
 from numba import njit
 
 
-def make_reference(mcts_module):
-    """The original's search with its numba functions rebuilt without fastmath.
+PATCHED = ("normalise", "np_roll", "pick_highest_UCB", "get_next_best_action_and_canonical_state")
 
-    Returns a callable restoring the as-shipped ones. Nothing else changes:
-    each function is recompiled from its own `py_func`, and
-    `get_next_best_action_and_canonical_state` is rebuilt after its global
-    `pick_highest_UCB` is replaced, because numba binds globals at compile
-    time.
+
+def build_reference(mcts_module):
+    """The original's numba functions rebuilt with `fastmath=False`.
+
+    Compiled **here, before anything fastmath has compiled in this process**,
+    and that ordering is load-bearing. On a cold numba cache, building a
+    fastmath=False dispatcher from a `py_func` whose fastmath=True twin has
+    already compiled in the same process can yield fastmath code anyway: the
+    generator once recorded, and labelled as the reference search's, priors
+    that were the as-shipped search's, and it stopped happening the moment the
+    on-disk cache was warm. `verify=True` in {@link run_sequence} is what
+    caught it and is the reason it exists; do not remove either.
+
+    Returns the dispatchers, already compiled on representative arguments so
+    nothing is left to compile later.
     """
-    shipped = {
-        name: getattr(mcts_module, name)
-        for name in ("normalise", "np_roll", "pick_highest_UCB", "get_next_best_action_and_canonical_state")
+    reference = {
+        name: njit(cache=False, fastmath=False, nogil=True)(getattr(mcts_module, name).py_func)
+        for name in ("normalise", "np_roll", "pick_highest_UCB")
     }
-    mcts_module.normalise = njit(cache=False, fastmath=False, nogil=True)(shipped["normalise"].py_func)
-    mcts_module.np_roll = njit(cache=False, fastmath=False, nogil=True)(shipped["np_roll"].py_func)
-    mcts_module.pick_highest_UCB = njit(cache=False, fastmath=False, nogil=True)(
-        shipped["pick_highest_UCB"].py_func
+    reference["normalise"](np.ones(180, dtype=np.float32))
+    reference["np_roll"](np.zeros(2, dtype=np.float32), 1)
+    reference["pick_highest_UCB"](*sample_ucb_arguments())
+    return reference
+
+
+def sample_ucb_arguments(valid=None, priors=None, visits=0, counts=None, qsa=None, qs=0.0, n_iter=1):
+    """Arguments `pick_highest_UCB` accepts, for compiling and for comparing."""
+    Vs = np.zeros(180, dtype=np.bool_) if valid is None else valid
+    if valid is None:
+        Vs[:8] = True
+    Ps = (np.ones(180, dtype=np.float32) / 180) if priors is None else priors
+    Nsa = np.zeros(180, dtype=np.int64) if counts is None else counts
+    Qsa = np.full(180, -42.0, dtype=np.float64) if qsa is None else qsa
+    return (
+        np.zeros(2, dtype=np.float32),  # Es
+        Vs, Ps, visits, Qsa, Nsa, np.float32(qs),
+        0.5,       # cpuct
+        True,      # forced_playouts
+        n_iter,
+        0.05,      # fpu
     )
+
+
+def install_reference(mcts_module, reference):
+    """Swap the reference dispatchers in; returns a callable putting them back.
+
+    `get_next_best_action_and_canonical_state` is rebuilt here rather than in
+    {@link build_reference} because numba binds globals at compile time, and
+    the global it needs is the reference `pick_highest_UCB` installed below.
+    """
+    shipped = {name: getattr(mcts_module, name) for name in PATCHED}
+    for name, function in reference.items():
+        setattr(mcts_module, name, function)
     mcts_module.get_next_best_action_and_canonical_state = njit(fastmath=False, nogil=True)(
         shipped["get_next_best_action_and_canonical_state"].py_func
     )
@@ -53,6 +91,36 @@ def make_reference(mcts_module):
             setattr(mcts_module, name, function)
 
     return restore
+
+
+def pick_agreement(shipped_pick, reference_pick, nodes, patterns=6):
+    """Do the two builds of `pick_highest_UCB` choose the same action?
+
+    Recorded in the manifest so that `seq-counts-reference.u16` and
+    `seq-counts-shipped.u16` being byte-identical is evidence rather than a
+    coincidence nobody checked: `verify` covers `normalise` only, and the same
+    fastmath leak could in principle reach selection.
+    """
+    agreed = total = 0
+    for index, node in enumerate(nodes):
+        valid = np.zeros(180, dtype=np.bool_)
+        valid[node["legal"]] = True
+        priors = np.asarray(node["normalised"], dtype=np.float32)
+        for pattern in range(patterns):
+            counts = np.zeros(180, dtype=np.int64)
+            qsa = np.full(180, -42.0, dtype=np.float64)
+            visits = pattern * 7
+            for position, action in enumerate(node["legal"]):
+                if (position + index) % (pattern + 2) == 0:
+                    counts[action] = 1 + (position % 3)
+                    qsa[action] = ((position + pattern) % 11) / 10.0 - 0.5
+            arguments = sample_ucb_arguments(
+                valid=valid, priors=priors, visits=visits, counts=counts, qsa=qsa,
+                qs=((index + pattern) % 7) / 10.0 - 0.3, n_iter=pattern * 13,
+            )
+            total += 1
+            agreed += int(shipped_pick(*arguments) == reference_pick(*arguments))
+    return {"cases": total, "agreed": agreed}
 
 
 def make_float64_qs(mcts_module):
@@ -176,6 +244,12 @@ def run_sequence(game, mcts, encode, positions, evaluated, collect_nodes=True, v
             # floor count, and a score that wrapped through 8 bits.
             if board_seen[11, 5] > 7 or board_seen[12, 5] > 7:
                 deviations.add("floor-overflow")
+            # A score past 127 shows here as a negative one. The other arm of
+            # that row — a wrap that `score_round`'s max(score - penalty, 0)
+            # clamps back to 0 in the same call — leaves a non-negative score
+            # and is not detected. It would not hide a difference: [A8-38]
+            # would compare diverged trees and fail loudly. These games score
+            # nowhere near 128.
             if board_seen[0, 0] < 0 or board_seen[0, 1] < 0:
                 deviations.add("score-wrap")
             # `no-centre-take` needs a whole round in which neither seat takes
