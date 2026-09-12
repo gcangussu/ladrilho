@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { createNetwork } from '../src/network.js';
 import { TENSORS, WEIGHTS_COUNT } from '../src/weights.js';
 import { encodeBoard } from '../src/index.js';
-import { fixtures, weightsRecord } from './support/fixtures.js';
+import { fixtures, manifest, weightsRecord } from './support/fixtures.js';
 
 const POSITIONS = fixtures();
 
@@ -107,6 +107,10 @@ describe('the weights table [A8-16]', () => {
     const kept = record.stateDict.filter((t) => !t.name.endsWith(record.omittedSuffix));
     expect(omitted.length).toBeGreaterThan(0);
     for (const tensor of omitted) expect(tensor.dtype).toBe('torch.int64');
+    // The generator packs every kept tensor as float32, which silently
+    // narrows a float64 and mangles an int, so "little-endian float32" in the
+    // generated header is a claim about these dtypes.
+    for (const tensor of kept) expect(tensor.dtype, tensor.name).toBe('torch.float32');
     expect(TENSORS.map((t) => t.name)).toEqual(kept.map((t) => t.name));
     expect(TENSORS.map((t) => [...t.shape])).toEqual(kept.map((t) => t.shape));
   });
@@ -121,12 +125,20 @@ describe('the weights table [A8-16]', () => {
     expect(WEIGHTS_COUNT).toBe(record.count);
   });
 
-  it('[A8-16] was generated from the pinned checkpoint', () => {
-    expect(record.commit).toBe('5d6d1f129b76659837f6afd6fb082e8da57e5428');
-    expect(record.checkpointSha256).toBe(
-      '7d2fbf9203e46837668cd5b8f7bb29b7ea6f9e500f25f148c79e0038a76fe2f9',
-    );
+  it('[A8-16], [A8-34] were generated from the pinned commit and checkpoint', () => {
+    const COMMIT = '5d6d1f129b76659837f6afd6fb082e8da57e5428';
+    const CHECKPOINT = '7d2fbf9203e46837668cd5b8f7bb29b7ea6f9e500f25f148c79e0038a76fe2f9';
+    expect(record.commit).toBe(COMMIT);
+    expect(record.checkpointSha256).toBe(CHECKPOINT);
+    // The fixtures are pinned too, and to the same pair. [A8-48]'s licence
+    // check now reads its sha out of this manifest, so an unpinned manifest
+    // would leave that check pinned to nothing.
+    const fixtureManifest = manifest();
+    expect(fixtureManifest.upstream.commit).toBe(COMMIT);
+    expect(fixtureManifest.checkpoint.sha256).toBe(CHECKPOINT);
+    expect(fixtureManifest.upstream.repository).toContain('cestpasphoto/alpha-zero-general');
     // [A8-34]'s NumPy pin, which [A8-50] depends on.
     expect(record.versions['numpy']).toMatch(/^2\./);
+    expect(fixtureManifest.versions['numpy']).toMatch(/^2\./);
   });
 });

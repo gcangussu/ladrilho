@@ -86,6 +86,12 @@ describe('exp [A8-49]', () => {
     expect(exp(-0)).toBe(1);
     expect(exp(1e-300)).toBe(1);
     expect(exp(-1e-300)).toBe(1);
+    // Inside `|x| < 2^-28` the answer is the branch's `1 + x` and nothing
+    // else. 1e-300 cannot see that — `1 + 1e-300` is 1 — so the probe that
+    // decides it is one an ulp of 1 can hold.
+    // Mutation: `return 1 + x` -> `return 1` in `exp`; red here.
+    expect(exp(1e-10)).toBe(1 + 1e-10);
+    expect(exp(-1e-10)).toBe(1 - 1e-10);
     // Within an ulp of `Math.E`, not equal to it: fdlibm's exp is under an
     // ulp of the true value but not correctly rounded, and `Math.E` is.
     expect(ulpsApart(exp(1), Math.E)).toBeLessThanOrEqual(1);
@@ -100,13 +106,37 @@ describe('exp [A8-49]', () => {
     expect(exp(709.782712893384)).toBeLessThan(Infinity);
     expect(exp(709.782712893384)).toBeGreaterThan(1e308);
     expect(exp(-745.1332191019412)).toBe(0);
-    // Subnormal: the scaling path that fdlibm splits in two.
+    // Subnormal: the scaling path that fdlibm splits in two. -744.5 cannot
+    // tell the two arms apart — there `k` is -1074 and both are one rounding
+    // of the same real — so the probe is the first `k` at which they diverge.
+    // Mutation: `k >= -1021` -> `k >= -1200`; red on the second line.
     const subnormal = exp(-744.5);
     expect(subnormal).toBeGreaterThan(0);
     expect(subnormal).toBeLessThan(2.3e-308);
     expect(ulpsApart(subnormal, Math.exp(-744.5))).toBeLessThanOrEqual(1);
+    expect(exp(-745)).toBe(5e-324);
     // A masked logit, which is what the policy softmax feeds it.
     expect(exp(-1e8)).toBe(0);
+  });
+
+  it('[A8-49] is decided by the gate itself far past the thresholds', () => {
+    // Everything above holds with the overflow and underflow guards deleted:
+    // past the threshold the scaling overflows on its own, and below it the
+    // scaling underflows on its own. These do not. `pow2` reduces `k` with an
+    // int32 shift, so without the gate an argument past 2^31 exits the loop
+    // at once and `exp` returns something near 1 — the guard is what decides
+    // these, and a check the guard's absence cannot fail is not a check.
+    //
+    // Mutations, each red here and green on every other assertion in the file:
+    //   `ax >= HUGE_GATE` -> `ax >= Infinity`
+    //   `if (x > O_THRESHOLD) return Infinity;` deleted
+    //   `if (x < U_THRESHOLD) return 0;` deleted
+    expect(exp(5e9)).toBe(Infinity);
+    expect(exp(1e300)).toBe(Infinity);
+    expect(exp(Number.MAX_VALUE)).toBe(Infinity);
+    expect(exp(-5e9)).toBe(0);
+    expect(exp(-1e300)).toBe(0);
+    expect(exp(-Number.MAX_VALUE)).toBe(0);
   });
 
   it('[A8-49] rises monotonically, which a broken reduction would not', () => {

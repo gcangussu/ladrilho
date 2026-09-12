@@ -72,6 +72,8 @@ interface Block {
   /** Hardswish when true, ReLU when false. */
   hardswish: boolean;
   width: number;
+  /** Channels in, which with {@link outputs} decides the residual add. */
+  inputs: number;
   outputs: number;
   /**
    * This block's own working buffers, never the caller's. The residual add
@@ -175,6 +177,7 @@ export function createNetwork(): Network {
       },
       hardswish: hardswishActivation,
       width,
+      inputs: expandShape === null ? projectShape[1] : expandShape[1],
       outputs: projectShape[0],
     };
   };
@@ -280,10 +283,10 @@ export function createNetwork(): Network {
     squeezeExcite(mixed, layer.width, layer.excite, layer.excitation);
     acrossChannels(mixed, layer.project.linear, out);
     normalise(out, layer.outputs, layer.project.norm, 0);
-    // `use_res_connect` is `in_channels == out_channels`. Every block here is
-    // entered with the trunk's 23 channels, so that is the test: the trunk and
-    // the value block add, the policy block (46 out) does not.
-    if (layer.outputs === CHANNELS) {
+    // Upstream's `use_res_connect = (in_channels == out_channels)`, written as
+    // that and not as an equivalent that happens to hold: the trunk and the
+    // value block add, the policy block (23 in, 46 out) does not.
+    if (layer.outputs === layer.inputs) {
       for (let i = 0; i < layer.outputs * LENGTH; i++) out[i] += source[i];
     }
   }
