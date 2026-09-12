@@ -21,7 +21,7 @@ import { normalise, simulate, visitCounts, type Evaluator } from '../src/search.
 import { createSession } from '../src/session.js';
 import { toTheirAction } from '../src/actions.js';
 import { universeRoot } from '../src/universe.js';
-import { apply, legalActions, newGame, outcome, toJSON, type AzulJSON } from 'engine';
+import { apply, fromJSON, legalActions, newGame, outcome, toJSON, type AzulJSON } from 'engine';
 import { boardKey } from '../src/search.js';
 import { manifest } from './support/fixtures.js';
 import { CUTTING, sequences, type Sequence } from './support/sequences.js';
@@ -87,6 +87,10 @@ describe('the search, against the reference search [A8-38]', () => {
         const theirs = [...call.reference];
         expect(ours, `${label} call ${i} (ply ${call.ply}) visit counts`).toEqual(theirs);
         expect(toTheirAction(choice.action), `${label} call ${i} chosen action`).toBe(call.chosen);
+        // The root's running value too, bit for bit: it is float32 and the
+        // original's is NumPy 2's float32, so every intermediate rounding of
+        // [A8-50]'s update has to land in the same place.
+        expect(choice.value, `${label} call ${i} root Qs`).toBe(Math.fround(call.qs));
       }
       comparedCalls += sequence.compared;
       recordedCalls += sequence.calls.length;
@@ -171,6 +175,41 @@ describe('one simulation, step by step [A8-18], [A8-20], [A8-10]', () => {
   }
 
   const PLIES = findPlies();
+
+  it('[A8-19] breaks an exact tie by the lowest of their action indices', () => {
+    // With uniform priors and a value of zero everywhere, every unvisited
+    // action at a fresh root scores identically, so the comparison is the only
+    // thing that decides. The second simulation is where it shows: the first
+    // expands the root, and the forced-playout bound is still zero at i = 1.
+    //
+    // Mutation record [A8-44]: `>` replaced by `>=` in `select`
+    // (`src/search.ts`) — red here. The uniform-prior sequence of [A8-38] does
+    // not catch it, which is why this test exists.
+    const session = createSession(constant(0, 0), { simulations: 2 });
+    const start = PLIES.changes;
+    session.choose(start);
+    const counts = visitCounts(session.table, encodeBoard(toJSON(universeRoot(start))))!;
+    const visited = [...counts.keys()].filter((a) => counts[a] > 0);
+    expect(visited).toHaveLength(1);
+    const legal = start.legalActions.map(toTheirAction).sort((a, b) => a - b);
+    expect(legal.length).toBeGreaterThan(1);
+    expect(visited[0]).toBe(legal[0]);
+  });
+
+  it('[A8-18] values a drawn game at the original’s 0.01, for both seats', () => {
+    // No recorded game ends level, so the draw arm is reached here instead:
+    // equal scores and equally many complete rows is what [0001 E1-39] calls a
+    // draw, and `check_end_game` answers 0.01 to both seats rather than 0.
+    const s = newGame(5);
+    while (!s.isTerminal) apply(s, legalActions(s)[0]);
+    const drawn = fromJSON({ ...toJSON(s), scores: [50, 50] }, 0);
+    drawn.scores = [50, 50];
+    drawn.walls = [drawn.walls[0], drawn.walls[0].slice()];
+    expect(outcome(drawn)).toBe(0);
+    const value = simulate(new Map(), constant(0.5, -0.5), drawn, 0);
+    expect(value).toEqual([Math.fround(0.01), Math.fround(0.01)]);
+    expect(value[0]).not.toBe(0);
+  });
 
   it('[A8-18] values a finished game from the seat to move, drawn games included', () => {
     // Step 1: terminal before any board is read. A game played to its end and
