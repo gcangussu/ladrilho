@@ -106,7 +106,11 @@ function compare(record: FixturePosition): Comparison {
 
   // `floor-overflow`: tiles past the seventh slot go to our lid and keep
   // counting on theirs.
-  if (theirs[cell(11, 5)] > 7 || theirs[cell(12, 5)] > 7 || ours[cell(11, 5)] > 7 || ours[cell(12, 5)] > 7) {
+  // Exactly the table's condition. Our count is `min(tiles, 7) + marker` and
+  // theirs is every tile ever placed plus the marker, so theirs is never the
+  // smaller of the two: testing ours as well would add a clause that cannot
+  // fire and that a later reader would take for a live one.
+  if (theirs[cell(11, 5)] > 7 || theirs[cell(12, 5)] > 7) {
     deviations.push('floor-overflow');
     exclude(11, 5);
     exclude(12, 5);
@@ -236,6 +240,32 @@ describe('the deviation machinery itself [A8-36]', () => {
     expect(wrapped.compared[cell(0, 1)]).toBe(false);
     // Only the two scores: the round beside them is still compared.
     expect(wrapped.compared[cell(0, 2)]).toBe(true);
+  });
+
+  it('[A8-36] excuses only the deal when a ply ends the game', () => {
+    // The most valuable comparison in the file, and the one whose excuse had
+    // no guard: on these plies row 0's scores are compared after the original
+    // has run `score_bonuses`, so our end-game bonuses are checked against
+    // upstream's, and rows 9–22 are compared after it tiled its last wall.
+    // Widen the mask and the comparison quietly becomes vacuous.
+    // Mutations: `exclude(0, c)` from c = 0 rather than 2, and the row loop
+    // extended to 22; both red here and green everywhere else.
+    const terminal = COMPARISONS.find((c) => c.deviations.includes('terminal-deal'));
+    expect(terminal, 'no fixture ply ends a game').toBeDefined();
+    expect(terminal!.compared[cell(0, 0)]).toBe(true);
+    expect(terminal!.compared[cell(0, 1)]).toBe(true);
+    for (let r = 9; r <= 22; r++) {
+      for (let c = 0; c < COLS; c++) {
+        expect(terminal!.compared[cell(r, c)], `row ${r} col ${c}`).toBe(true);
+      }
+    }
+    // And every terminal ply is compared that way, not just the first.
+    for (const { record, compared } of COMPARISONS.filter((c) =>
+      c.deviations.includes('terminal-deal'),
+    )) {
+      expect(compared[cell(0, 0)], `${record.game} ply ${record.ply}`).toBe(true);
+      expect(compared[cell(22, 4)], `${record.game} ply ${record.ply}`).toBe(true);
+    }
   });
 
   it('[A8-36] excuses only the floor counts when a floor overflows', () => {
