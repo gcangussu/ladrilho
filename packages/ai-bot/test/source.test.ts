@@ -121,7 +121,13 @@ const CLAUSES: Clause[] = [
     pattern: /\b(?:localStorage|sessionStorage|indexedDB|caches)\b/,
     rejects: 'localStorage.setItem(k, v)',
   },
-  { name: '[A8-2] the filesystem', pattern: /\bnode:|\brequire\s*\(/, rejects: "import fs from 'node:fs';" },
+  {
+    // The import specifier, not the bare word: `node:` also spells a
+    // parameter named `node` with a type annotation.
+    name: '[A8-2] the filesystem',
+    pattern: /(?:from|import)\s*\(?\s*['"]node:|\brequire\s*\(/,
+    rejects: "import fs from 'node:fs';",
+  },
   // [A8-4]: `choose` schedules nothing.
   {
     name: '[A8-4] scheduled work',

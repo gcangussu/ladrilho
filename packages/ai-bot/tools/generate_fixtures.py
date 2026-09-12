@@ -45,6 +45,11 @@ from upstream import (
 TOOLS = PACKAGE / "tools"
 FIXTURES = PACKAGE / "test" / "fixtures"
 
+# The games whose searches are recorded [A8-34]: at least two whole games, fed
+# seat by seat. The two shortest, because every call of every sequence carries
+# its evaluated nodes into the committed fixtures.
+SEQUENCE_GAMES = ("sharp-steady", "steady-easy")
+
 
 def constants(mcts_module, board_class) -> dict:
     """The constants table of spec 0008, read from the original [A8-34]."""
@@ -65,6 +70,81 @@ def constants(mcts_module, board_class) -> dict:
         "drawValue": float(outcome[0]),
         "drawValueDtype": str(outcome.dtype),
     }
+
+
+def record_sequences(mcts_module, game, net, work, settings, encode) -> list:
+    """Every recorded sequence, three times over [A8-34], [A8-38], [A8-50].
+
+    As shipped, as the reference search, and once more with a float64 `Qs` to
+    find the witness. One `MCTS` per seat per run, as `pit.py` keeps one per
+    player, and the recorded moves decide the positions either way.
+    """
+    from utils import dotdict
+
+    from sequences import UniformPrior, hook_predict, make_float64_qs, make_reference, run_sequence
+
+    args = dotdict(
+        {
+            "numMCTSSims": settings["numMCTSSims"],
+            "fpu": settings["fpu"],
+            "universes": settings["universes"],
+            "cpuct": settings["cpuct"],
+            "prob_fullMCTS": 1.0,
+            "ratio_fullMCTS": 5,
+            "forced_playouts": settings["forcedPlayouts"],
+            "no_mem_optim": False,
+            "temperature": settings["temperature"],
+        }
+    )
+    positions_of = {}
+    for record in work["positions"]:
+        positions_of.setdefault((record["game"], record["position"]["currentPlayer"]), []).append(record)
+
+    sequences = []
+    for game_id in SEQUENCE_GAMES:
+        for seat in (0, 1):
+            positions = positions_of[(game_id, seat)]
+            evaluated = hook_predict(net)
+
+            shipped = run_sequence(game, mcts_module.MCTS(game, net, args), encode, positions, evaluated, False)
+
+            restore = make_reference(mcts_module)
+            reference = run_sequence(
+                game, mcts_module.MCTS(game, net, args), encode, positions, evaluated, verify=True
+            )
+            float64 = run_sequence(
+                game, make_float64_qs(mcts_module)(game, net, args), encode, positions, evaluated, False
+            )
+            restore()
+            net.predict = net.__class__.predict.__get__(net)
+
+            witness = next(
+                (
+                    i
+                    for i, (a, b) in enumerate(zip(reference, float64))
+                    if not np.array_equal(a["counts"], b["counts"])
+                ),
+                None,
+            )
+            sequences.append(
+                {"game": game_id, "seat": seat, "kind": "network", "shipped": shipped,
+                 "reference": reference, "witness": witness}
+            )
+
+    # One sequence over the uniform-prior stub, which makes exact ties in `u`
+    # [A8-44]. Its priors are a rule, not a recording, so its nodes are not
+    # stored.
+    stub = UniformPrior()
+    evaluated = hook_predict(stub)
+    restore = make_reference(mcts_module)
+    positions = positions_of[(SEQUENCE_GAMES[0], 0)]
+    uniform = run_sequence(game, mcts_module.MCTS(game, stub, args), encode, positions, evaluated)
+    restore()
+    sequences.append(
+        {"game": SEQUENCE_GAMES[0], "seat": 0, "kind": "uniform", "shipped": uniform,
+         "reference": uniform, "witness": None}
+    )
+    return sequences
 
 
 def main() -> None:
@@ -134,7 +214,60 @@ def main() -> None:
             }
         )
 
+    sequences = record_sequences(MCTS, game, net, work, settings, encode)
+
+    # The sequence files. Nodes are concatenated across every sequence that
+    # records them, and a sequence names the range it owns; the variable-length
+    # arrays are read by walking `legal`, which starts each node with its
+    # count.
+    from sequences import pack_nodes
+
+    nodes: list = []
+    counts_reference, counts_shipped = bytearray(), bytearray()
+    sequence_manifest = []
+    call_index = 0
+    for sequence in sequences:
+        first_node = len(nodes)
+        calls = []
+        for reference, shipped in zip(sequence["reference"], sequence["shipped"]):
+            counts_reference += struct.pack("<180H", *[min(int(n), 65535) for n in reference["counts"]])
+            counts_shipped += struct.pack("<180H", *[min(int(n), 65535) for n in shipped["counts"]])
+            nodes.extend(reference["nodes"])
+            calls.append(
+                {
+                    "index": call_index,
+                    "ply": reference["ply"],
+                    "chosen": reference["chosen"],
+                    "shippedChosen": shipped["chosen"],
+                    "qs": reference["qs"],
+                    "qsType": reference["qsType"],
+                    "deviations": reference["deviations"],
+                    "nodesAdded": len(reference["nodes"]),
+                }
+            )
+            call_index += 1
+        sequence_manifest.append(
+            {
+                "game": sequence["game"],
+                "seat": sequence["seat"],
+                "kind": sequence["kind"],
+                "witness": sequence["witness"],
+                "nodesFrom": first_node,
+                "nodesTo": len(nodes),
+                "calls": calls,
+            }
+        )
+
+    packed = pack_nodes(nodes)
+
     FIXTURES.mkdir(parents=True, exist_ok=True)
+    (FIXTURES / "seq-boards.i8").write_bytes(packed["boards"])
+    (FIXTURES / "seq-legal.u8").write_bytes(packed["legal"])
+    (FIXTURES / "seq-raw.f32").write_bytes(packed["raw"])
+    (FIXTURES / "seq-normalised.f32").write_bytes(packed["normalised"])
+    (FIXTURES / "seq-values.f32").write_bytes(packed["values"])
+    (FIXTURES / "seq-counts-reference.u16").write_bytes(bytes(counts_reference))
+    (FIXTURES / "seq-counts-shipped.u16").write_bytes(bytes(counts_shipped))
     (FIXTURES / "boards.i8").write_bytes(bytes(boards))
     (FIXTURES / "next.i8").write_bytes(bytes(nexts))
     (FIXTURES / "masks.u8").write_bytes(bytes(masks))
@@ -161,6 +294,7 @@ def main() -> None:
             for g in work["games"]
         ],
         "coverage": work["coverage"],
+        "sequences": sequence_manifest,
         "records": index,
         "files": {
             "boards": {"name": "boards.i8", "stride": 138, "type": "int8"},
@@ -168,6 +302,13 @@ def main() -> None:
             "masks": {"name": "masks.u8", "stride": 180, "type": "uint8"},
             "policy": {"name": "policy.f32", "stride": 180, "type": "float32"},
             "value": {"name": "value.f32", "stride": 2, "type": "float32"},
+            "sequenceBoards": {"name": "seq-boards.i8", "stride": 138, "type": "int8"},
+            "sequenceLegal": {"name": "seq-legal.u8", "stride": 0, "type": "uint8"},
+            "sequenceRaw": {"name": "seq-raw.f32", "stride": 0, "type": "float32"},
+            "sequenceNormalised": {"name": "seq-normalised.f32", "stride": 0, "type": "float32"},
+            "sequenceValues": {"name": "seq-values.f32", "stride": 2, "type": "float32"},
+            "sequenceCountsReference": {"name": "seq-counts-reference.u16", "stride": 180, "type": "uint16"},
+            "sequenceCountsShipped": {"name": "seq-counts-shipped.u16", "stride": 180, "type": "uint16"},
         },
     }
     (FIXTURES / "manifest.json").write_text(json.dumps(manifest, indent=1) + "\n")

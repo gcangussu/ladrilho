@@ -9,3 +9,4 @@
 export { EXPERT } from './constants.js';
 export { fromTheirAction, toTheirAction } from './actions.js';
 export { encodeBoard } from './board.js';
+export { createExpert, type Expert, type ExpertChoice, type ExpertOptions } from './session.js';

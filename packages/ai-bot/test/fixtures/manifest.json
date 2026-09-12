@@ -42,10 +42,10 @@
   0,
   0,
   17,
-  17,
-  15,
   16,
-  15,
+  16,
+  17,
+  14,
   0,
   0,
   0,
@@ -59,6 +59,24 @@
   0,
   0,
   1,
+  0,
+  1,
+  1,
+  0,
+  2,
+  0,
+  1,
+  1,
+  1,
+  0,
+  1,
+  0,
+  2,
+  1,
+  0,
+  1,
+  0,
+  0,
   0,
   1,
   2,
@@ -67,27 +85,9 @@
   0,
   0,
   0,
-  1,
-  2,
-  1,
   0,
   2,
-  0,
-  1,
-  1,
-  0,
-  0,
-  1,
-  1,
-  0,
-  0,
   2,
-  0,
-  0,
-  1,
-  1,
-  1,
-  1,
   0,
   -1,
   -1,
@@ -924,6 +924,1304 @@
   "emptyBagDeal": true,
   "wholeDisplayFromLid": true
  },
+ "sequences": [
+  {
+   "game": "sharp-steady",
+   "seat": 0,
+   "kind": "network",
+   "witness": null,
+   "nodesFrom": 0,
+   "nodesTo": 2154,
+   "calls": [
+    {
+     "index": 0,
+     "ply": 0,
+     "chosen": 32,
+     "shippedChosen": 32,
+     "qs": 0.06023581326007843,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 1,
+     "ply": 2,
+     "chosen": 26,
+     "shippedChosen": 26,
+     "qs": 0.017493581399321556,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 2,
+     "ply": 4,
+     "chosen": 9,
+     "shippedChosen": 9,
+     "qs": 0.22782482206821442,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 3,
+     "ply": 6,
+     "chosen": 25,
+     "shippedChosen": 25,
+     "qs": 0.2021738439798355,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 4,
+     "ply": 8,
+     "chosen": 22,
+     "shippedChosen": 22,
+     "qs": 0.1136285737156868,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 5,
+     "ply": 10,
+     "chosen": 91,
+     "shippedChosen": 91,
+     "qs": 0.2054164707660675,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 6,
+     "ply": 12,
+     "chosen": 91,
+     "shippedChosen": 91,
+     "qs": 0.23077727854251862,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 7,
+     "ply": 14,
+     "chosen": 1,
+     "shippedChosen": 1,
+     "qs": 0.1285472810268402,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 8,
+     "ply": 16,
+     "chosen": 9,
+     "shippedChosen": 9,
+     "qs": -0.06184561923146248,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 9,
+     "ply": 18,
+     "chosen": 19,
+     "shippedChosen": 19,
+     "qs": -0.02393082156777382,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 10,
+     "ply": 20,
+     "chosen": 110,
+     "shippedChosen": 110,
+     "qs": 0.31276386976242065,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 11,
+     "ply": 22,
+     "chosen": 110,
+     "shippedChosen": 110,
+     "qs": 0.17666760087013245,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 12,
+     "ply": 24,
+     "chosen": 19,
+     "shippedChosen": 19,
+     "qs": 0.5367878079414368,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 13,
+     "ply": 26,
+     "chosen": 19,
+     "shippedChosen": 19,
+     "qs": 0.6442577838897705,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 14,
+     "ply": 29,
+     "chosen": 127,
+     "shippedChosen": 127,
+     "qs": 0.7582538723945618,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 15,
+     "ply": 31,
+     "chosen": 26,
+     "shippedChosen": 26,
+     "qs": 0.8034607768058777,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 16,
+     "ply": 33,
+     "chosen": 26,
+     "shippedChosen": 26,
+     "qs": 0.7764843106269836,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 17,
+     "ply": 35,
+     "chosen": 8,
+     "shippedChosen": 8,
+     "qs": 0.1802876889705658,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 18,
+     "ply": 37,
+     "chosen": 20,
+     "shippedChosen": 20,
+     "qs": 0.13168372213840485,
+     "qsType": "float32",
+     "deviations": [
+      "floor-overflow"
+     ],
+     "nodesAdded": 95
+    },
+    {
+     "index": 19,
+     "ply": 39,
+     "chosen": 151,
+     "shippedChosen": 151,
+     "qs": 0.7391330003738403,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 99
+    },
+    {
+     "index": 20,
+     "ply": 41,
+     "chosen": 96,
+     "shippedChosen": 96,
+     "qs": 0.8870348334312439,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 83
+    },
+    {
+     "index": 21,
+     "ply": 43,
+     "chosen": 140,
+     "shippedChosen": 140,
+     "qs": 0.9888565540313721,
+     "qsType": "float32",
+     "deviations": [
+      "floor-overflow"
+     ],
+     "nodesAdded": 60
+    },
+    {
+     "index": 22,
+     "ply": 45,
+     "chosen": 27,
+     "shippedChosen": 27,
+     "qs": 0.9916348457336426,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 17
+    },
+    {
+     "index": 23,
+     "ply": 47,
+     "chosen": 5,
+     "shippedChosen": 5,
+     "qs": 0.9992060661315918,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 0
+    }
+   ]
+  },
+  {
+   "game": "sharp-steady",
+   "seat": 1,
+   "kind": "network",
+   "witness": null,
+   "nodesFrom": 2154,
+   "nodesTo": 4364,
+   "calls": [
+    {
+     "index": 24,
+     "ply": 1,
+     "chosen": 32,
+     "shippedChosen": 32,
+     "qs": 0.03789721801877022,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 25,
+     "ply": 3,
+     "chosen": 26,
+     "shippedChosen": 26,
+     "qs": -0.05112188681960106,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 26,
+     "ply": 5,
+     "chosen": 27,
+     "shippedChosen": 27,
+     "qs": -0.10965296626091003,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 27,
+     "ply": 7,
+     "chosen": 26,
+     "shippedChosen": 26,
+     "qs": -0.12830135226249695,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 28,
+     "ply": 9,
+     "chosen": 61,
+     "shippedChosen": 61,
+     "qs": -0.13294081389904022,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 29,
+     "ply": 11,
+     "chosen": 116,
+     "shippedChosen": 116,
+     "qs": -0.02324766106903553,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 30,
+     "ply": 13,
+     "chosen": 116,
+     "shippedChosen": 116,
+     "qs": -0.24533051252365112,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 31,
+     "ply": 15,
+     "chosen": 176,
+     "shippedChosen": 176,
+     "qs": -0.038670435547828674,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 32,
+     "ply": 17,
+     "chosen": 5,
+     "shippedChosen": 5,
+     "qs": 0.01512150652706623,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 33,
+     "ply": 19,
+     "chosen": 16,
+     "shippedChosen": 16,
+     "qs": 0.037991397082805634,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 34,
+     "ply": 21,
+     "chosen": 111,
+     "shippedChosen": 111,
+     "qs": -0.12724843621253967,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 35,
+     "ply": 23,
+     "chosen": 7,
+     "shippedChosen": 7,
+     "qs": -0.43499991297721863,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 36,
+     "ply": 25,
+     "chosen": 7,
+     "shippedChosen": 7,
+     "qs": -0.6435508131980896,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 37,
+     "ply": 27,
+     "chosen": 5,
+     "shippedChosen": 5,
+     "qs": -0.6488028764724731,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 38,
+     "ply": 28,
+     "chosen": 175,
+     "shippedChosen": 175,
+     "qs": -0.6863024234771729,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 39,
+     "ply": 30,
+     "chosen": 26,
+     "shippedChosen": 26,
+     "qs": -0.7889701724052429,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 40,
+     "ply": 32,
+     "chosen": 25,
+     "shippedChosen": 25,
+     "qs": -0.7475985884666443,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 41,
+     "ply": 34,
+     "chosen": 28,
+     "shippedChosen": 28,
+     "qs": -0.45070207118988037,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 42,
+     "ply": 36,
+     "chosen": 23,
+     "shippedChosen": 23,
+     "qs": -0.20386071503162384,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 97
+    },
+    {
+     "index": 43,
+     "ply": 38,
+     "chosen": 145,
+     "shippedChosen": 145,
+     "qs": -0.712497353553772,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 90
+    },
+    {
+     "index": 44,
+     "ply": 40,
+     "chosen": 145,
+     "shippedChosen": 145,
+     "qs": -0.8279010057449341,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 76
+    },
+    {
+     "index": 45,
+     "ply": 42,
+     "chosen": 28,
+     "shippedChosen": 28,
+     "qs": -0.9281875491142273,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 82
+    },
+    {
+     "index": 46,
+     "ply": 44,
+     "chosen": 148,
+     "shippedChosen": 148,
+     "qs": -0.9887452125549316,
+     "qsType": "float32",
+     "deviations": [
+      "floor-overflow"
+     ],
+     "nodesAdded": 65
+    },
+    {
+     "index": 47,
+     "ply": 46,
+     "chosen": 23,
+     "shippedChosen": 23,
+     "qs": -0.9980656504631042,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 0
+    },
+    {
+     "index": 48,
+     "ply": 48,
+     "chosen": 11,
+     "shippedChosen": 11,
+     "qs": -0.9996993541717529,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 0
+    }
+   ]
+  },
+  {
+   "game": "steady-easy",
+   "seat": 0,
+   "kind": "network",
+   "witness": null,
+   "nodesFrom": 4364,
+   "nodesTo": 6603,
+   "calls": [
+    {
+     "index": 49,
+     "ply": 0,
+     "chosen": 116,
+     "shippedChosen": 116,
+     "qs": 0.11966640502214432,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 50,
+     "ply": 2,
+     "chosen": 116,
+     "shippedChosen": 116,
+     "qs": 0.06178627163171768,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 51,
+     "ply": 4,
+     "chosen": 21,
+     "shippedChosen": 21,
+     "qs": 0.21215084195137024,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 52,
+     "ply": 6,
+     "chosen": 3,
+     "shippedChosen": 3,
+     "qs": 0.20780228078365326,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 53,
+     "ply": 8,
+     "chosen": 18,
+     "shippedChosen": 18,
+     "qs": 0.27512484788894653,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 54,
+     "ply": 11,
+     "chosen": 110,
+     "shippedChosen": 110,
+     "qs": 0.348929226398468,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 55,
+     "ply": 13,
+     "chosen": 111,
+     "shippedChosen": 111,
+     "qs": 0.4575940668582916,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 56,
+     "ply": 15,
+     "chosen": 165,
+     "shippedChosen": 165,
+     "qs": 0.4793127179145813,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 57,
+     "ply": 17,
+     "chosen": 161,
+     "shippedChosen": 161,
+     "qs": 0.6121030449867249,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 58,
+     "ply": 19,
+     "chosen": 16,
+     "shippedChosen": 16,
+     "qs": 0.6917731761932373,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 59,
+     "ply": 22,
+     "chosen": 121,
+     "shippedChosen": 121,
+     "qs": 0.8123708367347717,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 60,
+     "ply": 24,
+     "chosen": 121,
+     "shippedChosen": 121,
+     "qs": 0.6508647203445435,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 61,
+     "ply": 26,
+     "chosen": 28,
+     "shippedChosen": 28,
+     "qs": 0.753459095954895,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 62,
+     "ply": 28,
+     "chosen": 2,
+     "shippedChosen": 2,
+     "qs": 0.7891436219215393,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 63,
+     "ply": 30,
+     "chosen": 28,
+     "shippedChosen": 28,
+     "qs": 0.9025660753250122,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 64,
+     "ply": 31,
+     "chosen": 31,
+     "shippedChosen": 31,
+     "qs": 0.944923460483551,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 65,
+     "ply": 33,
+     "chosen": 20,
+     "shippedChosen": 20,
+     "qs": 0.9549550414085388,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 66,
+     "ply": 35,
+     "chosen": 15,
+     "shippedChosen": 15,
+     "qs": 0.9357600212097168,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 67,
+     "ply": 37,
+     "chosen": 20,
+     "shippedChosen": 20,
+     "qs": 0.9347472190856934,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 68,
+     "ply": 39,
+     "chosen": 11,
+     "shippedChosen": 11,
+     "qs": 0.9587554335594177,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 69,
+     "ply": 41,
+     "chosen": 55,
+     "shippedChosen": 55,
+     "qs": 0.9443244934082031,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 97
+    },
+    {
+     "index": 70,
+     "ply": 43,
+     "chosen": 60,
+     "shippedChosen": 60,
+     "qs": 0.9548084139823914,
+     "qsType": "float32",
+     "deviations": [
+      "floor-overflow"
+     ],
+     "nodesAdded": 82
+    },
+    {
+     "index": 71,
+     "ply": 45,
+     "chosen": 16,
+     "shippedChosen": 16,
+     "qs": 0.9341842532157898,
+     "qsType": "float32",
+     "deviations": [
+      "floor-overflow"
+     ],
+     "nodesAdded": 54
+    },
+    {
+     "index": 72,
+     "ply": 47,
+     "chosen": 143,
+     "shippedChosen": 143,
+     "qs": 0.9909157156944275,
+     "qsType": "float32",
+     "deviations": [
+      "floor-overflow"
+     ],
+     "nodesAdded": 6
+    },
+    {
+     "index": 73,
+     "ply": 49,
+     "chosen": 11,
+     "shippedChosen": 11,
+     "qs": 0.9999829530715942,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 0
+    }
+   ]
+  },
+  {
+   "game": "steady-easy",
+   "seat": 1,
+   "kind": "network",
+   "witness": null,
+   "nodesFrom": 6603,
+   "nodesTo": 8907,
+   "calls": [
+    {
+     "index": 74,
+     "ply": 1,
+     "chosen": 116,
+     "shippedChosen": 116,
+     "qs": 0.123558409512043,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 75,
+     "ply": 3,
+     "chosen": 122,
+     "shippedChosen": 122,
+     "qs": -0.06399422883987427,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 76,
+     "ply": 5,
+     "chosen": 21,
+     "shippedChosen": 21,
+     "qs": -0.1785457581281662,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 77,
+     "ply": 7,
+     "chosen": 27,
+     "shippedChosen": 27,
+     "qs": -0.20481275022029877,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 78,
+     "ply": 9,
+     "chosen": 22,
+     "shippedChosen": 22,
+     "qs": -0.15576255321502686,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 79,
+     "ply": 10,
+     "chosen": 98,
+     "shippedChosen": 98,
+     "qs": -0.10972858220338821,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 80,
+     "ply": 12,
+     "chosen": 7,
+     "shippedChosen": 7,
+     "qs": -0.27071037888526917,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 81,
+     "ply": 14,
+     "chosen": 8,
+     "shippedChosen": 8,
+     "qs": -0.5059623122215271,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 82,
+     "ply": 16,
+     "chosen": 158,
+     "shippedChosen": 158,
+     "qs": -0.5608702301979065,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 83,
+     "ply": 18,
+     "chosen": 29,
+     "shippedChosen": 29,
+     "qs": -0.6585487127304077,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 84,
+     "ply": 20,
+     "chosen": 5,
+     "shippedChosen": 5,
+     "qs": -0.687329888343811,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 85,
+     "ply": 21,
+     "chosen": 43,
+     "shippedChosen": 43,
+     "qs": -0.7218221426010132,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 86,
+     "ply": 23,
+     "chosen": 82,
+     "shippedChosen": 82,
+     "qs": -0.691630482673645,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 87,
+     "ply": 25,
+     "chosen": 22,
+     "shippedChosen": 22,
+     "qs": -0.678672194480896,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 88,
+     "ply": 27,
+     "chosen": 142,
+     "shippedChosen": 142,
+     "qs": -0.7762041687965393,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 89,
+     "ply": 29,
+     "chosen": 27,
+     "shippedChosen": 27,
+     "qs": -0.4038810431957245,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 90,
+     "ply": 32,
+     "chosen": 109,
+     "shippedChosen": 109,
+     "qs": -0.9472551941871643,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 91,
+     "ply": 34,
+     "chosen": 109,
+     "shippedChosen": 109,
+     "qs": -0.9375616312026978,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 92,
+     "ply": 36,
+     "chosen": 26,
+     "shippedChosen": 26,
+     "qs": -0.93182373046875,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 93,
+     "ply": 38,
+     "chosen": 11,
+     "shippedChosen": 11,
+     "qs": -0.945617139339447,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 94,
+     "ply": 40,
+     "chosen": 5,
+     "shippedChosen": 5,
+     "qs": -0.9629950523376465,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 95,
+     "ply": 42,
+     "chosen": 157,
+     "shippedChosen": 157,
+     "qs": -0.949259877204895,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 96
+    },
+    {
+     "index": 96,
+     "ply": 44,
+     "chosen": 117,
+     "shippedChosen": 117,
+     "qs": -0.9434659481048584,
+     "qsType": "float32",
+     "deviations": [
+      "floor-overflow"
+     ],
+     "nodesAdded": 75
+    },
+    {
+     "index": 97,
+     "ply": 46,
+     "chosen": 143,
+     "shippedChosen": 143,
+     "qs": -0.9677843451499939,
+     "qsType": "float32",
+     "deviations": [
+      "floor-overflow"
+     ],
+     "nodesAdded": 33
+    },
+    {
+     "index": 98,
+     "ply": 48,
+     "chosen": 23,
+     "shippedChosen": 23,
+     "qs": -0.9988380074501038,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 0
+    }
+   ]
+  },
+  {
+   "game": "sharp-steady",
+   "seat": 0,
+   "kind": "uniform",
+   "witness": null,
+   "nodesFrom": 8907,
+   "nodesTo": 11147,
+   "calls": [
+    {
+     "index": 99,
+     "ply": 0,
+     "chosen": 30,
+     "shippedChosen": 30,
+     "qs": 0.0,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 100,
+     "ply": 2,
+     "chosen": 7,
+     "shippedChosen": 7,
+     "qs": 0.0,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 101,
+     "ply": 4,
+     "chosen": 7,
+     "shippedChosen": 7,
+     "qs": 0.0,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 102,
+     "ply": 6,
+     "chosen": 13,
+     "shippedChosen": 13,
+     "qs": 0.0,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 103,
+     "ply": 8,
+     "chosen": 22,
+     "shippedChosen": 22,
+     "qs": 0.0,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 104,
+     "ply": 10,
+     "chosen": 0,
+     "shippedChosen": 0,
+     "qs": 0.0,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 105,
+     "ply": 12,
+     "chosen": 1,
+     "shippedChosen": 1,
+     "qs": 0.0,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 106,
+     "ply": 14,
+     "chosen": 1,
+     "shippedChosen": 1,
+     "qs": 0.0,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 107,
+     "ply": 16,
+     "chosen": 1,
+     "shippedChosen": 1,
+     "qs": 0.0,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 108,
+     "ply": 18,
+     "chosen": 17,
+     "shippedChosen": 17,
+     "qs": 0.0,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 109,
+     "ply": 20,
+     "chosen": 33,
+     "shippedChosen": 33,
+     "qs": 0.0,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 110,
+     "ply": 22,
+     "chosen": 6,
+     "shippedChosen": 6,
+     "qs": 0.0,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 111,
+     "ply": 24,
+     "chosen": 5,
+     "shippedChosen": 5,
+     "qs": 0.0,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 112,
+     "ply": 26,
+     "chosen": 5,
+     "shippedChosen": 5,
+     "qs": 0.0,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 113,
+     "ply": 29,
+     "chosen": 1,
+     "shippedChosen": 1,
+     "qs": 0.0,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 114,
+     "ply": 31,
+     "chosen": 3,
+     "shippedChosen": 3,
+     "qs": 0.0,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 115,
+     "ply": 33,
+     "chosen": 8,
+     "shippedChosen": 8,
+     "qs": 0.0,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 116,
+     "ply": 35,
+     "chosen": 8,
+     "shippedChosen": 8,
+     "qs": 0.0,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 117,
+     "ply": 37,
+     "chosen": 20,
+     "shippedChosen": 20,
+     "qs": 0.0,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 118,
+     "ply": 39,
+     "chosen": 6,
+     "shippedChosen": 6,
+     "qs": 0.0,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 119,
+     "ply": 41,
+     "chosen": 6,
+     "shippedChosen": 6,
+     "qs": 0.0,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 120,
+     "ply": 43,
+     "chosen": 5,
+     "shippedChosen": 5,
+     "qs": 0.0,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 100
+    },
+    {
+     "index": 121,
+     "ply": 45,
+     "chosen": 27,
+     "shippedChosen": 27,
+     "qs": 0.574257493019104,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 40
+    },
+    {
+     "index": 122,
+     "ply": 47,
+     "chosen": 11,
+     "shippedChosen": 11,
+     "qs": 0.9830508232116699,
+     "qsType": "float32",
+     "deviations": [],
+     "nodesAdded": 0
+    }
+   ]
+  }
+ ],
  "records": [
   {
    "game": "steady-easy",
@@ -3446,6 +4744,41 @@
    "name": "value.f32",
    "stride": 2,
    "type": "float32"
+  },
+  "sequenceBoards": {
+   "name": "seq-boards.i8",
+   "stride": 138,
+   "type": "int8"
+  },
+  "sequenceLegal": {
+   "name": "seq-legal.u8",
+   "stride": 0,
+   "type": "uint8"
+  },
+  "sequenceRaw": {
+   "name": "seq-raw.f32",
+   "stride": 0,
+   "type": "float32"
+  },
+  "sequenceNormalised": {
+   "name": "seq-normalised.f32",
+   "stride": 0,
+   "type": "float32"
+  },
+  "sequenceValues": {
+   "name": "seq-values.f32",
+   "stride": 2,
+   "type": "float32"
+  },
+  "sequenceCountsReference": {
+   "name": "seq-counts-reference.u16",
+   "stride": 180,
+   "type": "uint16"
+  },
+  "sequenceCountsShipped": {
+   "name": "seq-counts-shipped.u16",
+   "stride": 180,
+   "type": "uint16"
   }
  }
 }

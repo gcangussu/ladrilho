@@ -34,6 +34,24 @@ export interface Manifest {
   games: FixtureGame[];
   /** Which of [A8-51]'s deals the corpus turned out to hold. */
   coverage: Record<string, boolean>;
+  sequences: {
+    game: string;
+    seat: number;
+    kind: string;
+    witness: number | null;
+    nodesFrom: number;
+    nodesTo: number;
+    calls: {
+      index: number;
+      ply: number;
+      chosen: number;
+      shippedChosen: number;
+      qs: number;
+      qsType: string;
+      deviations: string[];
+      nodesAdded: number;
+    }[];
+  }[];
   records: { game: string; ply: number; theirNextPlayer: number }[];
   files: Record<string, { name: string; stride: number; type: string }>;
 }

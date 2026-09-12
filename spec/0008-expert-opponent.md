@@ -396,9 +396,16 @@ their action), its visit count `Ns`, its running value `Qs`, and per action `Nsa
 
 - **[A8-19]** Selection MUST visit the legal actions in ascending order of **their** action index.
   For each, in order:
-  1. If `forcedPlayouts` is set and `Nsa[a] < ⌊√(k · P[a] · i)⌋`, select `a` immediately. Here
-     `i` is the 0-based index of the current simulation within the current `choose` call. It is
-     the same at every node of the descent.
+  1. If `forcedPlayouts` is set **and this is the node the simulation started from**, and
+     `Nsa[a] < ⌊√(k · P[a] · i)⌋`, select `a` immediately. Here `i` is the 0-based index of the
+     current simulation within the current `choose` call.
+
+     *Only at that node. `MCTS.search` takes `forced_playouts` as a parameter defaulting to
+     `False`, `getActionProb` passes it when it starts a simulation, and the recursive call is
+     written `self.search(next_s)` — so the flag is false at every node below the first. An
+     earlier reading of this requirement said the bound applied at every node of the descent;
+     that explores a different tree, and [A8-38] caught it by reaching boards the original never
+     evaluated.*
   2. Otherwise score `u = Qsa[a] + cpuct · P[a] · √Ns / (1 + Nsa[a])` if `Qsa[a]` is set, and
      `u = (Qs − fpu) + cpuct · P[a] · √(Ns + EPS)` if it is not.
 
