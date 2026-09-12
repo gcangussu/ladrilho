@@ -7,6 +7,14 @@
  * [A8-12], where the original's `valid_moves` interprets the board by its own
  * rules, and [A8-52], where the original's own opening board vouches for the
  * conventions nobody could derive from the table.
+ *
+ * Neither of those reaches every row. `valid_moves` reads the centre, the
+ * displays and the pattern lines, and not the bag, the lid or the floor
+ * counts — its `line_free[5]`/`wall_colour_free[5]` are unconditionally true,
+ * so the floor is never what makes a move legal or illegal. The opening board
+ * is one position. What reaches the rest is [A8-36] in `transitions.test.ts`,
+ * where the original deals from row 1 by its own rules and recycles row 2 into
+ * it: a shared misreading there deals different tiles and fails.
  */
 
 import { describe, expect, it } from 'vitest';

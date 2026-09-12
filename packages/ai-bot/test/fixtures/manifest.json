@@ -41,9 +41,9 @@
   0,
   0,
   0,
-  16,
   17,
-  16,
+  17,
+  15,
   16,
   15,
   0,
@@ -61,15 +61,9 @@
   1,
   0,
   1,
-  1,
-  1,
-  1,
-  0,
-  1,
-  0,
-  1,
-  0,
   2,
+  0,
+  1,
   0,
   0,
   0,
@@ -77,17 +71,23 @@
   2,
   1,
   0,
-  3,
+  2,
+  0,
+  1,
+  1,
   0,
   0,
-  0,
+  1,
   1,
   0,
   0,
   2,
-  1,
-  1,
   0,
+  0,
+  1,
+  1,
+  1,
+  1,
   0,
   -1,
   -1,
@@ -776,1621 +776,2659 @@
      "bagBefore": 52
     }
    ]
+  },
+  {
+   "id": "random-90",
+   "seed": 29335711,
+   "players": [
+    "random:29335711",
+    "random:29335712"
+   ],
+   "actions": [
+    76,
+    7,
+    125,
+    58,
+    159,
+    153,
+    110,
+    176,
+    169,
+    156,
+    162,
+    96,
+    53,
+    85,
+    162,
+    9,
+    161,
+    173,
+    122,
+    179,
+    173,
+    167,
+    153,
+    161,
+    63,
+    161,
+    17,
+    168,
+    118,
+    173,
+    155,
+    46,
+    157,
+    165,
+    144,
+    155,
+    161,
+    166,
+    179,
+    47,
+    105,
+    173,
+    2,
+    80,
+    175,
+    149,
+    150,
+    167,
+    161,
+    113,
+    53,
+    137,
+    71,
+    25,
+    165,
+    161,
+    175,
+    173,
+    155,
+    77,
+    140,
+    44,
+    161,
+    15,
+    113,
+    173,
+    157,
+    178,
+    77,
+    101,
+    59,
+    9,
+    165,
+    121,
+    173,
+    155,
+    174,
+    31,
+    10,
+    68,
+    155,
+    121,
+    173,
+    161,
+    179,
+    95,
+    159,
+    95,
+    71,
+    143,
+    2,
+    169,
+    32,
+    160,
+    179,
+    167,
+    150
+   ],
+   "deals": [
+    {
+     "ply": 10,
+     "bagBefore": 80
+    },
+    {
+     "ply": 23,
+     "bagBefore": 60
+    },
+    {
+     "ply": 38,
+     "bagBefore": 40
+    },
+    {
+     "ply": 48,
+     "bagBefore": 20
+    },
+    {
+     "ply": 58,
+     "bagBefore": 0
+    },
+    {
+     "ply": 67,
+     "bagBefore": 52
+    },
+    {
+     "ply": 76,
+     "bagBefore": 32
+    },
+    {
+     "ply": 86,
+     "bagBefore": 12
+    }
+   ]
   }
  ],
+ "coverage": {
+  "shortDisplay": true,
+  "emptyBagDeal": true,
+  "wholeDisplayFromLid": true
+ },
  "records": [
   {
    "game": "steady-easy",
-   "ply": 0
+   "ply": 0,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 1
+   "ply": 1,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 2
+   "ply": 2,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 3
+   "ply": 3,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 4
+   "ply": 4,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 5
+   "ply": 5,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 6
+   "ply": 6,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 7
+   "ply": 7,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 8
+   "ply": 8,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 9
+   "ply": 9,
+   "theirNextPlayer": 0
   },
   {
    "game": "steady-easy",
-   "ply": 10
+   "ply": 10,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 11
+   "ply": 11,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 12
+   "ply": 12,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 13
+   "ply": 13,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 14
+   "ply": 14,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 15
+   "ply": 15,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 16
+   "ply": 16,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 17
+   "ply": 17,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 18
+   "ply": 18,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 19
+   "ply": 19,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 20
+   "ply": 20,
+   "theirNextPlayer": 0
   },
   {
    "game": "steady-easy",
-   "ply": 21
+   "ply": 21,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 22
+   "ply": 22,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 23
+   "ply": 23,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 24
+   "ply": 24,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 25
+   "ply": 25,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 26
+   "ply": 26,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 27
+   "ply": 27,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 28
+   "ply": 28,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 29
+   "ply": 29,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 30
+   "ply": 30,
+   "theirNextPlayer": 0
   },
   {
    "game": "steady-easy",
-   "ply": 31
+   "ply": 31,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 32
+   "ply": 32,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 33
+   "ply": 33,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 34
+   "ply": 34,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 35
+   "ply": 35,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 36
+   "ply": 36,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 37
+   "ply": 37,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 38
+   "ply": 38,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 39
+   "ply": 39,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 40
+   "ply": 40,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 41
+   "ply": 41,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 42
+   "ply": 42,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 43
+   "ply": 43,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 44
+   "ply": 44,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 45
+   "ply": 45,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 46
+   "ply": 46,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 47
+   "ply": 47,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 48
+   "ply": 48,
+   "theirNextPlayer": 1
   },
   {
    "game": "steady-easy",
-   "ply": 49
+   "ply": 49,
+   "theirNextPlayer": 0
   },
   {
    "game": "sharp-steady",
-   "ply": 0
+   "ply": 0,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 1
+   "ply": 1,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 2
+   "ply": 2,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 3
+   "ply": 3,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 4
+   "ply": 4,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 5
+   "ply": 5,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 6
+   "ply": 6,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 7
+   "ply": 7,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 8
+   "ply": 8,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 9
+   "ply": 9,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 10
+   "ply": 10,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 11
+   "ply": 11,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 12
+   "ply": 12,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 13
+   "ply": 13,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 14
+   "ply": 14,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 15
+   "ply": 15,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 16
+   "ply": 16,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 17
+   "ply": 17,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 18
+   "ply": 18,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 19
+   "ply": 19,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 20
+   "ply": 20,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 21
+   "ply": 21,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 22
+   "ply": 22,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 23
+   "ply": 23,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 24
+   "ply": 24,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 25
+   "ply": 25,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 26
+   "ply": 26,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 27
+   "ply": 27,
+   "theirNextPlayer": 0
   },
   {
    "game": "sharp-steady",
-   "ply": 28
+   "ply": 28,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 29
+   "ply": 29,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 30
+   "ply": 30,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 31
+   "ply": 31,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 32
+   "ply": 32,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 33
+   "ply": 33,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 34
+   "ply": 34,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 35
+   "ply": 35,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 36
+   "ply": 36,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 37
+   "ply": 37,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 38
+   "ply": 38,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 39
+   "ply": 39,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 40
+   "ply": 40,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 41
+   "ply": 41,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 42
+   "ply": 42,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 43
+   "ply": 43,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 44
+   "ply": 44,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 45
+   "ply": 45,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 46
+   "ply": 46,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 47
+   "ply": 47,
+   "theirNextPlayer": 1
   },
   {
    "game": "sharp-steady",
-   "ply": 48
+   "ply": 48,
+   "theirNextPlayer": 0
   },
   {
    "game": "easy-random",
-   "ply": 0
+   "ply": 0,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 1
+   "ply": 1,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 2
+   "ply": 2,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 3
+   "ply": 3,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 4
+   "ply": 4,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 5
+   "ply": 5,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 6
+   "ply": 6,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 7
+   "ply": 7,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 8
+   "ply": 8,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 9
+   "ply": 9,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 10
+   "ply": 10,
+   "theirNextPlayer": 0
   },
   {
    "game": "easy-random",
-   "ply": 11
+   "ply": 11,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 12
+   "ply": 12,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 13
+   "ply": 13,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 14
+   "ply": 14,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 15
+   "ply": 15,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 16
+   "ply": 16,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 17
+   "ply": 17,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 18
+   "ply": 18,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 19
+   "ply": 19,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 20
+   "ply": 20,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 21
+   "ply": 21,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 22
+   "ply": 22,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 23
+   "ply": 23,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 24
+   "ply": 24,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 25
+   "ply": 25,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 26
+   "ply": 26,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 27
+   "ply": 27,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 28
+   "ply": 28,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 29
+   "ply": 29,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 30
+   "ply": 30,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 31
+   "ply": 31,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 32
+   "ply": 32,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 33
+   "ply": 33,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 34
+   "ply": 34,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 35
+   "ply": 35,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 36
+   "ply": 36,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 37
+   "ply": 37,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 38
+   "ply": 38,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 39
+   "ply": 39,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 40
+   "ply": 40,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 41
+   "ply": 41,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 42
+   "ply": 42,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 43
+   "ply": 43,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 44
+   "ply": 44,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 45
+   "ply": 45,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 46
+   "ply": 46,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 47
+   "ply": 47,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 48
+   "ply": 48,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 49
+   "ply": 49,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 50
+   "ply": 50,
+   "theirNextPlayer": 1
   },
   {
    "game": "easy-random",
-   "ply": 51
+   "ply": 51,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 0
+   "ply": 0,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 1
+   "ply": 1,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 2
+   "ply": 2,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 3
+   "ply": 3,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 4
+   "ply": 4,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 5
+   "ply": 5,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 6
+   "ply": 6,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 7
+   "ply": 7,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 8
+   "ply": 8,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 9
+   "ply": 9,
+   "theirNextPlayer": 0
   },
   {
    "game": "random-0",
-   "ply": 10
+   "ply": 10,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 11
+   "ply": 11,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 12
+   "ply": 12,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 13
+   "ply": 13,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 14
+   "ply": 14,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 15
+   "ply": 15,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 16
+   "ply": 16,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 17
+   "ply": 17,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 18
+   "ply": 18,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 19
+   "ply": 19,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 20
+   "ply": 20,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 21
+   "ply": 21,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 22
+   "ply": 22,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 23
+   "ply": 23,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 24
+   "ply": 24,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 25
+   "ply": 25,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 26
+   "ply": 26,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 27
+   "ply": 27,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 28
+   "ply": 28,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 29
+   "ply": 29,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 30
+   "ply": 30,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 31
+   "ply": 31,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 32
+   "ply": 32,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 33
+   "ply": 33,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 34
+   "ply": 34,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 35
+   "ply": 35,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 36
+   "ply": 36,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 37
+   "ply": 37,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 38
+   "ply": 38,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 39
+   "ply": 39,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 40
+   "ply": 40,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 41
+   "ply": 41,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 42
+   "ply": 42,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 43
+   "ply": 43,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 44
+   "ply": 44,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 45
+   "ply": 45,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 46
+   "ply": 46,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 47
+   "ply": 47,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 48
+   "ply": 48,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 49
+   "ply": 49,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 50
+   "ply": 50,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 51
+   "ply": 51,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 52
+   "ply": 52,
+   "theirNextPlayer": 0
   },
   {
    "game": "random-0",
-   "ply": 53
+   "ply": 53,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 54
+   "ply": 54,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 55
+   "ply": 55,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 56
+   "ply": 56,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 57
+   "ply": 57,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 58
+   "ply": 58,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 59
+   "ply": 59,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 60
+   "ply": 60,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 61
+   "ply": 61,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 62
+   "ply": 62,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 63
+   "ply": 63,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 64
+   "ply": 64,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 65
+   "ply": 65,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 66
+   "ply": 66,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 67
+   "ply": 67,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 68
+   "ply": 68,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 69
+   "ply": 69,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 70
+   "ply": 70,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 71
+   "ply": 71,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 72
+   "ply": 72,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 73
+   "ply": 73,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 74
+   "ply": 74,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 75
+   "ply": 75,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-0",
-   "ply": 76
+   "ply": 76,
+   "theirNextPlayer": 0
   },
   {
    "game": "random-1",
-   "ply": 0
+   "ply": 0,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 1
+   "ply": 1,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 2
+   "ply": 2,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 3
+   "ply": 3,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 4
+   "ply": 4,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 5
+   "ply": 5,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 6
+   "ply": 6,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 7
+   "ply": 7,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 8
+   "ply": 8,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 9
+   "ply": 9,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 10
+   "ply": 10,
+   "theirNextPlayer": 0
   },
   {
    "game": "random-1",
-   "ply": 11
+   "ply": 11,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 12
+   "ply": 12,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 13
+   "ply": 13,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 14
+   "ply": 14,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 15
+   "ply": 15,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 16
+   "ply": 16,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 17
+   "ply": 17,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 18
+   "ply": 18,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 19
+   "ply": 19,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 20
+   "ply": 20,
+   "theirNextPlayer": 0
   },
   {
    "game": "random-1",
-   "ply": 21
+   "ply": 21,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 22
+   "ply": 22,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 23
+   "ply": 23,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 24
+   "ply": 24,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 25
+   "ply": 25,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 26
+   "ply": 26,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 27
+   "ply": 27,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 28
+   "ply": 28,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 29
+   "ply": 29,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 30
+   "ply": 30,
+   "theirNextPlayer": 0
   },
   {
    "game": "random-1",
-   "ply": 31
+   "ply": 31,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 32
+   "ply": 32,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 33
+   "ply": 33,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 34
+   "ply": 34,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 35
+   "ply": 35,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 36
+   "ply": 36,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 37
+   "ply": 37,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 38
+   "ply": 38,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 39
+   "ply": 39,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 40
+   "ply": 40,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 41
+   "ply": 41,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 42
+   "ply": 42,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 43
+   "ply": 43,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 44
+   "ply": 44,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 45
+   "ply": 45,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 46
+   "ply": 46,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 47
+   "ply": 47,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 48
+   "ply": 48,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 49
+   "ply": 49,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 50
+   "ply": 50,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 51
+   "ply": 51,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 52
+   "ply": 52,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 53
+   "ply": 53,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 54
+   "ply": 54,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 55
+   "ply": 55,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 56
+   "ply": 56,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 57
+   "ply": 57,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 58
+   "ply": 58,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 59
+   "ply": 59,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 60
+   "ply": 60,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 61
+   "ply": 61,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 62
+   "ply": 62,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-1",
-   "ply": 63
+   "ply": 63,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 0
+   "ply": 0,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 1
+   "ply": 1,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 2
+   "ply": 2,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 3
+   "ply": 3,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 4
+   "ply": 4,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 5
+   "ply": 5,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 6
+   "ply": 6,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 7
+   "ply": 7,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 8
+   "ply": 8,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 9
+   "ply": 9,
+   "theirNextPlayer": 0
   },
   {
    "game": "random-41",
-   "ply": 10
+   "ply": 10,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 11
+   "ply": 11,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 12
+   "ply": 12,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 13
+   "ply": 13,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 14
+   "ply": 14,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 15
+   "ply": 15,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 16
+   "ply": 16,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 17
+   "ply": 17,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 18
+   "ply": 18,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 19
+   "ply": 19,
+   "theirNextPlayer": 0
   },
   {
    "game": "random-41",
-   "ply": 20
+   "ply": 20,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 21
+   "ply": 21,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 22
+   "ply": 22,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 23
+   "ply": 23,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 24
+   "ply": 24,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 25
+   "ply": 25,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 26
+   "ply": 26,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 27
+   "ply": 27,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 28
+   "ply": 28,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 29
+   "ply": 29,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 30
+   "ply": 30,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 31
+   "ply": 31,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 32
+   "ply": 32,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 33
+   "ply": 33,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 34
+   "ply": 34,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 35
+   "ply": 35,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 36
+   "ply": 36,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 37
+   "ply": 37,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 38
+   "ply": 38,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 39
+   "ply": 39,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 40
+   "ply": 40,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 41
+   "ply": 41,
+   "theirNextPlayer": 0
   },
   {
    "game": "random-41",
-   "ply": 42
+   "ply": 42,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 43
+   "ply": 43,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 44
+   "ply": 44,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 45
+   "ply": 45,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 46
+   "ply": 46,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 47
+   "ply": 47,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 48
+   "ply": 48,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 49
+   "ply": 49,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 50
+   "ply": 50,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 51
+   "ply": 51,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 52
+   "ply": 52,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 53
+   "ply": 53,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 54
+   "ply": 54,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 55
+   "ply": 55,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 56
+   "ply": 56,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 57
+   "ply": 57,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 58
+   "ply": 58,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 59
+   "ply": 59,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 60
+   "ply": 60,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 61
+   "ply": 61,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 62
+   "ply": 62,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 63
+   "ply": 63,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 64
+   "ply": 64,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 65
+   "ply": 65,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 66
+   "ply": 66,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 67
+   "ply": 67,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 68
+   "ply": 68,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 69
+   "ply": 69,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 70
+   "ply": 70,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 71
+   "ply": 71,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 72
+   "ply": 72,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 73
+   "ply": 73,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 74
+   "ply": 74,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 75
+   "ply": 75,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 76
+   "ply": 76,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 77
+   "ply": 77,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 78
+   "ply": 78,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 79
+   "ply": 79,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 80
+   "ply": 80,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 81
+   "ply": 81,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 82
+   "ply": 82,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 83
+   "ply": 83,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 84
+   "ply": 84,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 85
+   "ply": 85,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 86
+   "ply": 86,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 87
+   "ply": 87,
+   "theirNextPlayer": 0
   },
   {
    "game": "random-41",
-   "ply": 88
+   "ply": 88,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 89
+   "ply": 89,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 90
+   "ply": 90,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 91
+   "ply": 91,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 92
+   "ply": 92,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 93
+   "ply": 93,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 94
+   "ply": 94,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 95
+   "ply": 95,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 96
+   "ply": 96,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 97
+   "ply": 97,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 98
+   "ply": 98,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 99
+   "ply": 99,
+   "theirNextPlayer": 0
   },
   {
    "game": "random-41",
-   "ply": 100
+   "ply": 100,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 101
+   "ply": 101,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 102
+   "ply": 102,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 103
+   "ply": 103,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 104
+   "ply": 104,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 105
+   "ply": 105,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 106
+   "ply": 106,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 107
+   "ply": 107,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 108
+   "ply": 108,
+   "theirNextPlayer": 1
   },
   {
    "game": "random-41",
-   "ply": 109
+   "ply": 109,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 0,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 1,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 2,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 3,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 4,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 5,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 6,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 7,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 8,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 9,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 10,
+   "theirNextPlayer": 0
+  },
+  {
+   "game": "random-90",
+   "ply": 11,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 12,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 13,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 14,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 15,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 16,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 17,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 18,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 19,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 20,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 21,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 22,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 23,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 24,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 25,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 26,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 27,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 28,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 29,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 30,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 31,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 32,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 33,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 34,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 35,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 36,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 37,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 38,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 39,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 40,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 41,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 42,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 43,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 44,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 45,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 46,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 47,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 48,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 49,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 50,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 51,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 52,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 53,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 54,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 55,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 56,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 57,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 58,
+   "theirNextPlayer": 0
+  },
+  {
+   "game": "random-90",
+   "ply": 59,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 60,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 61,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 62,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 63,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 64,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 65,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 66,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 67,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 68,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 69,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 70,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 71,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 72,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 73,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 74,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 75,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 76,
+   "theirNextPlayer": 0
+  },
+  {
+   "game": "random-90",
+   "ply": 77,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 78,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 79,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 80,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 81,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 82,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 83,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 84,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 85,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 86,
+   "theirNextPlayer": 0
+  },
+  {
+   "game": "random-90",
+   "ply": 87,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 88,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 89,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 90,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 91,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 92,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 93,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 94,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 95,
+   "theirNextPlayer": 1
+  },
+  {
+   "game": "random-90",
+   "ply": 96,
+   "theirNextPlayer": 1
   }
  ],
  "files": {
   "boards": {
    "name": "boards.i8",
+   "stride": 138,
+   "type": "int8"
+  },
+  "next": {
+   "name": "next.i8",
    "stride": 138,
    "type": "int8"
   },

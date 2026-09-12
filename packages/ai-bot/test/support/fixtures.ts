@@ -32,7 +32,9 @@ export interface Manifest {
   constants: Record<string, number | boolean | number[] | string>;
   initialBoard: number[];
   games: FixtureGame[];
-  records: { game: string; ply: number }[];
+  /** Which of [A8-51]'s deals the corpus turned out to hold. */
+  coverage: Record<string, boolean>;
+  records: { game: string; ply: number; theirNextPlayer: number }[];
   files: Record<string, { name: string; stride: number; type: string }>;
 }
 
@@ -40,6 +42,18 @@ export interface FixturePosition {
   game: string;
   ply: number;
   position: AzulJSON;
+  /** The action our game played here, in our encoding. */
+  action: number;
+  /**
+   * The original's board after that action, in canonical form — from the
+   * perspective of whoever it has to move [A8-36].
+   */
+  theirs: Int8Array;
+  /**
+   * `0` when the original leaves the same seat to move. Compared against our
+   * engine's answer, this is what recognises `no-centre-take`.
+   */
+  theirNextPlayer: number;
   /** The original's board, 138 int8. */
   board: Int8Array;
   /** Its `valid_moves`, by their action. */
@@ -74,11 +88,13 @@ export function weightsRecord(): {
 export function fixtures(): FixturePosition[] {
   const data = manifest();
   const boards = read(data.files['boards'].name);
+  const nexts = read(data.files['next'].name);
   const masks = read(data.files['masks'].name);
   const policy = read(data.files['policy'].name);
   const value = read(data.files['value'].name);
 
   const byGame = new Map<string, AzulJSON[]>();
+  const actionsOf = new Map<string, number[]>();
   for (const game of data.games) {
     const positions: AzulJSON[] = [];
     const s = newGame(game.seed);
@@ -88,6 +104,7 @@ export function fixtures(): FixturePosition[] {
     }
     if (!s.isTerminal) throw new Error(`fixture game ${game.id} did not replay to its end`);
     byGame.set(game.id, positions);
+    actionsOf.set(game.id, game.actions);
   }
 
   return data.records.map((record, i) => {
@@ -101,6 +118,9 @@ export function fixtures(): FixturePosition[] {
       game: record.game,
       ply: record.ply,
       position,
+      action: actionsOf.get(record.game)![record.ply],
+      theirs: new Int8Array(nexts.buffer, nexts.byteOffset + i * 138, 138),
+      theirNextPlayer: record.theirNextPlayer,
       board: new Int8Array(boards.buffer, boards.byteOffset + i * 138, 138),
       mask: new Uint8Array(masks.buffer, masks.byteOffset + i * 180, 180),
       policy: new Float32Array(policy.buffer.slice(policy.byteOffset + i * 720, policy.byteOffset + (i + 1) * 720)),

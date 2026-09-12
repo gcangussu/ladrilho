@@ -12,6 +12,7 @@ What it writes, under `test/fixtures/`:
   manifest.json   everything readable: games as seed + actions, the record
                   index, the constants, the versions, the checksums
   boards.i8       the original's board per record, 138 int8
+  next.i8         its board after the ply our game played, canonical, 138 int8
   masks.u8        its `valid_moves` per record, 180 bytes of 0/1
   policy.f32      the raw policy its network returned, 180 little-endian float32
   value.f32       the value it returned, 2 little-endian float32
@@ -28,7 +29,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from encoder import encode
+from encoder import encode, their_action
 from upstream import (
     CHECKPOINT,
     CHECKPOINT_SHA256,
@@ -99,7 +100,10 @@ def main() -> None:
 
     initial = game.getInitBoard().copy()
 
+    played = {(g["id"], ply): action for g in work["games"] for ply, action in enumerate(g["actions"])}
+
     boards, masks, policies, values, index = bytearray(), bytearray(), bytearray(), bytearray(), []
+    nexts = bytearray()
     for record in work["positions"]:
         position = record["position"]
         board = encode(position)
@@ -109,10 +113,30 @@ def main() -> None:
         masks += bytes(1 if bit else 0 for bit in valid)
         policies += struct.pack("<180f", *[float(p) for p in pi])
         values += struct.pack("<2f", *[float(x) for x in v])
-        index.append({"game": record["game"], "ply": record["ply"]})
+
+        # The ply our game actually played, applied by the original with the
+        # universe draw, exactly as its search applies one: `make_move(a, 0,
+        # random_seed)` on the canonical board, then the canonical form of what
+        # comes back [A8-36].
+        action = their_action(played[(record["game"], record["ply"])])
+        assert valid[action], f"{record['game']} ply {record['ply']}: the original calls it illegal"
+        after, next_player = game.getNextState(board, 0, action, random_seed=settings["universeSeed"])
+        canonical = game.getCanonicalForm(after, next_player)
+        nexts += np.asarray(canonical, dtype=np.int8).tobytes()
+        index.append(
+            {
+                "game": record["game"],
+                "ply": record["ply"],
+                # 0 when the original leaves the same seat to move, which is
+                # how [A8-36] recognises `no-centre-take` without either side
+                # deciding a rule for the other.
+                "theirNextPlayer": int(next_player),
+            }
+        )
 
     FIXTURES.mkdir(parents=True, exist_ok=True)
     (FIXTURES / "boards.i8").write_bytes(bytes(boards))
+    (FIXTURES / "next.i8").write_bytes(bytes(nexts))
     (FIXTURES / "masks.u8").write_bytes(bytes(masks))
     (FIXTURES / "policy.f32").write_bytes(bytes(policies))
     (FIXTURES / "value.f32").write_bytes(bytes(values))
@@ -136,9 +160,11 @@ def main() -> None:
             }
             for g in work["games"]
         ],
+        "coverage": work["coverage"],
         "records": index,
         "files": {
             "boards": {"name": "boards.i8", "stride": 138, "type": "int8"},
+            "next": {"name": "next.i8", "stride": 138, "type": "int8"},
             "masks": {"name": "masks.u8", "stride": 180, "type": "uint8"},
             "policy": {"name": "policy.f32", "stride": 180, "type": "float32"},
             "value": {"name": "value.f32", "stride": 2, "type": "float32"},

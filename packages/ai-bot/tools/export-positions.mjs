@@ -92,6 +92,35 @@ function hasEmptyBagDeal(game) {
   return game.deals.some((d) => d.bagBefore === 0);
 }
 
+/**
+ * Does this game deal a display that finds the bag at exactly 0 and takes its
+ * whole four from the recycled lid?
+ *
+ * The neighbouring arm of `setup_new_round`, which `hasShortDisplay` excludes
+ * by construction rather than by luck: there the recycle happens between
+ * displays instead of inside one.
+ */
+function hasWholeDisplayFromLid(game) {
+  return game.deals.some((d) => d.bagBefore > 0 && d.bagBefore < 20 && d.bagBefore % 4 === 0);
+}
+
+/**
+ * The deals worth having, by name.
+ *
+ * The first two are [A8-51]'s, and the export fails without them. The third is
+ * its neighbour, and it is rare enough that demanding it would make the corpus
+ * depend on finding a needle: it needs a refill that starts with the bag at
+ * exactly 4, 8, 12 or 16. It is searched for and recorded either way, so the
+ * suite asserts what the fixtures hold rather than what they were hoped to.
+ */
+const WANTED = [
+  ['shortDisplay', 'a display short of the bag', hasShortDisplay, true],
+  ['emptyBagDeal', 'a deal after a bag left at zero', hasEmptyBagDeal, true],
+  ['wholeDisplayFromLid', 'a display taken whole from the lid', hasWholeDisplayFromLid, false],
+];
+/** How many random games to look through for the rare one. */
+const SCAN_LIMIT = 250;
+
 const sink = [];
 const games = [
   playGame('steady-easy', 20260911, ['steady', 'easy'], sink),
@@ -102,32 +131,32 @@ const games = [
 // Floor-heavy random play is what reaches [A8-51]'s rare deal, so random games
 // are scanned until both conditions are covered rather than hoped for.
 let scanned = 0;
+const missing = () => WANTED.filter(([, , holds]) => !games.some(holds));
 while (
-  scanned < 60 &&
-  (games.filter((g) => g.id.startsWith('random')).length < 2 ||
-    !games.some(hasShortDisplay) ||
-    !games.some(hasEmptyBagDeal))
+  scanned < SCAN_LIMIT &&
+  (games.filter((g) => g.id.startsWith('random')).length < 2 || missing().length > 0)
 ) {
   const seed = 19910101 + scanned * 104729;
   const candidate = [];
   const game = playGame(`random-${scanned}`, seed, [`random:${seed}`, `random:${seed + 1}`], candidate);
   scanned++;
-  const wantedShort = !games.some(hasShortDisplay) && hasShortDisplay(game);
-  const wantedEmpty = !games.some(hasEmptyBagDeal) && hasEmptyBagDeal(game);
-  if (wantedShort || wantedEmpty || games.filter((g) => g.id.startsWith('random')).length < 2) {
+  const fills = missing().some(([, , holds]) => holds(game));
+  if (fills || games.filter((g) => g.id.startsWith('random')).length < 2) {
     games.push(game);
     sink.push(...candidate);
   }
 }
 
-if (!games.some(hasShortDisplay)) {
-  throw new Error('no game deals a display short of the bag; [A8-51] cannot be satisfied');
+for (const [, description, , required] of missing()) {
+  if (required) throw new Error(`no game holds ${description}; [A8-51] cannot be satisfied`);
+  process.stderr.write(`not found in ${scanned} random games: ${description}\n`);
 }
-if (!games.some(hasEmptyBagDeal)) throw new Error('no game recycles a bag left at exactly 0');
+/** Which deals the corpus turned out to hold, for the manifest [A8-51]. */
+const coverage = Object.fromEntries(WANTED.map(([key, , holds]) => [key, games.some(holds)]));
 
 const kept = new Set(games.map((g) => g.id));
 const positions = sink.filter((record) => kept.has(record.game));
-writeFileSync(`${WORK}/positions.json`, `${JSON.stringify({ games, positions })}\n`);
+writeFileSync(`${WORK}/positions.json`, `${JSON.stringify({ games, positions, coverage })}\n`);
 process.stderr.write(
   `${games.length} games, ${positions.length} plies, ${scanned} random games scanned\n` +
     games

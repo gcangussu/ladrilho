@@ -89,9 +89,16 @@ describe('exp [A8-49]', () => {
     // Inside `|x| < 2^-28` the answer is the branch's `1 + x` and nothing
     // else. 1e-300 cannot see that — `1 + 1e-300` is 1 — so the probe that
     // decides it is one an ulp of 1 can hold.
-    // Mutation: `return 1 + x` -> `return 1` in `exp`; red here.
+    //
+    // The argument is chosen to decide the branch's *gate* as well: on about
+    // 99.6% of that range the polynomial path below agrees with `1 + x`
+    // anyway, and 1e-10 is one of those. Here the two differ by an ulp, and
+    // `1 + x` is the correctly-rounded one.
+    // Mutations: `return 1 + x` -> `return 1`, and `ax < TINY` -> `ax < 0`;
+    // red here, and the second one red nowhere else.
+    expect(exp(1.1056700000000001e-10)).toBe(1 + 1.1056700000000001e-10);
+    expect(exp(-1.1056700000000001e-10)).toBe(1 - 1.1056700000000001e-10);
     expect(exp(1e-10)).toBe(1 + 1e-10);
-    expect(exp(-1e-10)).toBe(1 - 1e-10);
     // Within an ulp of `Math.E`, not equal to it: fdlibm's exp is under an
     // ulp of the true value but not correctly rounded, and `Math.E` is.
     expect(ulpsApart(exp(1), Math.E)).toBeLessThanOrEqual(1);
