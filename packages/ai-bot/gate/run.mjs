@@ -46,7 +46,8 @@ await build({
   platform: 'neutral',
   target: 'es2025',
 });
-const { match, wilsonLowerBound, tier, WIDE_SEEDS, expertChooser } = await import(BUNDLE);
+const { match, wilsonLowerBound, tier, WIDE_SEEDS, expertChooser, seedLimit, mayWriteBaseline } =
+  await import(BUNDLE);
 
 /** `expert` over a session built for this game alone [A8-30]. */
 function expert() {
@@ -143,16 +144,8 @@ function provenance() {
   }
 }
 
-// `pnpm -F ai-bot gate 8` runs a smoke pass. pnpm also forwards a bare `--`,
-// and `Number('--')` is NaN, which would silently slice the seed list to
-// nothing — so the argument is validated rather than trusted.
-const argument = process.argv.slice(2).find((value) => value !== '--');
-const limit = argument === undefined ? WIDE_SEEDS.length : Number(argument);
-if (!Number.isInteger(limit) || limit <= 0 || limit > WIDE_SEEDS.length) {
-  throw new Error(`a seed count must be a whole number in 1..${WIDE_SEEDS.length}, not ${argument}`);
-}
-const seeds = WIDE_SEEDS.slice(0, limit);
-const full = seeds.length === WIDE_SEEDS.length;
+const seeds = WIDE_SEEDS.slice(0, seedLimit(process.argv.slice(2), WIDE_SEEDS.length));
+const full = mayWriteBaseline(seeds.length, WIDE_SEEDS.length);
 process.stderr.write(
   `gate: ${seeds.length} games against sharp, then ${seeds.length} of the null` +
     `${full ? '' : ' (smoke run: gate/baseline.json will be left alone)'}\n`,

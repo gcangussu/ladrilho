@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { WIDE_SEEDS, wilsonLowerBound } from 'bot/arena';
 import { newGame, toJSON } from 'engine';
-import { expertChooser } from '../gate/chooser.js';
+import { expertChooser, mayWriteBaseline, seedLimit } from '../gate/chooser.js';
 import { manifest } from './support/fixtures.js';
 
 const PACKAGE = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -116,6 +116,23 @@ describe('the gate result [A8-32]', () => {
     expect(play.complete).toBe(false);
     expect(play.curtailed).toBe(false); // and there is no clock to curtail it
     expect(position.legalActions).toContain(play.action);
+  });
+
+  it('[A8-32] lets only a full run write the baseline, whatever it was asked for', () => {
+    // The committed result costs an hour and a half of play. `pnpm -F ai-bot
+    // gate -- 8` used to run zero games — pnpm forwards the `--`, and
+    // `Number('--')` is NaN — and write the file anyway, so the guard is the
+    // one protecting the artefact, and it is decided here rather than by
+    // having run the command once.
+    expect(seedLimit(['--', '8'], 200)).toBe(8);
+    expect(seedLimit(['8'], 200)).toBe(8);
+    expect(seedLimit(['--'], 200)).toBe(200);
+    expect(seedLimit([], 200)).toBe(200);
+    for (const bad of ['0', '-1', '1.5', 'abc', '999', '']) {
+      expect(() => seedLimit([bad], 200), bad).toThrow(/whole number/);
+    }
+    expect(mayWriteBaseline(200, 200)).toBe(true);
+    for (const partial of [1, 8, 199]) expect(mayWriteBaseline(partial, 200)).toBe(false);
   });
 
   it('[A8-32] carries a digest of the numbers it was written from', () => {

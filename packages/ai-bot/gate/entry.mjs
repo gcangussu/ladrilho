@@ -8,4 +8,4 @@
  */
 
 export { match, wilsonLowerBound, tier, WIDE_SEEDS } from 'bot/arena';
-export { expertChooser } from './chooser.js';
+export { expertChooser, mayWriteBaseline, seedLimit } from './chooser.js';

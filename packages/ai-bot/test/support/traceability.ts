@@ -49,9 +49,10 @@ function sources(dirs: string[]): { file: string; text: string }[] {
       const path = join(dir, entry);
       if (statSync(path).isDirectory()) walk(path);
       // `.mjs` too, unlike `bot`'s copy of this scanner: *0008*'s gate lane is
-      // a Node script, and its citations are the only ones [A8-30] has. Left
-      // out, the `gate/` entry in `sourceDirs` would match no file at all and
-      // the directory would be listed as covered while contributing nothing.
+      // a Node script, and walking only `.ts` would leave the `gate/` entry in
+      // `sourceDirs` matching no file at all — a directory listed as scanned
+      // while contributing nothing. No requirement's coverage rests on this:
+      // the suite cites the lane's requirements itself.
       else if (/\.(?:tsx?|mjs)$/.test(entry)) out.push({ file: path, text: readFileSync(path, 'utf8') });
     }
   };
