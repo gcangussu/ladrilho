@@ -2,7 +2,7 @@
 title: A learned opponent
 author: Gabriel Cangussu
 date: 2026-09-11
-status: pending
+status: done
 depends-on: 0003 — Computer opponent
 summary: >
   A fourth difficulty setting that plays like a player someone else has already

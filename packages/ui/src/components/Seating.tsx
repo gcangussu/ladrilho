@@ -1,6 +1,6 @@
 import type { JSX } from '@solidjs/web';
 import { For } from 'solid-js';
-import type { Seating as SeatingModel, Tier } from '../opponent.js';
+import { LEVELS, type Level, type Seating as SeatingModel } from '../opponent.js';
 
 /**
  * Who plays each seat [W6-1], [W6-5].
@@ -19,12 +19,23 @@ import type { Seating as SeatingModel, Tier } from '../opponent.js';
  * longer describes a match.
  */
 
-/** The tiers, by a name a player can act on rather than a number [W6-1]. */
-const CHOICES: readonly { value: Tier | 'human'; label: string }[] = [
+/**
+ * The settings, by a name a player can act on rather than a number [W6-1].
+ *
+ * `expert` is offered only when the gate of [0008 A8-30] passed, which is what
+ * [0008 A8-33] asks: intent 0006 said the learned opponent ships only if it
+ * wins clearly more often than the hardest setting we built.
+ */
+const LABELS: Readonly<Record<Level, string>> = {
+  easy: 'Computer — gentle',
+  steady: 'Computer — steady',
+  sharp: 'Computer — ruthless',
+  expert: 'Computer — expert',
+};
+
+const CHOICES: readonly { value: Level | 'human'; label: string }[] = [
   { value: 'human', label: 'Person' },
-  { value: 'easy', label: 'Computer — gentle' },
-  { value: 'steady', label: 'Computer — steady' },
-  { value: 'sharp', label: 'Computer — ruthless' },
+  ...LEVELS.map((level) => ({ value: level, label: LABELS[level] })),
 ];
 
 export function Seating(props: {
@@ -32,9 +43,9 @@ export function Seating(props: {
   onChoose: (seating: SeatingModel) => void;
 }): JSX.Element {
   const choose = (seat: 0 | 1, value: string): void => {
-    const tier = value === 'human' ? null : (value as Tier);
-    const players: [Tier | null, Tier | null] = [...props.seating.players];
-    players[seat] = tier;
+    const level = value === 'human' ? null : (value as Level);
+    const players: [Level | null, Level | null] = [...props.seating.players];
+    players[seat] = level;
     props.onChoose({ players });
   };
 

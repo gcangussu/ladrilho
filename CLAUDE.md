@@ -12,9 +12,22 @@ TypeScript implementation of the board game Azul, delivered in three roadmap ste
    player (spec 0004), the arena (0005), and the interface seam (0006). The search runs in a
    worker; `packages/ui` reaches it only through `src/opponent.ts`.
 
-Since the three steps, one thing has been added across two of them: the engine reports how it
-scored a round (`applyExplained`, spec 0007) and the interface shows it. `apply` is untouched and
-is still what the vectors and the bot drive.
+Since the three steps, two things have been added. The engine reports how it scored a round
+(`applyExplained`, spec 0007) and the interface shows it; `apply` is untouched and is still what
+the vectors and the bot drive. And a fourth package, **`packages/ai-bot`** (spec 0008), ports a
+published AlphaZero-style player — network, search, and the deal it guesses — onto our engine as
+the `expert` difficulty. It sits beside `bot` rather than inside it: `bot` is code we can read and
+explain, and that is worth keeping separate from weights we cannot. It ships because a gate said
+so (`pnpm -F ai-bot gate`, 72% of 200 games against `sharp`), and `packages/ui` offers the setting
+only while the committed `packages/ai-bot/gate/baseline.json` says `passed: true`.
+
+Two things about `ai-bot` cost real time if discovered late. Its fixtures are recorded from the
+original Python program by `pnpm -F ai-bot fixtures`, which needs `uv` and pinned wheels — and its
+generator asserts, as it records, that it captured the non-`fastmath` build, because numba can
+leak `fastmath` across compilations in one process while its cache is cold. And the exactness of
+[0008 A8-38] rests on arithmetic order: the search reproduces NumPy 2's float32 `Qs` rounding by
+rounding after every step, and `src/exp.ts` is a hand-written fdlibm `exp` because `Math.exp` may
+differ in the last bit between browsers.
 
 The repo is a **pnpm monorepo**. Check what is actually on disk before assuming a package is
 present.
@@ -100,6 +113,11 @@ pnpm typecheck
 pnpm -F engine test              # the engine suite
 pnpm -F engine test vectors      # the oracle replays only
 pnpm -F engine bench             # the [E1-58] / [E1-59] budgets, non-gating
+
+pnpm -F ai-bot test              # the expert: board, network, search, sessions, the gate result
+pnpm -F ai-bot gate              # the [A8-30] lane: 400 games, ~90 minutes, writes gate/baseline.json
+pnpm -F ai-bot fixtures          # re-record from the original; needs uv. A deliberate act
+pnpm -F ai-bot weights           # regenerate src/weights.ts from the checkpoint. Likewise
 
 pnpm -F bot test                 # the move chooser: evaluation, search, tiers
 pnpm -F bot bench                # the [B4-47]..[B4-50] budgets, non-gating, bundled

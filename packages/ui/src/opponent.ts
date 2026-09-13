@@ -17,19 +17,38 @@
 
 import type { AzulJSON, Player } from 'engine';
 import type { Choice, Tier } from 'bot';
+import type { ExpertChoice } from 'ai-bot';
+import baseline from 'ai-bot/gate/baseline.json' with { type: 'json' };
 
-export type { Choice, Tier };
+export type { Choice, ExpertChoice, Tier };
+
+/**
+ * What can occupy a seat [0008 A8-33]: one of `bot`'s three tiers, or the
+ * expert of *0008*, which is not a tier of `bot` but a second package the
+ * interface reaches beside it ([0004 B4-1]).
+ */
+export type Level = Tier | 'expert';
+
+/**
+ * Is `expert` offered at all [0008 A8-33]?
+ *
+ * Intent 0006 said it ships only if it wins clearly more often than our
+ * hardest setting, and the gate of [0008 A8-30] is what answered that. The
+ * committed result decides, so this is read from the file the lane wrote
+ * rather than from a flag somebody can set.
+ */
+export const EXPERT_AVAILABLE: boolean = baseline.passed === true;
 
 /** What the main thread sends [W6-14]. */
 export interface ToWorker {
   generation: number;
   position: AzulJSON;
-  tier: Tier;
+  tier: Level;
 }
 
 /** What comes back [W6-14], [W6-15]. */
 export type FromWorker =
-  | { generation: number; ok: true; choice: Choice }
+  | { generation: number; ok: true; choice: Choice | ExpertChoice }
   | { generation: number; ok: false; message: string };
 
 /**
@@ -97,9 +116,9 @@ export function workerThinker(): Thinker {
   };
 }
 
-/** Who occupies each seat: `null` is a person, a tier is the computer [W6-1]. */
+/** Who occupies each seat: `null` is a person, a level is the computer [W6-1]. */
 export interface Seating {
-  players: [Tier | null, Tier | null];
+  players: [Level | null, Level | null];
 }
 
 /** Two people — 0003's game, unchanged. */
@@ -110,17 +129,26 @@ export function isComputer(seating: Seating, seat: Player): boolean {
   return seating.players[seat] !== null;
 }
 
-/** The tier at `seat`, or `null` when a person sits there. */
-export function tierAt(seating: Seating, seat: Player): Tier | null {
+/** The level at `seat`, or `null` when a person sits there. */
+export function tierAt(seating: Seating, seat: Player): Level | null {
   return seating.players[seat];
 }
 
-const TIERS: readonly Tier[] = ['easy', 'steady', 'sharp'];
+/**
+ * What a seat may be set to, in the order the interface offers them [W6-1].
+ *
+ * `expert` is here only when the gate passed: a setting the interface does not
+ * offer is not one a URL may name either, or a link would seat an opponent
+ * nobody can choose ([0008 A8-33]).
+ */
+export const LEVELS: readonly Level[] = EXPERT_AVAILABLE
+  ? ['easy', 'steady', 'sharp', 'expert']
+  : ['easy', 'steady', 'sharp'];
 
-/** A tier name, or `null` for a person; anything else is discarded [W6-4]. */
-function parseSeat(raw: string | null): Tier | null | undefined {
+/** A level name, or `null` for a person; anything else is discarded [W6-4]. */
+function parseSeat(raw: string | null): Level | null | undefined {
   if (raw === null || raw === 'human') return null;
-  return TIERS.includes(raw as Tier) ? (raw as Tier) : undefined;
+  return LEVELS.includes(raw as Level) ? (raw as Level) : undefined;
 }
 
 /**

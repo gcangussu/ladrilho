@@ -56,10 +56,20 @@ async function until(predicate: () => boolean, ms: number, what: string): Promis
   }
 }
 
-/** Tiles left on the board, read off the status the interface renders. */
+/**
+ * Tiles left on the board, read off the status the interface renders.
+ *
+ * Per paragraph, not off the whole block: `textContent` runs the lines
+ * together, so "Round 5" followed by "0 tiles left…" reads as "50 tiles left".
+ * The comparisons below survived that because a constant prefix cancels, but
+ * the number was never the one on screen.
+ */
 function tilesLeft(doc: Document): number {
-  const text = doc.querySelector('.status')?.textContent ?? '';
-  return Number(/(\d+) tiles left/.exec(text)?.[1] ?? -1);
+  for (const line of doc.querySelectorAll('.status p')) {
+    const match = /^(\d+) tiles left/.exec(line.textContent ?? '');
+    if (match !== null) return Number(match[1]);
+  }
+  return -1;
 }
 
 describe('the opponent against a real worker [W6-30]', () => {
@@ -117,6 +127,51 @@ describe('the opponent against a real worker [W6-30]', () => {
     // gap would be that. Off it, the loop keeps running throughout.
     expect(worst, `longest main-thread gap was ${worst.toFixed(0)}ms`).toBeLessThan(400);
   }, 60_000);
+
+  /**
+   * [W6-30] as extended by [0008 A8-33]: a complete game against a real worker
+   * running `expert`.
+   *
+   * The only place any of it is real. The weights are a 630 KB module the
+   * worker's bundle carries, the sessions of [W6-40] live for the worker's
+   * lifetime, and intent 0006's one performance promise — the page stays alive
+   * however long it thinks — is only observable off the main thread.
+   */
+  it('[W6-30] [W6-40] plays a whole game against a real worker running expert', async () => {
+    const { doc, win } = await load('expert-expert');
+
+    let worst = 0;
+    let last = win.performance.now();
+    const timer = win.setInterval(() => {
+      const now = win.performance.now();
+      worst = Math.max(worst, now - last);
+      last = now;
+    }, 10);
+
+    try {
+      // Both seats are the expert, which is [W6-40]'s configuration: two
+      // sessions in one worker, each asked only about its own seat.
+      await until(
+        () => /thinking/i.test(doc.querySelector('.status')?.textContent ?? ''),
+        20_000,
+        'the thinking indicator',
+      );
+      await until(
+        () => /wins|draw/i.test(doc.querySelector('.game-over')?.textContent ?? ''),
+        600_000,
+        'the game to finish',
+      );
+    } finally {
+      win.clearInterval(timer);
+    }
+
+    const status = doc.querySelector('.status')?.textContent ?? '';
+    const verdict = doc.querySelector('.game-over')?.textContent ?? '';
+    expect(tilesLeft(doc), `status was ${JSON.stringify(status)}`).toBe(0);
+    expect(verdict, 'the verdict panel').toMatch(/wins|draw/i);
+    // [W6-26], [W6-35]: however long it thought, the page never froze.
+    expect(worst, `longest main-thread gap was ${worst.toFixed(0)}ms`).toBeLessThan(400);
+  }, 900_000);
 
   it('[W6-30] [W6-23] leaves the new-game control usable mid-search', async () => {
     const { doc } = await load('sharp-human');

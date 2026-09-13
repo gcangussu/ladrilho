@@ -173,10 +173,11 @@ type Selection = { source: number; color: Color } | null;
 
 ### Package and build
 
-- **[U3-7]** `packages/ui` MUST depend on `engine` and `bot` as workspace dependencies, and
-  `engine` MUST be the only dependency that carries any knowledge of **the rules of** Azul. `bot`
-  knows how to play but asks the engine what is legal; this requirement is about rules, not about
-  strategy. *(Widened by [0006 W6-28]; the parenthetical it replaces anticipated exactly this.)*
+- **[U3-7]** `packages/ui` MUST depend on `engine`, `bot` and `ai-bot` as workspace dependencies,
+  and `engine` MUST be the only dependency that carries any knowledge of **the rules of** Azul.
+  `bot` and `ai-bot` know how to play but ask the engine what is legal; this requirement is about
+  rules, not about strategy. *(Widened by [0006 W6-28]; the parenthetical it replaces anticipated
+  exactly this. Widened again by [0008 A8-33], for `ai-bot`.)*
 - **[U3-8]** The client MUST make **no network request at runtime**: no `fetch`,
   `XMLHttpRequest`, `WebSocket`, `navigator.sendBeacon`, dynamic `import()`, or asset addressed by
   an absolute URL. There is no server and there are no accounts.
@@ -694,10 +695,11 @@ budget.
   provider, which the testing guide names for real-browser needs. Layout requirements need a
   layout engine and a reload requirement needs a reload; excusing them because jsdom has neither
   would excuse nine requirements that came straight from an intent.
-- **[U3-74]** The suite MUST assert that `packages/ui`'s `dependencies` are exactly `engine`, `bot`
-  and the Solid v2 runtime [U3-10], and that the declared `vitest` range satisfies [U3-11]. An
-  allowlist, not a judgement about which packages "carry the rules" — adding one is a spec change
-  to [U3-7]. *(Widened by [0006 W6-28].)*
+- **[U3-74]** The suite MUST assert that `packages/ui`'s `dependencies` are exactly `engine`, `bot`,
+  `ai-bot` and the Solid v2 runtime [U3-10], that each workspace package is declared with a
+  `workspace:` range, and that the declared `vitest` range satisfies [U3-11]. An allowlist, not a
+  judgement about which packages "carry the rules" — adding one is a spec change to [U3-7].
+  *(Widened by [0006 W6-28], and again by [0008 A8-33].)*
 - **[U3-75]** The suite MUST include a source check over the **TypeScript** in `packages/ui/src`
   — `.ts` and `.tsx` — using the module layout of [U3-78], that fails on: a module-level numeric
   table of length 5, 7 or 25; either penalty ladder; any `%` expression whose right operand is `5`

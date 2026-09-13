@@ -453,8 +453,15 @@ describe('what crosses the boundary [W6-14]', () => {
  * against an engine state driven in parallel, not against the view.
  */
 describe('a whole game with a computer opponent [W6-29]', () => {
-  it('[W6-29] [W6-32] [W6-34] plays through, one request at a time', async () => {
-    const { screen, state, harness } = await mount('?seed=42&seating=human-easy');
+  // Once with a tier and once with the expert [W6-41]. The seam answers for
+  // both, so what differs is only which level the request names — but that is
+  // the whole of what the interface knows about the difference, and a loop
+  // that never ran with `expert` would leave [W6-40]'s configuration
+  // unexercised through the rendered interface.
+  it.each(['easy', 'expert'] as const)(
+    '[W6-29] [W6-32] [W6-34] [W6-41] plays through against %s, one request at a time',
+    async (level) => {
+    const { screen, state, harness } = await mount(`?seed=42&seating=human-${level}`);
     const parallel = newGame(state.view().seed);
     let answered = 0;
     let plies = 0;
@@ -484,7 +491,11 @@ describe('a whole game with a computer opponent [W6-29]', () => {
 
     expect(state.view().game.isTerminal).toBe(true);
     expect(answered).toBeGreaterThan(10);
-  }, 60_000);
+    // The requests really did name the level under test.
+    expect(harness.pending[0].tier).toBe(level);
+  },
+    60_000,
+  );
 });
 
 /**

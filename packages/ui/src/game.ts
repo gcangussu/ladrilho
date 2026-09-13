@@ -30,6 +30,7 @@ import {
   tierAt,
   workerThinker,
   type Choice,
+  type ExpertChoice,
   type Seating,
   type Thinker,
   type ToWorker,
@@ -67,7 +68,7 @@ export interface ViewModel {
    * be rendered [W6-24], [W6-25] — intent 0003 rules out explaining a move, and
    * [0003 U3-30] already rules out judging one before it is made.
    */
-  lastChoice: Choice | null;
+  lastChoice: Choice | ExpertChoice | null;
   /**
    * How the engine scored the most recent round [U3-82], or `null` before the
    * first one has scored.
@@ -108,8 +109,11 @@ let generation = 0;
 /** The seat a request is outstanding for, or `null` [W6-19], [W6-32]. */
 let thinking: Thinking = null;
 
-/** The last `Choice`, for [W6-25] only. Never rendered [W6-24]. */
-let lastChoice: Choice | null = null;
+/**
+ * The last choice, for [W6-25] only. Never rendered [W6-24] — which now
+ * covers `ExpertChoice.value` as well, a number in [-1, 1] rather than points.
+ */
+let lastChoice: Choice | ExpertChoice | null = null;
 
 /**
  * The most recent `RoundScoring`, or `null` [U3-82]. Replaced only by a later

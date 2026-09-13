@@ -16,11 +16,11 @@ const manifest = JSON.parse(readFileSync(join(HERE, '..', 'package.json'), 'utf8
   devDependencies: Record<string, string>;
 };
 
-/** `engine` and `bot` [U3-7] plus the Solid v2 runtime [U3-10]. */
-const ALLOWED = ['@solidjs/web', 'bot', 'engine', 'solid-js'];
+/** `engine`, `bot` and `ai-bot` [U3-7] plus the Solid v2 runtime [U3-10]. */
+const ALLOWED = ['@solidjs/web', 'ai-bot', 'bot', 'engine', 'solid-js'];
 
 describe('package manifest', () => {
-  it('[U3-74] declares exactly engine, bot and the Solid v2 runtime as dependencies', () => {
+  it('[U3-74] declares exactly engine, bot, ai-bot and the Solid v2 runtime as dependencies', () => {
     expect(Object.keys(manifest.dependencies).sort()).toEqual(ALLOWED);
   });
 
@@ -30,9 +30,12 @@ describe('package manifest', () => {
     }
   });
 
-  it('[U3-74] depends on engine and bot through the workspace, not registry copies [U3-7]', () => {
-    expect(manifest.dependencies['engine']).toMatch(/^workspace:/);
-    expect(manifest.dependencies['bot']).toMatch(/^workspace:/);
+  it('[U3-74] depends on engine, bot and ai-bot through the workspace, not registry copies [U3-7]', () => {
+    // Each knows how to play and asks the engine what is legal; `engine`
+    // remains the only one carrying the rules, which is what [U3-7] is about.
+    for (const workspace of ['engine', 'bot', 'ai-bot']) {
+      expect(manifest.dependencies[workspace], workspace).toMatch(/^workspace:/);
+    }
   });
 
   it('[U3-74] [U3-11] declares a vitest range that resolves to 5', () => {

@@ -2,7 +2,7 @@
 title: Expert opponent
 author: Gabriel Cangussu
 date: 2026-09-11
-status: draft
+status: implemented
 intent: 0006 — A learned opponent
 prefix: A8
 depends-on: 0001 — Engine core, 0004 — Computer opponent, 0005 — Opponent strength, 0006 — Opponent in the interface
@@ -23,7 +23,7 @@ fixtures that prove all four against the original, and the lane that decides whe
 Does not cover `bot`'s player. *0004 — Computer opponent* is unchanged by this document, and
 [0004 B4-1] and [0004 B4-32] stay true as written: `expert` is not a tier of `bot`, but a second
 package the interface reaches beside the first. The one edit to `packages/bot` is a single export
-line in its manifest, so the arena can be imported (proposed `[0005 M5-32]`). It changes no source,
+line in its manifest, so the arena can be imported ([0005 M5-32]). It changes no source,
 no test and no behaviour. Training is out of scope, and so is speed: intent 0006 excludes both,
 and this document sets no time budget.
 
@@ -63,7 +63,7 @@ game so far, not of the position alone. This spec keeps that behaviour ([A8-26])
 ([A8-27]). A fresh session is still a pure function of the position.
 
 The state lives in an explicit **session**, owned by whoever plays the game. In the interface that
-is the worker (proposed `[0006 W6-40]`); in the gate it is the lane, which builds fresh sessions for
+is the worker ([0006 W6-40]); in the gate it is the lane, which builds fresh sessions for
 every game ([A8-30]). The existing tiers opt out by doing nothing: `chooseMove` stays a stateless
 function, nothing here gives `bot` a session, and a caller that never asks for `expert` never
 creates one.
@@ -460,7 +460,7 @@ their action), its visit count `Ns`, its running value `Qs`, and per action `Nsa
   [A8-36] checks it ply by ply, and [A8-51] guarantees the recycle is among what it checks. Both
   constructors are the engine's supported way in ([0001 E1-61], [0001 E1-62]). This is a new
   production caller of that seam, so the seam's own suite gains a case in the new configuration
-  (proposed `[0001 E1-72]`).*
+  ([0001 E1-72]).*
 
 - **[A8-23]** `choose` MUST run exactly `simulations` simulations from the root, adding to whatever
   statistics the session already holds for the boards it passes through.
@@ -485,7 +485,7 @@ their action), its visit count `Ns`, its running value `Qs`, and per action `Nsa
   *The binding is the cheap half of "not shared between seats". It catches the easy mistake: one
   session answering both seats in a computer-against-computer game. The other half, a session
   carried into a second game, cannot be seen from a position. Preventing it is the owner's job:
-  proposed `[0006 W6-40]` in the interface, and [A8-30] in the gate.*
+  [0006 W6-40] in the interface, and [A8-30] in the gate.*
 
 - **[A8-27]** Two fresh sessions handed the same sequence of positions MUST return the same
   sequence of choices (`action`, `value`, `simulations`, `rootVisits`), on any machine and in any
@@ -723,9 +723,9 @@ setting.
 
 These are edits to four living specs. Identifiers are append-only: a widened requirement is edited
 in place, and a new one takes the next free number. The new identifiers named here —
-`[0001 E1-72]`, `[0005 M5-32]`, `[0006 W6-40]`, `[0006 W6-41]`, the next free numbers today — are
-proposals. They are written in backticks, as [0004 B4-9] wrote its proposed engine requirement, and
-they are fixed when they land.
+[0001 E1-72], [0005 M5-32], [0006 W6-40], [0006 W6-41] — were proposals when this document was
+written, in the manner of [0004 B4-9]'s proposed engine requirement. They have since landed in
+their own specs, and are cited here as the requirements they now are.
 
 - **[A8-47]** These amendments MUST land in their specs in the same change as the code that needs
   them, as [0006 W6-28] required of its own.
@@ -735,7 +735,7 @@ they are fixed when they land.
 | Requirement | Amendment |
 | --- | --- |
 | [0001 E1-61] | Widen "production callers pass a seed": `ai-bot` passes a shuffle derived from bag counts alone ([A8-22]). It is still a pure function of `(bag, index)`, so sharing it by reference across `clone` is sound. |
-| New, `[0001 E1-72]` | The engine suite MUST include a case in which a **clone** of a state built with an injected shuffle recycles the lid during a later `apply`. It MUST assert that the shuffle is called exactly once, with the recycled bag and the clone's `shufflesUsed`, and that the source state is unaffected. |
+| New, [0001 E1-72] | The engine suite MUST include a case in which a **clone** of a state built with an injected shuffle recycles the lid during a later `apply`. It MUST assert that the shuffle is called exactly once, with the recycled bag and the clone's `shufflesUsed`, and that the source state is unaffected. |
 
 *CLAUDE.md's new-caller rule. Until now the seam has been driven only by the conformance harness
 replaying recorded orders into states it never clones; the search drives it through `clone` on
@@ -752,7 +752,7 @@ every simulation.*
 
 | Requirement | Amendment |
 | --- | --- |
-| New, `[0005 M5-32]` | `bot`'s manifest MUST export the arena as `bot/arena`, so another workspace package can run a match. The arena's source, tests and behaviour are unchanged. |
+| New, [0005 M5-32] | `bot`'s manifest MUST export the arena as `bot/arena`, so another workspace package can run a match. The arena's source, tests and behaviour are unchanged. |
 
 ### To 0006 — Opponent in the interface
 
@@ -762,15 +762,15 @@ every simulation.*
 | *Data model* | `Seating.players` becomes `[Level \| null, Level \| null]`, with `type Level = Tier \| 'expert'` declared in `ui`. `ToWorker.tier` becomes `Level`. `FromWorker`'s `choice` and `lastChoice` become `Choice \| ExpertChoice`. |
 | [0006 W6-4] | Extend: the seating URL parameter accepts `expert`. |
 | [0006 W6-12] | Widen: the worker may import `ai-bot`, and stays the only thing in the client that does; [0006 W6-31]'s clause extends to `ai-bot`. The worker's bundle therefore carries the weights module — about 630 KB, which MUST stay under 1 MB — whatever tier it runs. Intent 0006's "plays exactly as it did before" is about play, and this cost to loading is accepted here, in writing. |
-| New, `[0006 W6-40]` | The worker MUST hold at most one `Expert` per seat, created on the first `expert` request for that seat, and MUST NOT let one outlive the worker. [0006 W6-13]'s termination on a new game or seating change is therefore also what ends every session. The per-seat logic MUST live in a module importable without a `Worker`. |
-| New, `[0006 W6-41]` | The fast suite MUST assert `[0006 W6-40]` with an `expert` on **both** seats: each seat's session is asked only about its own seat's positions, and a new game starts with none. [0006 W6-29]'s property test MUST also run with one seat `expert`. |
+| New, [0006 W6-40] | The worker MUST hold at most one `Expert` per seat, created on the first `expert` request for that seat, and MUST NOT let one outlive the worker. [0006 W6-13]'s termination on a new game or seating change is therefore also what ends every session. The per-seat logic MUST live in a module importable without a `Worker`. |
+| New, [0006 W6-41] | The fast suite MUST assert [0006 W6-40] with an `expert` on **both** seats: each seat's session is asked only about its own seat's positions, and a new game starts with none. [0006 W6-29]'s property test MUST also run with one seat `expert`. |
 | [0006 W6-15] | Extend: a throw from `createExpert` or `choose` is caught and reported the same way. |
 | [0006 W6-24], [0006 W6-25] | Unchanged, and they now cover `ExpertChoice.value`, which MUST NOT be rendered. |
 | [0006 W6-26], [0006 W6-35] | Unchanged, and applying to `expert`: the page stays responsive however long it thinks. This is intent 0006's one performance promise. |
 | [0006 W6-30] | Extend: the browser lane also plays one complete game against a real worker running `expert`. |
 | [0004 B4-47], [0004 B4-48] | Not amended. These are `bot`'s budgets and do not apply to `expert`; intent 0006 exempts it from intent 0003's "a couple of seconds at most". |
 
-*`[0006 W6-41]` exists for the same reason as `[0001 E1-72]`. Two computer seats in one worker is
+*[0006 W6-41] exists for the same reason as [0001 E1-72]. Two computer seats in one worker is
 exactly the configuration in which a session would first be shared by mistake, and nothing in
 0006's suite has ever held state between requests to find out.*
 
@@ -784,11 +784,11 @@ exactly the configuration in which a session would first be shared by mistake, a
 
 ## Open questions
 
-- **How much of the fixture set survives [A8-38]'s prefix rule?** `floor-overflow` is the only
-  deviation reachable in normal play, and a search exploring odd lines may trip it early. The floor
-  of one half is a guess, and the first generated fixtures will measure the real fraction. If it is
-  low, the choice is between accepting a shorter compared prefix and choosing games that avoid full
-  floors. Teaching the encoder a history it cannot see is not available from `AzulJSON`.
+- **How much of the fixture set survives [A8-38]'s prefix rule?** *Answered: 87%.* `floor-overflow`
+  is indeed the only deviation the recorded searches reach, and it arrives late — the earliest
+  cutting call is the 19th of 24 in one sequence, and the uniform-prior sequence is never cut at
+  all. 108 of 123 recorded calls are compared exactly. The floor of one half stands, with room to
+  spare, and neither fallback was needed.
 - **Should the lane also measure `expert` against `steady` and `easy`?** Intent 0006 asks only
   about the hardest setting, and so does [A8-31]. A fourth rung on [0005 M5-12]'s ladder would read
   naturally, but adding it is a change to 0005's gates, not to this spec.

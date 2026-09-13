@@ -31,6 +31,8 @@ const COMPONENTS = `components${sep}`;
 const SEAM = 'opponent.ts';
 /** What runs inside the worker [W6-12], [U3-78]. */
 const WORKER = 'worker.ts';
+/** The expert's per-seat sessions, which the worker owns [W6-40]. */
+const EXPERTS = 'experts.ts';
 
 interface Source {
   /** Path relative to `src`, so a failure reads as `components/App.tsx`. */
@@ -289,18 +291,28 @@ describe('the module layout the check runs against', () => {
    * contains no strategy" is a property of the import graph rather than a
    * promise — the same shape [U3-78] uses for "contains no rule".
    */
-  it('[W6-31] keeps bot out of the components and the state module', () => {
+  it('[W6-31] keeps bot and ai-bot out of the components and the state module', () => {
     // The ban is on those two, precisely. `worker.ts` imports `bot` because
-    // running the search is its job [W6-12], and `opponent.ts` imports its
-    // types; what must not happen is a component or the held state reaching
-    // strategy directly, because then a move could enter the game without
-    // passing `submit` [W6-8].
+    // running the search is its job [W6-12], `experts.ts` imports `ai-bot`
+    // because holding the expert's sessions is its job [W6-40], and
+    // `opponent.ts` imports their types; what must not happen is a component
+    // or the held state reaching strategy directly, because then a move could
+    // enter the game without passing `submit` [W6-8].
     for (const source of [...inComponents(src), ...inStateModule(src)]) {
-      expect(source.code, `${source.file} imports bot [W6-31]`).not.toMatch(/from\s+'bot'/);
+      for (const player of ['bot', 'ai-bot']) {
+        expect(source.code, `${source.file} imports ${player} [W6-31]`).not.toMatch(
+          new RegExp(`from\\s+'${player}'`),
+        );
+      }
     }
-    // The two that may really do, so the clause above is not vacuous.
+    // The ones that may really do, so the clause above is not vacuous.
     expect(src.find((s) => s.file === SEAM)!.code).toMatch(/from\s+'bot'/);
     expect(src.find((s) => s.file === WORKER)!.code).toMatch(/from\s+'bot'/);
+    expect(src.find((s) => s.file === EXPERTS)!.code).toMatch(/from\s+'ai-bot'/);
+    // `opponent.ts` reaches `ai-bot` for its types and for the committed gate
+    // result, which is what decides whether `expert` is offered at all
+    // ([0008 A8-33]).
+    expect(src.find((s) => s.file === SEAM)!.code).toMatch(/'ai-bot(?:\/[^']*)?'/);
   });
 
   /**
@@ -324,7 +336,7 @@ describe('the module layout the check runs against', () => {
     // Anything outside those two sides has to be accounted for here, or a
     // clause below would quietly stop covering it.
     const other = src.filter((s) => s.file !== STATE_MODULE && !s.file.startsWith(COMPONENTS));
-    expect(other.map((s) => s.file).sort()).toEqual([SEAM, 'main.tsx', WORKER].sort());
+    expect(other.map((s) => s.file).sort()).toEqual([SEAM, EXPERTS, 'main.tsx', WORKER].sort());
   });
 });
 

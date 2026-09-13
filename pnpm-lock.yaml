@@ -170,6 +170,9 @@ importers:
       '@solidjs/web':
         specifier: 2.0.0-rc.6
         version: 2.0.0-rc.6(solid-js@2.0.0-rc.6)
+      ai-bot:
+        specifier: workspace:*
+        version: link:../ai-bot
       bot:
         specifier: workspace:*
         version: link:../bot
