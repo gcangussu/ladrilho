@@ -2,7 +2,7 @@
  * The gate [A8-30], [A8-31], [A8-32]:
  *
  *   pnpm -F ai-bot gate            every seed of the wide list
- *   pnpm -F ai-bot gate -- 8       the first 8, for a smoke run
+ *   pnpm -F ai-bot gate 8          the first 8, printed and not written
  *
  * Intent 0006 says the expert ships only if it wins clearly more often than
  * our hardest setting — "at least 10% more likely to win: 60 or more games in
@@ -16,6 +16,11 @@
  * that spans games is done here — one loop and a formula imported from the
  * arena — rather than by teaching `match` about a new kind of entrant, which
  * would change every gate that already runs through it.
+ *
+ * Only a full run writes `gate/baseline.json`. A shorter one prints its
+ * numbers and leaves the file alone: the committed baseline costs an hour and
+ * a half of play, and a smoke run must not be able to replace it whatever it
+ * was asked for.
  */
 
 import { execSync } from 'node:child_process';
@@ -41,21 +46,11 @@ await build({
   platform: 'neutral',
   target: 'es2025',
 });
-const { match, wilsonLowerBound, tier, WIDE_SEEDS, createExpert } = await import(BUNDLE);
+const { match, wilsonLowerBound, tier, WIDE_SEEDS, expertChooser } = await import(BUNDLE);
 
-/**
- * `expert` as a chooser over a session built for this game alone [A8-30].
- *
- * Its work is reported as `nodes = simulations`, `depth = 0`, and neither
- * complete nor curtailed: the search is not depth-bounded and is never
- * curtailed, because this package has no clock to curtail it with [A8-2].
- */
+/** `expert` over a session built for this game alone [A8-30]. */
 function expert() {
-  const session = createExpert();
-  return (position) => {
-    const choice = session.choose(position);
-    return { action: choice.action, nodes: choice.simulations, curtailed: false, depth: 0, complete: false };
-  };
+  return expertChooser();
 }
 
 /** One game per seed, `first` on seat 0 and `second` on seat 1. */
@@ -90,6 +85,7 @@ function playSeries(label, first, second, seeds) {
     } else draws++;
     seats[seat]++;
     seatPoints[seat] += points;
+    // `meanScore` is `[a's, b's]`, not seat 0's and seat 1's.
     totals[0] += subjectFirst ? result.meanScore[0] : result.meanScore[1];
     totals[1] += subjectFirst ? result.meanScore[1] : result.meanScore[0];
     plies += result.plies;
@@ -122,9 +118,45 @@ function playSeries(label, first, second, seeds) {
   };
 }
 
-const limit = Number(process.argv[2] ?? WIDE_SEEDS.length);
+/**
+ * The commit these numbers came from, and whether anything the games ran on
+ * was uncommitted.
+ *
+ * Everything the play depends on: this package, the arena the lane plays
+ * through, and the engine underneath both. Recorded, never fatal — a failure
+ * here must not discard an hour and a half of completed play.
+ */
+function provenance() {
+  try {
+    const root = execSync('git rev-parse --show-toplevel', { cwd: PACKAGE }).toString().trim();
+    const head = execSync('git rev-parse HEAD', { cwd: root }).toString().trim();
+    const dirty = execSync(
+      'git status --porcelain -- packages/engine/src packages/bot/src packages/bot/arena' +
+        ' packages/ai-bot/src packages/ai-bot/gate',
+      { cwd: root },
+    )
+      .toString()
+      .trim();
+    return dirty === '' ? head : `${head}-dirty`;
+  } catch {
+    return 'unknown';
+  }
+}
+
+// `pnpm -F ai-bot gate 8` runs a smoke pass. pnpm also forwards a bare `--`,
+// and `Number('--')` is NaN, which would silently slice the seed list to
+// nothing — so the argument is validated rather than trusted.
+const argument = process.argv.slice(2).find((value) => value !== '--');
+const limit = argument === undefined ? WIDE_SEEDS.length : Number(argument);
+if (!Number.isInteger(limit) || limit <= 0 || limit > WIDE_SEEDS.length) {
+  throw new Error(`a seed count must be a whole number in 1..${WIDE_SEEDS.length}, not ${argument}`);
+}
 const seeds = WIDE_SEEDS.slice(0, limit);
-process.stderr.write(`gate: ${seeds.length} games against sharp, then ${seeds.length} of the null\n`);
+const full = seeds.length === WIDE_SEEDS.length;
+process.stderr.write(
+  `gate: ${seeds.length} games against sharp, then ${seeds.length} of the null` +
+    `${full ? '' : ' (smoke run: gate/baseline.json will be left alone)'}\n`,
+);
 
 const against = playSeries('expert vs sharp', expert, () => tier(SHARP), seeds);
 // The null [A8-31]: two identical players over the same seeds, played the same
@@ -134,8 +166,6 @@ const nullSeries = playSeries('expert vs expert', expert, expert, seeds);
 
 const passed = against.winrate >= THRESHOLD && nullSeries.winrate < THRESHOLD;
 const manifest = JSON.parse(readFileSync(`${PACKAGE}test/fixtures/manifest.json`, 'utf8'));
-const head = execSync('git rev-parse HEAD', { cwd: PACKAGE }).toString().trim();
-const dirty = execSync('git status --porcelain -- src gate', { cwd: PACKAGE }).toString().trim();
 
 const baseline = {
   winrate: against.winrate,
@@ -155,7 +185,7 @@ const baseline = {
   seeds: [...seeds],
   sharp: SHARP,
   simulations: 100,
-  commit: dirty === '' ? head : `${head}-dirty`,
+  commit: provenance(),
   checkpointSha256: manifest.checkpoint.sha256,
   upstreamCommit: manifest.upstream.commit,
   machine: {
@@ -173,15 +203,25 @@ baseline.digest = createHash('sha256')
   .digest('hex')
   .slice(0, 16);
 
-mkdirSync(`${PACKAGE}gate`, { recursive: true });
-writeFileSync(`${PACKAGE}gate/baseline.json`, `${JSON.stringify(baseline, null, 2)}\n`);
+if (full) {
+  mkdirSync(`${PACKAGE}gate`, { recursive: true });
+  writeFileSync(`${PACKAGE}gate/baseline.json`, `${JSON.stringify(baseline, null, 2)}\n`);
+}
 
 const pct = (n) => `${(100 * n).toFixed(1)}%`;
+// Which of [A8-31]'s two conditions decided it: a winrate below the bar is a
+// failure, a null that reaches the bar makes the comparison uninformative,
+// and they are not the same news.
+const verdict = passed
+  ? `PASSED (${pct(against.winrate)} against a null of ${pct(nullSeries.winrate)})`
+  : against.winrate < THRESHOLD
+    ? `FAILED: ${pct(against.winrate)} is below ${pct(THRESHOLD)}`
+    : `UNINFORMATIVE: the null itself reaches ${pct(nullSeries.winrate)}`;
 process.stdout.write(
   `\nexpert vs sharp: ${pct(against.winrate)} over ${against.games} games ` +
     `(lower bound ${pct(against.lowerBound)}), seat 0 ${pct(against.bySeat[0])} / seat 1 ${pct(against.bySeat[1])}\n` +
     `scores ${against.meanScore[0].toFixed(1)}–${against.meanScore[1].toFixed(1)}\n` +
     `null (expert vs expert): ${pct(nullSeries.winrate)}, seat 0 ${pct(nullSeries.bySeat[0])} / seat 1 ${pct(nullSeries.bySeat[1])}\n` +
-    `threshold ${pct(THRESHOLD)}: ${passed ? 'PASSED' : 'FAILED'}\n` +
-    `written to gate/baseline.json\n`,
+    `threshold ${pct(THRESHOLD)}: ${verdict}\n` +
+    `${full ? 'written to gate/baseline.json' : 'smoke run: gate/baseline.json left as it was'}\n`,
 );

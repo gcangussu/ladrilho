@@ -13,7 +13,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { WIDE_SEEDS } from 'bot/arena';
+import { WIDE_SEEDS, wilsonLowerBound } from 'bot/arena';
+import { newGame, toJSON } from 'engine';
+import { expertChooser } from '../gate/chooser.js';
 import { manifest } from './support/fixtures.js';
 
 const PACKAGE = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -25,6 +27,8 @@ interface Baseline {
   bySeat: [number, number];
   nullWinrate: number;
   nullBySeat: [number, number];
+  nullLowerBound: number;
+  lostSeeds: number[];
   threshold: number;
   passed: boolean;
   games: number;
@@ -71,9 +75,27 @@ describe('the gate result [A8-32]', () => {
   it('[A8-31] reports the Wilson bound, both seats, and the null beside them', () => {
     expect(baseline.wins + baseline.losses + baseline.draws).toBe(baseline.games);
     expect(baseline.winrate).toBeCloseTo((baseline.wins + baseline.draws / 2) / baseline.games, 12);
-    // A one-sided lower bound is below the estimate it bounds, and both are
-    // rates.
+    // The bound is the number [A8-31] asks the lane to report, so it is
+    // recomputed here rather than merely bounded: `<= winrate` alone let it
+    // move five points unnoticed.
+    expect(baseline.lowerBound).toBeCloseTo(
+      wilsonLowerBound(baseline.wins + baseline.draws / 2, baseline.games),
+      12,
+    );
+    expect(baseline.nullLowerBound).toBeCloseTo(
+      wilsonLowerBound(baseline.nullWinrate * baseline.games, baseline.games),
+      12,
+    );
     expect(baseline.lowerBound).toBeLessThanOrEqual(baseline.winrate);
+    // Every loss is a seed somebody can drill into [0005 M5-6].
+    expect(baseline.lostSeeds).toHaveLength(baseline.losses);
+    for (const seed of baseline.lostSeeds) expect(baseline.seeds).toContain(seed);
+    // With an even number of games the seats are played equally often, so
+    // their mean is the winrate — which pins both halves of a split that
+    // could otherwise be written freely.
+    expect(baseline.games % 2).toBe(0);
+    expect((baseline.bySeat[0] + baseline.bySeat[1]) / 2).toBeCloseTo(baseline.winrate, 12);
+    expect((baseline.nullBySeat[0] + baseline.nullBySeat[1]) / 2).toBeCloseTo(baseline.nullWinrate, 12);
     for (const rate of [baseline.winrate, baseline.lowerBound, ...baseline.bySeat, baseline.nullWinrate]) {
       expect(rate).toBeGreaterThanOrEqual(0);
       expect(rate).toBeLessThanOrEqual(1);
@@ -82,6 +104,18 @@ describe('the gate result [A8-32]', () => {
     // visible rather than averaged away.
     expect(baseline.bySeat).toHaveLength(2);
     expect(baseline.nullBySeat).toHaveLength(2);
+  });
+
+  it('[A8-30] reports expert’s work the way the lane says it does', () => {
+    // `match` only ever looks at `curtailed`, so the other three fields would
+    // drift unnoticed. The lane's chooser is a module for exactly this reason.
+    const position = toJSON(newGame(20260913));
+    const play = expertChooser({ simulations: 3 })(position);
+    expect(play.nodes).toBe(3); // nodes = simulations
+    expect(play.depth).toBe(0); // the search is not depth-bounded
+    expect(play.complete).toBe(false);
+    expect(play.curtailed).toBe(false); // and there is no clock to curtail it
+    expect(position.legalActions).toContain(play.action);
   });
 
   it('[A8-32] carries a digest of the numbers it was written from', () => {

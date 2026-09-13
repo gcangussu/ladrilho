@@ -285,7 +285,7 @@
     "milliseconds": 3600000
   },
   "simulations": 100,
-  "commit": "f6e7a400046997fd4ca3e49957901222cffbd02e-dirty",
+  "commit": "519f6206ea2976b262b5a1de22bdb594545afa6e",
   "checkpointSha256": "7d2fbf9203e46837668cd5b8f7bb29b7ea6f9e500f25f148c79e0038a76fe2f9",
   "upstreamCommit": "5d6d1f129b76659837f6afd6fb082e8da57e5428",
   "machine": {
@@ -296,6 +296,6 @@
     "memoryGb": 34,
     "node": "v24.20.0"
   },
-  "seconds": 8371,
+  "seconds": 3043,
   "digest": "ff462856ee953d85"
 }

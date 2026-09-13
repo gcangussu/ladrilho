@@ -350,7 +350,7 @@ opponent without ever making a mistake worth pointing at.
   identifier, or listed with a reason in the *Traceability exemptions* table, enforced exactly as
   [0003 U3-76] and [0004 B4-59] are.
 - **[M5-32]** `bot`'s manifest MUST export the arena as `bot/arena`, so another workspace package
-  can run a match. The arena's source, tests and behaviour are unchanged by this.
+  can run a match. No existing test or behaviour changes; one test is added, for the export itself.
 
   *Added by [0008 A8-30]: the expert's gate plays it against `sharp` one single-seed match at a
   time, and a second copy of the match harness would be a second answer to "how strong is it".

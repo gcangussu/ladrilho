@@ -48,7 +48,11 @@ function sources(dirs: string[]): { file: string; text: string }[] {
     for (const entry of readdirSync(dir).sort()) {
       const path = join(dir, entry);
       if (statSync(path).isDirectory()) walk(path);
-      else if (/\.tsx?$/.test(entry)) out.push({ file: path, text: readFileSync(path, 'utf8') });
+      // `.mjs` too, unlike `bot`'s copy of this scanner: *0008*'s gate lane is
+      // a Node script, and its citations are the only ones [A8-30] has. Left
+      // out, the `gate/` entry in `sourceDirs` would match no file at all and
+      // the directory would be listed as covered while contributing nothing.
+      else if (/\.(?:tsx?|mjs)$/.test(entry)) out.push({ file: path, text: readFileSync(path, 'utf8') });
     }
   };
   for (const dir of dirs) walk(dir);
