@@ -349,6 +349,12 @@ opponent without ever making a mistake worth pointing at.
 - **[M5-30]** Every requirement in this document MUST be either cited by at least one test, by
   identifier, or listed with a reason in the *Traceability exemptions* table, enforced exactly as
   [0003 U3-76] and [0004 B4-59] are.
+- **[M5-32]** `bot`'s manifest MUST export the arena as `bot/arena`, so another workspace package
+  can run a match. The arena's source, tests and behaviour are unchanged by this.
+
+  *Added by [0008 A8-30]: the expert's gate plays it against `sharp` one single-seed match at a
+  time, and a second copy of the match harness would be a second answer to "how strong is it".
+  Exporting the arena is what keeps there being one.*
 
 ### Traceability exemptions
 

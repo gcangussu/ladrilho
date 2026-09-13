@@ -8,6 +8,9 @@
  * minutes and lives in `ladder/`.
  */
 
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   apply,
@@ -304,5 +307,18 @@ describe('the reference opponents [M5-9], [M5-10]', () => {
     });
     expect(result.winrate).toBe(1);
     expect(result.meanScore[0]).toBeGreaterThan(result.meanScore[1] + 20);
+  });
+
+  it('[M5-32] is reachable from another workspace package, as bot/arena', () => {
+    // *0008*'s gate plays `expert` against `sharp` through this harness. A
+    // second copy of it would be a second answer to "how strong is it", so
+    // the manifest exports the one that exists.
+    const manifest = JSON.parse(
+      readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf8'),
+    ) as { exports: Record<string, string> };
+    expect(manifest.exports['./arena']).toBe('./arena/index.ts');
+    // And it is the entry this file's own imports come through, so what is
+    // exported is what is tested here.
+    expect(manifest.exports['.']).toBe('./src/index.ts');
   });
 });

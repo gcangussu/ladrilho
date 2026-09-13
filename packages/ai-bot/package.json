@@ -11,7 +11,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "weights": "bash tools/venv.sh tools/export_weights.py",
-    "fixtures": "node tools/export-positions.mjs && bash tools/venv.sh tools/generate_fixtures.py"
+    "fixtures": "node tools/export-positions.mjs && bash tools/venv.sh tools/generate_fixtures.py",
+    "gate": "node gate/run.mjs"
   },
   "dependencies": {
     "engine": "workspace:*"

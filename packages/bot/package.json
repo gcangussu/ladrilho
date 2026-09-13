@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Azul move chooser: evaluation, search and difficulty tiers (spec 0004).",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./arena": "./arena/index.ts"
   },
   "scripts": {
     "test": "vitest run",
