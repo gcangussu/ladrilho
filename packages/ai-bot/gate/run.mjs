@@ -129,12 +129,18 @@ function playSeries(label, first, second, seeds) {
  */
 function provenance() {
   try {
-    const root = execSync('git rev-parse --show-toplevel', { cwd: PACKAGE }).toString().trim();
-    const head = execSync('git rev-parse HEAD', { cwd: root }).toString().trim();
+    const quiet = { stdio: ['ignore', 'pipe', 'ignore'] };
+    const root = execSync('git rev-parse --show-toplevel', { cwd: PACKAGE, ...quiet })
+      .toString()
+      .trim();
+    const head = execSync('git rev-parse HEAD', { cwd: root, ...quiet }).toString().trim();
+    // The baseline this run is about to overwrite is excluded: a second full
+    // run before the first is committed would otherwise be marked dirty by its
+    // own output, and a marker that cries wolf stops being read.
     const dirty = execSync(
       'git status --porcelain -- packages/engine/src packages/bot/src packages/bot/arena' +
-        ' packages/ai-bot/src packages/ai-bot/gate',
-      { cwd: root },
+        " packages/ai-bot/src packages/ai-bot/gate ':(exclude)packages/ai-bot/gate/baseline.json'",
+      { cwd: root, ...quiet },
     )
       .toString()
       .trim();

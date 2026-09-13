@@ -52,6 +52,10 @@ describe('the gate result [A8-32]', () => {
     // Intent 0006 asks that a copy which does not clear the bar be written
     // down, so the file's presence is not conditional on the answer.
     expect(existsSync(BASELINE)).toBe(true);
+    // A committed baseline must name the commit it came from, so `unknown` —
+    // which the lane records when git is unavailable — is deliberately not
+    // committable. That fallback exists so a finished run's numbers survive to
+    // be looked at, not so they can be committed without provenance.
     expect(baseline.commit).toMatch(/^[0-9a-f]{40}(-dirty)?$/);
     expect(baseline.checkpointSha256).toBe(manifest().checkpoint.sha256);
     expect(baseline.upstreamCommit).toBe(manifest().upstream.commit);
