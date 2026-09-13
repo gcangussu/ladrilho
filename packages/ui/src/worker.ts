@@ -12,16 +12,15 @@
  * without a `Worker`.
  */
 
-import { chooseMove } from 'bot';
-import { createExpertSeats } from './experts.js';
+import { chooseFor, createExpertSeats } from './experts.js';
 import type { FromWorker, ToWorker } from './opponent.js';
 
 const experts = createExpertSeats();
 
 self.addEventListener('message', (event: MessageEvent<ToWorker>) => {
-  const { generation, position, tier } = event.data;
+  const { generation } = event.data;
   try {
-    const choice = tier === 'expert' ? experts.choose(position) : chooseMove(position, { tier });
+    const choice = chooseFor(event.data, experts);
     const reply: FromWorker = { generation, ok: true, choice };
     self.postMessage(reply);
   } catch (error) {

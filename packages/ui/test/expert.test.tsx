@@ -18,8 +18,14 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { apply, legalActions, newGame, toJSON, type AzulJSON } from 'engine';
 import type { Expert, ExpertChoice } from 'ai-bot';
-import { createExpertSeats } from '../src/experts.js';
-import { EXPERT_AVAILABLE, LEVELS, seatingFromUrl, seatingToUrl } from '../src/opponent.js';
+import { chooseFor, createExpertSeats } from '../src/experts.js';
+import {
+  EXPERT_AVAILABLE,
+  LEVELS,
+  expertAvailable,
+  seatingFromUrl,
+  seatingToUrl,
+} from '../src/opponent.js';
 
 const BASELINE = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -62,6 +68,16 @@ function stubExpert(asked: AzulJSON[][]): { create: () => Expert; created: () =>
 }
 
 describe('the expert is offered exactly when the gate passed [0008 A8-33]', () => {
+  it('[0008 A8-33] reads the gate rather than a constant', () => {
+    // Both answers, which the committed file alone cannot show: it passed, so
+    // a hard-coded `true` agrees with it today, and would go on agreeing the
+    // day a rerun did not clear the bar.
+    expect(expertAvailable({ passed: true })).toBe(true);
+    expect(expertAvailable({ passed: false })).toBe(false);
+    expect(expertAvailable({})).toBe(false);
+    expect(expertAvailable({ passed: 'yes' })).toBe(false);
+  });
+
   it('[0008 A8-33] [W6-1] offers it if and only if the committed baseline passed', () => {
     const baseline = JSON.parse(readFileSync(BASELINE, 'utf8')) as { passed: boolean };
     expect(EXPERT_AVAILABLE).toBe(baseline.passed);
@@ -83,6 +99,30 @@ describe('the expert is offered exactly when the gate passed [0008 A8-33]', () =
     }
     // A malformed value is discarded whole, as [0003 U3-13] discards a seed.
     expect(seatingFromUrl('?seating=wizard-human')).toBeNull();
+  });
+});
+
+describe('which player answers a request [W6-12]', () => {
+  it('[W6-12] routes expert to a session and every tier to bot', () => {
+    const asked: AzulJSON[][] = [];
+    const seats = createExpertSeats(stubExpert(asked).create);
+    const position = toJSON(newGame(31337));
+
+    // The expert's answer comes from the session: an `ExpertChoice` carries
+    // simulations and root visits where a `Choice` carries depth and nodes, so
+    // routing `expert` to a tier is visible here and nowhere else — the game
+    // would still finish, and the browser lane would not notice.
+    const expert = chooseFor({ generation: 1, position, tier: 'expert' }, seats);
+    expect(asked[0]).toHaveLength(1);
+    expect(expert).toHaveProperty('rootVisits');
+    expect(expert).not.toHaveProperty('nodes');
+
+    // A tier's does not, and does not disturb the sessions.
+    const tier = chooseFor({ generation: 2, position, tier: 'easy' }, seats);
+    expect(asked[0]).toHaveLength(1);
+    expect(tier).toHaveProperty('nodes');
+    expect(tier).not.toHaveProperty('rootVisits');
+    expect(position.legalActions).toContain(tier.action);
   });
 });
 

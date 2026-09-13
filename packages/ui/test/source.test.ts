@@ -306,9 +306,13 @@ describe('the module layout the check runs against', () => {
       }
     }
     // The ones that may really do, so the clause above is not vacuous.
+    // `experts.ts` is where both players are reached — it is what the worker
+    // asks, and what the fast suite can ask without a `Worker` — so `worker.ts`
+    // itself now imports neither directly.
     expect(src.find((s) => s.file === SEAM)!.code).toMatch(/from\s+'bot'/);
-    expect(src.find((s) => s.file === WORKER)!.code).toMatch(/from\s+'bot'/);
+    expect(src.find((s) => s.file === EXPERTS)!.code).toMatch(/from\s+'bot'/);
     expect(src.find((s) => s.file === EXPERTS)!.code).toMatch(/from\s+'ai-bot'/);
+    expect(src.find((s) => s.file === WORKER)!.code).toMatch(/from\s+'\.\/experts\.js'/);
     // `opponent.ts` reaches `ai-bot` for its types and for the committed gate
     // result, which is what decides whether `expert` is offered at all
     // ([0008 A8-33]).

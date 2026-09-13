@@ -30,6 +30,17 @@ export type { Choice, ExpertChoice, Tier };
 export type Level = Tier | 'expert';
 
 /**
+ * Is `expert` offered, given a gate result [0008 A8-33]?
+ *
+ * A function of the file rather than a constant read from it, so both answers
+ * can be tested: the committed baseline passed, so a hard-coded `true` would
+ * agree with it today and disagree the day a rerun did not clear the bar.
+ */
+export function expertAvailable(gate: { passed?: unknown }): boolean {
+  return gate.passed === true;
+}
+
+/**
  * Is `expert` offered at all [0008 A8-33]?
  *
  * Intent 0006 said it ships only if it wins clearly more often than our
@@ -37,7 +48,7 @@ export type Level = Tier | 'expert';
  * committed result decides, so this is read from the file the lane wrote
  * rather than from a flag somebody can set.
  */
-export const EXPERT_AVAILABLE: boolean = baseline.passed === true;
+export const EXPERT_AVAILABLE: boolean = expertAvailable(baseline);
 
 /** What the main thread sends [W6-14]. */
 export interface ToWorker {

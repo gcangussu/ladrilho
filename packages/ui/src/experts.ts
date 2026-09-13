@@ -13,7 +13,9 @@
  */
 
 import type { AzulJSON } from 'engine';
+import { chooseMove, type Choice } from 'bot';
 import { createExpert, type Expert, type ExpertChoice } from 'ai-bot';
+import type { ToWorker } from './opponent.js';
 
 export interface ExpertSeats {
   /** The choice for whichever seat is to move, from that seat's own session. */
@@ -32,6 +34,20 @@ export interface ExpertSeats {
  * Nothing here ends a session, because nothing needs to: [W6-13] terminates
  * the worker on a new game and on a seating change, and these die with it.
  */
+/**
+ * Which player answers a request [W6-12].
+ *
+ * The worker's only decision, and a function so the fast suite can make it:
+ * jsdom has no `Worker`, and routing `expert` to a tier would otherwise be
+ * invisible — the game would still finish, and the browser lane would not
+ * notice either.
+ */
+export function chooseFor(request: ToWorker, seats: ExpertSeats): Choice | ExpertChoice {
+  return request.tier === 'expert'
+    ? seats.choose(request.position)
+    : chooseMove(request.position, { tier: request.tier });
+}
+
 export function createExpertSeats(create: () => Expert = createExpert): ExpertSeats {
   const seats = new Map<number, Expert>();
   return {
