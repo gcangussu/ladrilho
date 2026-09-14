@@ -306,9 +306,10 @@ widened requirement is edited in place and a genuinely new one takes the next fr
   assert [W6-26] and [W6-35] by measuring main-thread task durations while a search is in flight.
 
   *Corrected by [0008 A8-33], and the correction is an admission: the first clause used to demand a
-  complete game from a tier, and the lane has never played one — three tests that play a single ply
-  each. Traceability could not see it, because [W6-30] is cited by name in every one of them and a
-  clause inside a requirement is invisible to a scanner that works in identifiers.*
+  complete game from a tier, and the lane has never played one — three tests, two of which play a
+  single ply and the third of which interrupts a search before one lands. Traceability could not
+  see it, because [W6-30] is cited by name in every one of them and a clause inside a requirement
+  is invisible to a scanner that works in identifiers.*
 
   *What the requirement should have asked for is what each player makes observable. A tier is
   stateless ([0004 B4-30]): one ply through a real worker proves the wiring, and every further ply

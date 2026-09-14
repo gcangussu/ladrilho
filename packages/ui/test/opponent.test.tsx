@@ -469,7 +469,16 @@ describe('a whole game with a computer opponent [W6-29]', () => {
       // `answered` would fail for a reason that has nothing to do with
       // [W6-29]. `skip` rather than an early return, so the reporter says so
       // too — a silently green case named for a player nobody can pick is the
-      // same lie in a quieter font.
+      // same lie in a quieter font. `it.for` rather than `it.each` is what
+      // makes that possible: it is the one that hands the callback a context,
+      // and its options go before the callback, which is where the timeout
+      // went.
+      //
+      // Seen to work: flipping this condition to `level === 'expert'` prints
+      // `↓ … plays through against expert` and the run ends `23 passed | 1
+      // skipped`, so the branch aborts before `mount` rather than after. It is
+      // unreachable while the committed gate passes, and that flip is its
+      // record.
       if (level === 'expert' && !EXPERT_AVAILABLE) skip();
     const { screen, state, harness } = await mount(`?seed=42&seating=human-${level}`);
     const parallel = newGame(state.view().seed);
