@@ -123,7 +123,7 @@ describe('the gate result [A8-32]', () => {
   });
 
   it('[A8-32] lets only a full run write the baseline, whatever it was asked for', () => {
-    // The committed result costs an hour and a half of play. `pnpm -F ai-bot
+    // The committed result costs the best part of an hour of play. `pnpm -F ai-bot
     // gate -- 8` used to run zero games — pnpm forwards the `--`, and
     // `Number('--')` is NaN — and write the file anyway, so the guard is the
     // one protecting the artefact, and it is decided here rather than by

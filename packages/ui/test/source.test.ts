@@ -300,8 +300,11 @@ describe('the module layout the check runs against', () => {
     // enter the game without passing `submit` [W6-8].
     for (const source of [...inComponents(src), ...inStateModule(src)]) {
       for (const player of ['bot', 'ai-bot']) {
+        // Subpaths too: `bot/arena` is exported since [0005 M5-32], and a
+        // component importing the match harness would otherwise pass the
+        // clause that exists to stop exactly that.
         expect(source.code, `${source.file} imports ${player} [W6-31]`).not.toMatch(
-          new RegExp(`from\\s+'${player}'`),
+          new RegExp(`from\\s+'${player}(?:/|')`),
         );
       }
     }

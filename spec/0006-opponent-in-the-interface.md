@@ -350,7 +350,6 @@ it keeps state between requests, which is what these two requirements are about.
 
 | Requirement | Why it is not testable |
 | --- | --- |
-| [W6-1] | The naming half is a judgement about words a player can act on; the offering half is asserted by [W6-29] and [W6-38]. |
 | [W6-24], [W6-25] | The absence of any commentary anywhere, unbounded as stated — 0003 exempts [U3-30] for the same reason, and [W6-31]'s source check covers the decidable part. |
 | [W6-27] | A budget, non-gating for the reason [0003 U3-67] is. |
 | [W6-28] | A process promise about what lands in which commit. |

@@ -26,6 +26,7 @@ import { pickName, picksIn } from '../src/components/Displays.jsx';
 import { floorLineName } from '../src/components/FloorLine.jsx';
 import { patternLineName } from '../src/components/PatternLines.jsx';
 import {
+  EXPERT_AVAILABLE,
   seatingFromUrl,
   seatingToUrl,
   type FromWorker,
@@ -461,6 +462,11 @@ describe('a whole game with a computer opponent [W6-29]', () => {
   it.each(['easy', 'expert'] as const)(
     '[W6-29] [W6-32] [W6-34] [W6-41] plays through against %s, one request at a time',
     async (level) => {
+      // `expert` is only a seating the URL accepts while the committed gate
+      // says it passed ([0008 A8-33]). Skipped rather than failed the day a
+      // rerun says otherwise: the case would quietly become hot-seat, and
+      // `answered` would fail for a reason that has nothing to do with [W6-29].
+      if (level === 'expert' && !EXPERT_AVAILABLE) return;
     const { screen, state, harness } = await mount(`?seed=42&seating=human-${level}`);
     const parallel = newGame(state.view().seed);
     let answered = 0;

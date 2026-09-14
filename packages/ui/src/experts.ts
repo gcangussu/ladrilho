@@ -25,7 +25,7 @@ export interface ExpertSeats {
 }
 
 /**
- * Which player answers a request [W6-1], [W6-40].
+ * Which player answers a request [W6-40].
  *
  * The worker's only decision, and a function so the fast suite can make it:
  * jsdom has no `Worker`, and routing `expert` to a tier would otherwise be

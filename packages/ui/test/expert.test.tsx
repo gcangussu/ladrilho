@@ -76,9 +76,15 @@ function stubExpert(asked: AzulJSON[][]): { create: () => Expert; created: () =>
  * imports — because `src/game.ts` deals on import and the selector is only
  * rendered by `App`.
  */
-async function mount(search: string): Promise<ReturnType<typeof render>> {
+async function mount(
+  search: string,
+  gate?: boolean,
+): Promise<{ screen: ReturnType<typeof render>; state: typeof import('../src/game.js') }> {
   history.replaceState({}, '', `/${search}`);
   vi.resetModules();
+  // The rendered control has to consult the gate, not just the module behind
+  // it, so a mounted interface can be given one that did not pass.
+  if (gate !== undefined) vi.doMock('ai-bot/gate/baseline.json', () => ({ default: { passed: gate } }));
   const state = await import('../src/game.js');
   state.useThinker({ think: () => new Promise(() => {}), terminate: () => {} });
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -86,7 +92,19 @@ async function mount(search: string): Promise<ReturnType<typeof render>> {
   const { App } = await import('../src/components/App.jsx');
   const screen = render(() => <App />);
   flush();
-  return screen;
+  return { screen, state };
+}
+
+/** The seat selectors, in seat order. */
+function selectors(screen: ReturnType<typeof render>): HTMLSelectElement[] {
+  return [...screen.container.querySelectorAll('select')];
+}
+
+/** Pick a value in a selector the way a player does. */
+function pick(select: HTMLSelectElement, value: string): void {
+  select.value = value;
+  select.dispatchEvent(new Event('change', { bubbles: true }));
+  flush();
 }
 
 /** `opponent.ts` as it loads against a given gate result. */
@@ -156,31 +174,74 @@ describe('the expert is offered exactly when the gate passed [0008 A8-33]', () =
 });
 
 describe('what the seat selector offers [W6-1]', () => {
-  it('[W6-1] [0008 A8-33] offers expert as a fourth difficulty, after sharp', async () => {
+  it('[W6-1] offers expert as a fourth difficulty, after sharp, by name', async () => {
     // Intent 0006: "picking it is picking one more difficulty setting, next to
-    // the other three". The order and the presence are the whole of what a
-    // player sees, and nothing looked at the control until now — every
+    // the other three". Nothing looked at the control until now — every
     // computer option could have been dropped with the suite green.
-    const screen = await mount('?seed=42');
-    const selects = [...screen.container.querySelectorAll('select')];
+    const { screen } = await mount('?seed=42', true);
+    const selects = selectors(screen);
     expect(selects).toHaveLength(2); // a seat each [W6-5]
     for (const select of selects) {
-      const values = [...select.options].map((option) => option.value);
-      expect(values).toEqual(
-        EXPERT_AVAILABLE
-          ? ['human', 'easy', 'steady', 'sharp', 'expert']
-          : ['human', 'easy', 'steady', 'sharp'],
-      );
-      // By a name a player can act on, never a number [W6-1].
-      const labels = [...select.options].map((option) => option.textContent ?? '');
-      expect(labels[0]).toMatch(/person/i);
-      for (const label of labels.slice(1)) expect(label).toMatch(/computer/i);
-      if (EXPERT_AVAILABLE) expect(labels.at(-1)).toMatch(/expert/i);
+      expect([...select.options].map((option) => option.value)).toEqual([
+        'human',
+        'easy',
+        'steady',
+        'sharp',
+        'expert',
+      ]);
+      // By a name a player can act on, never a number [W6-1], and in the order
+      // the settings rank: swapping two labels is a different interface.
+      expect([...select.options].map((option) => option.textContent)).toEqual([
+        'Person',
+        'Computer — gentle',
+        'Computer — steady',
+        'Computer — ruthless',
+        'Computer — expert',
+      ]);
     }
+  });
+
+  it('[0008 A8-33] [W6-1] offers no expert when the committed gate did not pass', async () => {
+    // [A8-33] is about the *interface*, so it is asserted about the rendered
+    // control and not only about the level list a module away. Written out
+    // rather than derived from `EXPERT_AVAILABLE`: a test that agrees with the
+    // model agrees with it when both are wrong.
+    const { screen } = await mount('?seed=42', false);
+    for (const select of selectors(screen)) {
+      expect([...select.options].map((option) => option.value)).toEqual([
+        'human',
+        'easy',
+        'steady',
+        'sharp',
+      ]);
+    }
+  });
+
+  it('[W6-1] [W6-3] seats the player that was picked, and deals a new game', async () => {
+    // What a player *does* with the control, which is the half the options
+    // list cannot see: an interface can offer "Computer — expert" and seat
+    // `easy`, and until this test every lane stayed green when it did.
+    const { screen, state } = await mount('?seed=42', true);
+    const [first, second] = selectors(screen);
+
+    for (const level of ['expert', 'easy', 'steady', 'sharp'] as const) {
+      const before = state.view().seed;
+      pick(first, level);
+      expect(state.view().seating.players[0], level).toBe(level);
+      expect(state.view().seating.players[1], level).toBeNull();
+      // [W6-3]: changing the seating deals a new game rather than swapping an
+      // opponent into one in progress.
+      expect(state.view().seed, level).not.toBe(before);
+    }
+
+    pick(second, 'expert');
+    expect(state.view().seating.players[1]).toBe('expert');
+    pick(second, 'human');
+    expect(state.view().seating.players[1]).toBeNull();
   });
 });
 
-describe('which player answers a request [W6-1], [W6-40]', () => {
+describe('which player answers a request [W6-40]', () => {
   it('[W6-40] routes expert to a session and every tier to bot', () => {
     const asked: AzulJSON[][] = [];
     const seats = createExpertSeats(stubExpert(asked).create);

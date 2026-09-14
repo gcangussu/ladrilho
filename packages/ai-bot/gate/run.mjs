@@ -125,7 +125,7 @@ function playSeries(label, first, second, seeds) {
  *
  * Everything the play depends on: this package, the arena the lane plays
  * through, and the engine underneath both. Recorded, never fatal — a failure
- * here must not discard an hour and a half of completed play.
+ * here must not discard the best part of an hour of completed play.
  */
 function provenance() {
   try {

@@ -692,7 +692,10 @@ budget.
   "No persistence" and "no network" are behaviour, and behaviour is testable.
 - **[U3-73]** The suite MUST check [U3-58], [U3-59], [U3-16], the positional half of [U3-81],
   and [U3-86], [U3-88], [U3-89], [U3-92] and [U3-94], under Vitest browser mode with the Playwright
-  provider, which the testing guide names for real-browser needs. Layout requirements need a
+  provider, which the testing guide names for real-browser needs. *(Extended by [0006 W6-30]: the
+  lane also plays complete games against a **real worker**, one per player the client offers —
+  jsdom has no `Worker`, no thread to keep free, and no way to tell a search that ran off it from
+  one that did not. The `expert` game is [0008 A8-33]'s.)* Layout requirements need a
   layout engine and a reload requirement needs a reload; excusing them because jsdom has neither
   would excuse nine requirements that came straight from an intent.
 - **[U3-74]** The suite MUST assert that `packages/ui`'s `dependencies` are exactly `engine`, `bot`,
