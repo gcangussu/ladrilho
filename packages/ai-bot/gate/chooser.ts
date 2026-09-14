@@ -31,8 +31,7 @@ export function seedLimit(argv: readonly string[], total: number): number {
  *
  * Only a full one. The committed baseline costs the best part of an hour of
  * play and is what decides whether the interface offers `expert` at all; a
- * smoke run
- * must not be able to replace it, whatever it was asked for.
+ * smoke run must not be able to replace it, whatever it was asked for.
  */
 export function mayWriteBaseline(count: number, total: number): boolean {
   return count === total;

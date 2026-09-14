@@ -301,11 +301,21 @@ widened requirement is edited in place and a genuinely new one takes the next fr
   [0003 U3-61] and [0003 U3-62] at every human ply, [W6-22] at every computer ply, and [W6-32]
   through [W6-34] throughout. Seeds MUST be recorded and reported on failure, as [0003 U3-70]
   requires.
-- **[W6-30]** The browser lane of [0003 U3-73] MUST play at least one complete game against a real
-  worker running a real tier, and MUST assert [W6-26] and [W6-35] by measuring main-thread task
-  durations while a search is in flight. *(Extended by [0008 A8-33]: it MUST also play one complete
-  game against a real worker running `expert`, which is the only place the weights are really
-  loaded and the only place its thinking is really off-thread.)*
+- **[W6-30]** The browser lane of [0003 U3-73] MUST play, against a **real worker**: at least one
+  real ply from a tier, and at least one **complete game** from `expert` ([0008 A8-33]). It MUST
+  assert [W6-26] and [W6-35] by measuring main-thread task durations while a search is in flight.
+
+  *Corrected by [0008 A8-33], and the correction is an admission: the first clause used to demand a
+  complete game from a tier, and the lane has never played one — three tests that play a single ply
+  each. Traceability could not see it, because [W6-30] is cited by name in every one of them and a
+  clause inside a requirement is invisible to a scanner that works in identifiers.*
+
+  *What the requirement should have asked for is what each player makes observable. A tier is
+  stateless ([0004 B4-30]): one ply through a real worker proves the wiring, and every further ply
+  re-proves it, which is why the fast suite's seam covers the rest. `expert` keeps a search tree for
+  the length of a game ([0008 A8-26]), so its sessions, their per-seat lifetime and their end with
+  the worker ([W6-40]) only appear over a whole game. That game is now in the lane and is the reason
+  the clause could be narrowed honestly rather than quietly.*
 
   *In the browser lane because it is the only place any of it is real: jsdom has no `Worker`, no
   main thread to block, and no way to tell a search that ran off-thread from one that did not.*

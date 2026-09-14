@@ -7,6 +7,12 @@
  * off-thread from one that did not. Asserting them there would be asserting
  * them about a stub.
  *
+ * What each player is asked to do here is [W6-30] as corrected: a tier plays a
+ * **ply**, because it is stateless ([0004 B4-30]) and one real round-trip
+ * through a real worker proves the wiring the fast suite's seam stands in for;
+ * `expert` plays a **whole game**, because its sessions and their per-seat
+ * lifetime ([W6-40]) exist only across one.
+ *
  * The interface is loaded into an iframe for the reasons `layout.test.ts` gives
  * — the viewport is exact and the frame can be torn down without taking the
  * runner with it. Here it also isolates the worker: terminating the frame ends

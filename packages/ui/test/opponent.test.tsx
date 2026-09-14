@@ -459,14 +459,18 @@ describe('a whole game with a computer opponent [W6-29]', () => {
   // the whole of what the interface knows about the difference, and a loop
   // that never ran with `expert` would leave [W6-40]'s configuration
   // unexercised through the rendered interface.
-  it.each(['easy', 'expert'] as const)(
+  it.for(['easy', 'expert'] as const)(
     '[W6-29] [W6-32] [W6-34] [W6-41] plays through against %s, one request at a time',
-    async (level) => {
+    { timeout: 60_000 },
+    async (level, { skip }) => {
       // `expert` is only a seating the URL accepts while the committed gate
       // says it passed ([0008 A8-33]). Skipped rather than failed the day a
       // rerun says otherwise: the case would quietly become hot-seat, and
-      // `answered` would fail for a reason that has nothing to do with [W6-29].
-      if (level === 'expert' && !EXPERT_AVAILABLE) return;
+      // `answered` would fail for a reason that has nothing to do with
+      // [W6-29]. `skip` rather than an early return, so the reporter says so
+      // too — a silently green case named for a player nobody can pick is the
+      // same lie in a quieter font.
+      if (level === 'expert' && !EXPERT_AVAILABLE) skip();
     const { screen, state, harness } = await mount(`?seed=42&seating=human-${level}`);
     const parallel = newGame(state.view().seed);
     let answered = 0;
@@ -500,7 +504,6 @@ describe('a whole game with a computer opponent [W6-29]', () => {
     // The requests really did name the level under test.
     expect(harness.pending[0].tier).toBe(level);
   },
-    60_000,
   );
 });
 
