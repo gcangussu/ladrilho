@@ -15,7 +15,9 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { render } from '@solidjs/testing-library';
+import { flush } from 'solid-js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { apply, legalActions, newGame, toJSON, type AzulJSON } from 'engine';
 import type { Expert, ExpertChoice } from 'ai-bot';
 import { chooseFor, createExpertSeats } from '../src/experts.js';
@@ -67,7 +69,58 @@ function stubExpert(asked: AzulJSON[][]): { create: () => Expert; created: () =>
   };
 }
 
+/**
+ * The interface, mounted on a given URL with a seam that never answers.
+ *
+ * The same route `opponent.test.tsx` takes — module reset, then two dynamic
+ * imports — because `src/game.ts` deals on import and the selector is only
+ * rendered by `App`.
+ */
+async function mount(search: string): Promise<ReturnType<typeof render>> {
+  history.replaceState({}, '', `/${search}`);
+  vi.resetModules();
+  const state = await import('../src/game.js');
+  state.useThinker({ think: () => new Promise(() => {}), terminate: () => {} });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  flush();
+  const { App } = await import('../src/components/App.jsx');
+  const screen = render(() => <App />);
+  flush();
+  return screen;
+}
+
+/** `opponent.ts` as it loads against a given gate result. */
+async function withGate(passed: boolean): Promise<typeof import('../src/opponent.js')> {
+  vi.resetModules();
+  vi.doMock('ai-bot/gate/baseline.json', () => ({ default: { passed } }));
+  return import('../src/opponent.js');
+}
+
+afterEach(() => {
+  vi.doUnmock('ai-bot/gate/baseline.json');
+  vi.resetModules();
+});
+
 describe('the expert is offered exactly when the gate passed [0008 A8-33]', () => {
+  it('[0008 A8-33] takes its answer from the committed file, in both directions', async () => {
+    // The direction the committed baseline cannot show. Ninety minutes of play
+    // exist to be able to say `passed: false`, and until this test nothing in
+    // the client was wired to that answer: a hard-coded `true`, or dropping
+    // the import altogether, agreed with the file as long as it said yes.
+    const failed = await withGate(false);
+    expect(failed.EXPERT_AVAILABLE).toBe(false);
+    expect(failed.LEVELS).toEqual(['easy', 'steady', 'sharp']);
+    expect(failed.seatingFromUrl('?seating=expert-human')).toBeNull();
+    // The three tiers keep working: intent 0006 says picking any other setting
+    // plays exactly as it did before.
+    expect(failed.seatingFromUrl('?seating=sharp-human')?.players).toEqual(['sharp', null]);
+
+    const gated = await withGate(true);
+    expect(gated.EXPERT_AVAILABLE).toBe(true);
+    expect(gated.LEVELS).toEqual(['easy', 'steady', 'sharp', 'expert']);
+    expect(gated.seatingFromUrl('?seating=expert-human')?.players).toEqual(['expert', null]);
+  });
+
   it('[0008 A8-33] reads the gate rather than a constant', () => {
     // Both answers, which the committed file alone cannot show: it passed, so
     // a hard-coded `true` agrees with it today, and would go on agreeing the
@@ -102,8 +155,33 @@ describe('the expert is offered exactly when the gate passed [0008 A8-33]', () =
   });
 });
 
-describe('which player answers a request [W6-12]', () => {
-  it('[W6-12] routes expert to a session and every tier to bot', () => {
+describe('what the seat selector offers [W6-1]', () => {
+  it('[W6-1] [0008 A8-33] offers expert as a fourth difficulty, after sharp', async () => {
+    // Intent 0006: "picking it is picking one more difficulty setting, next to
+    // the other three". The order and the presence are the whole of what a
+    // player sees, and nothing looked at the control until now — every
+    // computer option could have been dropped with the suite green.
+    const screen = await mount('?seed=42');
+    const selects = [...screen.container.querySelectorAll('select')];
+    expect(selects).toHaveLength(2); // a seat each [W6-5]
+    for (const select of selects) {
+      const values = [...select.options].map((option) => option.value);
+      expect(values).toEqual(
+        EXPERT_AVAILABLE
+          ? ['human', 'easy', 'steady', 'sharp', 'expert']
+          : ['human', 'easy', 'steady', 'sharp'],
+      );
+      // By a name a player can act on, never a number [W6-1].
+      const labels = [...select.options].map((option) => option.textContent ?? '');
+      expect(labels[0]).toMatch(/person/i);
+      for (const label of labels.slice(1)) expect(label).toMatch(/computer/i);
+      if (EXPERT_AVAILABLE) expect(labels.at(-1)).toMatch(/expert/i);
+    }
+  });
+});
+
+describe('which player answers a request [W6-1], [W6-40]', () => {
+  it('[W6-40] routes expert to a session and every tier to bot', () => {
     const asked: AzulJSON[][] = [];
     const seats = createExpertSeats(stubExpert(asked).create);
     const position = toJSON(newGame(31337));

@@ -164,9 +164,14 @@ type FromWorker =
 
 - **[W6-11]** The search MUST run in a dedicated worker, constructed from a module URL relative to
   the interface's own source. It MUST be the only thing in the client loaded at run time.
-- **[W6-12]** The worker MUST import `bot`, `ai-bot` and `engine` and MUST NOT import anything from
-  `src/components/`, and the state module MUST NOT be reachable from it. [W6-31]'s clause covers
-  `ai-bot` as it covers `bot`.
+- **[W6-12]** The worker's module graph MUST reach `bot`, `ai-bot` and `engine`, and MUST NOT reach
+  anything in `src/components/` or the state module. [W6-31]'s clause covers `ai-bot` as it covers
+  `bot`.
+
+  *Reachability rather than a list of imports, because the worker itself now imports neither
+  player: which one answers a request is a decision, and it lives in a module the fast suite can
+  call without a `Worker` ([W6-40]). Both halves of this requirement were already about what is
+  reachable; only the first half was written as if it were about import statements.*
 
   *(Widened by [0008 A8-33].)* The worker's bundle therefore carries the expert's weights — about
   630 KB, which MUST stay under 1 MB — whatever setting it runs. Intent 0006's "plays exactly as
@@ -265,7 +270,6 @@ widened requirement is edited in place and a genuinely new one takes the next fr
 | [0003 U3-74] | Widen the allowlist to `@solidjs/web`, `ai-bot`, `bot`, `engine`, `solid-js`, and assert each of the three workspace packages is a `workspace:` range. *(`ai-bot` added by [0008 A8-33].)* |
 | [0003 U3-8] | Widen: a same-origin module worker constructed from `new URL(…, import.meta.url)` is permitted, and is the **only** run-time load. `fetch`, `XMLHttpRequest`, `WebSocket`, `sendBeacon`, bare dynamic `import()` and absolute URLs stay forbidden. |
 | [0003 U3-75] | Amend the source check to match [0003 U3-8] as widened: permit the one worker construction by its exact shape, keep every other clause, and add the clause of [W6-31]. |
-| [0003 U3-73] | *(Extended by [0008 A8-33].)* The browser lane also plays one complete game against a real worker running `expert`. |
 | [0003 U3-18] | Widen: `submit` remains the single path and stays synchronous. What becomes asynchronous is *arrival* — the turn loop of [W6-6] — not `submit` itself. |
 | [0003 U3-20] | Unchanged, and extended by [W6-15]: a throw from the worker propagates as a throw here. |
 | [0003 U3-31] | Unchanged and now load-bearing: it is what lets [W6-8] use one path for both movers. |

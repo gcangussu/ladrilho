@@ -761,7 +761,7 @@ every simulation.*
 | [0006 W6-1] | Extend: offer `expert` as a fourth difficulty after `sharp`, if and only if [A8-33] allows. The test reads `packages/ai-bot/gate/baseline.json`. |
 | *Data model* | `Seating.players` becomes `[Level \| null, Level \| null]`, with `type Level = Tier \| 'expert'` declared in `ui`. `ToWorker.tier` becomes `Level`. `FromWorker`'s `choice` and `lastChoice` become `Choice \| ExpertChoice`. |
 | [0006 W6-4] | Extend: the seating URL parameter accepts `expert`. |
-| [0006 W6-12] | Widen: the worker may import `ai-bot`, and stays the only thing in the client that does; [0006 W6-31]'s clause extends to `ai-bot`. The worker's bundle therefore carries the weights module — about 630 KB, which MUST stay under 1 MB — whatever tier it runs. Intent 0006's "plays exactly as it did before" is about play, and this cost to loading is accepted here, in writing. |
+| [0006 W6-12] | Widen: the worker's module graph MUST reach `ai-bot`, and [0006 W6-31]'s clause extends to `ai-bot` — the components and the state module may not reach either player. The main-thread seam reaches `ai-bot` for its types and for the committed gate result, which is a JSON subpath and does not carry the weights; nothing else in the client reaches the package at all. The worker's bundle carries the weights module — about 630 KB, which MUST stay under 1 MB — whatever setting it runs. Intent 0006's "plays exactly as it did before" is about play, and this cost to loading is accepted here, in writing. |
 | New, [0006 W6-40] | The worker MUST hold at most one `Expert` per seat, created on the first `expert` request for that seat, and MUST NOT let one outlive the worker. [0006 W6-13]'s termination on a new game or seating change is therefore also what ends every session. The per-seat logic MUST live in a module importable without a `Worker`. |
 | New, [0006 W6-41] | The fast suite MUST assert [0006 W6-40] with an `expert` on **both** seats: each seat's session is asked only about its own seat's positions, and a new game starts with none. [0006 W6-29]'s property test MUST also run with one seat `expert`. |
 | [0006 W6-15] | Extend: a throw from `createExpert` or `choose` is caught and reported the same way. |
@@ -787,7 +787,7 @@ exactly the configuration in which a session would first be shared by mistake, a
 - **How much of the fixture set survives [A8-38]'s prefix rule?** *Answered: 87%.* `floor-overflow`
   is indeed the only deviation the recorded searches reach, and it arrives late — the earliest
   cutting call is the 19th of 24 in one sequence, and the uniform-prior sequence is never cut at
-  all. 108 of 123 recorded calls are compared exactly. The floor of one half stands, with room to
+  all. 107 of 123 recorded calls are compared exactly. The floor of one half stands, with room to
   spare, and neither fallback was needed.
 - **Should the lane also measure `expert` against `steady` and `easy`?** Intent 0006 asks only
   about the hardest setting, and so does [A8-31]. A fourth rung on [0005 M5-12]'s ladder would read

@@ -25,17 +25,7 @@ export interface ExpertSeats {
 }
 
 /**
- * Sessions for one worker's lifetime.
- *
- * Keyed by the seat to move, which is what a session binds to on its first
- * position ([0008 A8-26]): asking seat 1's session about seat 0's position
- * throws there, and this is the structure that makes that unreachable.
- *
- * Nothing here ends a session, because nothing needs to: [W6-13] terminates
- * the worker on a new game and on a seating change, and these die with it.
- */
-/**
- * Which player answers a request [W6-12].
+ * Which player answers a request [W6-1], [W6-40].
  *
  * The worker's only decision, and a function so the fast suite can make it:
  * jsdom has no `Worker`, and routing `expert` to a tier would otherwise be
@@ -48,6 +38,16 @@ export function chooseFor(request: ToWorker, seats: ExpertSeats): Choice | Exper
     : chooseMove(request.position, { tier: request.tier });
 }
 
+/**
+ * Sessions for one worker's lifetime.
+ *
+ * Keyed by the seat to move, which is what a session binds to on its first
+ * position ([0008 A8-26]): asking seat 1's session about seat 0's position
+ * throws there, and this is the structure that makes that unreachable.
+ *
+ * Nothing here ends a session, because nothing needs to: [W6-13] terminates
+ * the worker on a new game and on a seating change, and these die with it.
+ */
 export function createExpertSeats(create: () => Expert = createExpert): ExpertSeats {
   const seats = new Map<number, Expert>();
   return {

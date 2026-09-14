@@ -115,7 +115,8 @@ pnpm -F engine test vectors      # the oracle replays only
 pnpm -F engine bench             # the [E1-58] / [E1-59] budgets, non-gating
 
 pnpm -F ai-bot test              # the expert: board, network, search, sessions, the gate result
-pnpm -F ai-bot gate              # the [A8-30] lane: 400 games, ~90 minutes, writes gate/baseline.json
+pnpm -F ai-bot gate              # the [A8-30] lane: 400 games, ~90 minutes. Only a full run
+                                 # writes gate/baseline.json; `gate 8` prints and leaves it alone
 pnpm -F ai-bot fixtures          # re-record from the original; needs uv. A deliberate act
 pnpm -F ai-bot weights           # regenerate src/weights.ts from the checkpoint. Likewise
 
