@@ -130,12 +130,14 @@ describe('the ladder [M5-12], [M5-13]', () => {
     expect(run('steady vs easy', steady(), easy(), easy)).toBeGreaterThanOrEqual(0.7);
   });
 
-  it('[M5-13] [M5-17] sharp beats steady at least 55% of the time, at the same budget', () => {
+  it('[M5-13] [M5-17] sharp beats steady at least 62.5% of the time, at the same budget', () => {
     // Same node budget on both sides, so the whole difference is the horizon.
-    // The threshold was set between the measured null (40.0%) and the measured
-    // value (66.3%) rather than just above the null. Since the [0004 B4-30]
-    // tie fix those read 52.5% and 75.0%, and the threshold is unchanged.
-    expect(run('sharp vs steady', sharp(), steady(), steady)).toBeGreaterThanOrEqual(0.55);
+    // The threshold sits between the measured null and the measured value
+    // rather than just above the null: 52.5% and 75.0% since the [0004 B4-30]
+    // tie fix, so 62.5% is four games clear of `steady` in `sharp`'s chair and
+    // five under what `sharp` scores. It was 55% against the pre-fix 40.0% and
+    // 66.3%, which left it one game above the new null.
+    expect(run('sharp vs steady', sharp(), steady(), steady)).toBeGreaterThanOrEqual(0.625);
   });
 
   it('[M5-13] sharp beats easy at least 80% of the time', () => {

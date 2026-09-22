@@ -95,7 +95,7 @@ one below it. Current numbers, 40 recorded seeds:
 | --- | --- | --- | --- |
 | `easy` vs uniform random | ~50% | 100.0% | ≥ 95% |
 | `steady` vs `easy` | 62.5% | 90.0% | ≥ 70% |
-| `sharp` vs `steady` | 52.5% | 75.0% | ≥ 55% |
+| `sharp` vs `steady` | 52.5% | 75.0% | ≥ 62.5% |
 | `sharp` vs `easy` | 62.5% | 97.5% | ≥ 80% |
 
 `sharp` over `steady` is at the *same* node budget on both sides, so the whole 75.0% is the
@@ -139,15 +139,16 @@ that file says `passed: true`.
 
 **It does not pass today.** Its first gate won 72% (143 of 200), but that was measured against a
 `sharp` whose root search could break a tie on an alpha-beta bound and play a strictly worse
-move ([B4-30]). With that fixed, `sharp` itself got markedly stronger — 75.0% against `steady`,
-up from 66.3% — and the rerun gate reads:
+move ([B4-30]). With that fixed, the rerun over the same seeds reads:
 
 | | Winrate | Lower bound | W / L / D | Mean score (expert – `sharp`) |
 | --- | --- | --- | --- | --- |
 | First gate, old `sharp` | 72.0% | 66.5% | 143 / 55 / 2 | 43.5 – 36.4 |
 | Rerun, fixed `sharp` | **45.0%** | 39.3% | 88 / 108 / 4 | 41.0 – 45.4 |
 
-The null (expert against itself) is 42.75% both times — the expert is deterministic and did not
-change; `sharp` did. So `expert` is currently withdrawn from the interface, and a URL naming it
+The null (expert against itself) is 42.75% both times. The expert is deterministic and did not
+change, so the same player on the same deals going from 72% to 45% is the measure of how much
+stronger the fix made `sharp` at its shipped budget — which the ladder, at reduced budgets and
+with the fix in both of its players, cannot say. So `expert` is currently withdrawn from the interface, and a URL naming it
 is discarded like any other unknown setting. The package, its suite and its gate stay, so a
 stronger expert can be measured the same way.

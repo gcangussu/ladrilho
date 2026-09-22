@@ -201,13 +201,15 @@ interface Result {
   | --- | --- | --- | --- |
   | `easy` vs uniform random | ~50% | 100.0% | ≥ 95% |
   | `steady` vs `easy` | 62.5% | 90.0% | ≥ 70% |
-  | `sharp` vs `steady` | 52.5% | 75.0% | ≥ 55% |
+  | `sharp` vs `steady` | 52.5% | 75.0% | ≥ 62.5% |
   | `sharp` vs `easy` | 62.5% | 97.5% | ≥ 80% |
 
   Re-measured when [0004 B4-30] was made to break ties on exact values only. Before it, the root
   could take an alpha-beta bound equal to the best value as a tie and play a worse move, and the
   same lane read 88.8%, 66.3% against a 40.0% null, and 92.5%. The thresholds were set from those
-  figures and are unchanged.
+  figures. Three still sit well clear of their nulls; `sharp` vs `steady`'s 55% did not — it was
+  one game above the new 52.5% null — so it was re-derived the way it was first set, between the
+  null and the measurement: 62.5%, four games above the one and five below the other.
 
   Each threshold is set against the match's **null** — the same player against itself over the same
   seeds — because a threshold below its null gates nothing. The `steady` row is why the nulls are
@@ -253,6 +255,13 @@ interface Result {
 
   *The baseline is the memory this project would otherwise not have. Without it "is the bot better
   than it was in March" has no answer, and every eval-weight change is argued from taste.*
+
+  *Not yet met. No baseline has ever been committed: the wide lane (`ladder/wide.mjs`, writing
+  `arena/baseline.json`) takes hours at shipped budgets and has never been run to completion. The
+  first change this requirement should have caught — [0004 B4-30]'s tie fix, which moved the
+  gating lane by up to 8.7 points — therefore had nothing to update, and said so in its commit
+  message. Until the file exists, the gating lane's recorded figures in [M5-13] are the only
+  record of strength, with [M5-17]'s caveats.*
 
 ### The blunder audit
 
@@ -374,7 +383,7 @@ opponent without ever making a mistake worth pointing at.
 | Requirement | Why it is not testable |
 | --- | --- |
 | [M5-11] | A process promise about how a failing threshold is responded to. No run of the suite can see whether a reference opponent was changed for the right reason. |
-| [M5-16], [M5-15] | Properties of a lane the suite does not run and of an artifact it does not produce. The baseline's *format* is checked when it is read; that it is kept current is a process promise. |
+| [M5-16], [M5-15] | Properties of a lane the suite does not run and of an artifact it does not produce. The baseline's *format* is checked when it is read; that it is kept current is a process promise — and it has not yet been kept: no baseline exists (see the note under [M5-15]). |
 | [M5-20] | A `SHOULD` about the lane's own runtime. |
 | [M5-22], [M5-23] | Statements about what may be claimed, and a procedure involving a human. The suite has no human and no claims. |
 

@@ -37,17 +37,56 @@ import {
   type ToWorker,
 } from '../src/opponent.js';
 
-/** A seam that queues requests and answers only when told to. */
+/**
+ * A seam that queues requests and answers only when told to.
+ *
+ * `terminate` abandons every request outstanding at that moment, as the real
+ * seam does ([W6-42]): `answer` and `fail` refuse one, because a harness that
+ * settles what the shipped client never settles tests a situation that cannot
+ * arise [W6-18]. `answerAbandoned` is the one deliberate exception, for
+ * [W6-37], which asks the suite to resolve a stale response on purpose — the
+ * generation filter of [W6-16] is the second line behind [W6-13], and it is
+ * only reachable from a seam that misbehaves.
+ */
 function deferredThinker(): {
   seam: Thinker;
   pending: ToWorker[];
   answer(index?: number): Promise<void>;
+  answerAbandoned(index: number): Promise<void>;
   fail(message: string, index?: number): void;
   terminations: () => number;
 } {
   const pending: ToWorker[] = [];
   const resolvers: ((reply: FromWorker) => void)[] = [];
+  const abandoned = new Set<number>();
   let terminations = 0;
+
+  const live = (index: number): void => {
+    if (abandoned.has(index)) {
+      throw new Error(`request ${index} was abandoned by terminate; the real seam never settles it`);
+    }
+  };
+
+  async function settle(index: number): Promise<void> {
+    const request = pending[index];
+    resolvers[index]({
+      generation: request.generation,
+      ok: true,
+      choice: {
+        action: request.position.legalActions[0],
+        value: 0,
+        depth: 1,
+        nodes: 1,
+        complete: false,
+        curtailed: false,
+      },
+    });
+    // Two turns of the microtask queue: one for the seam's promise, one for
+    // the `.then` in the state module that submits the move.
+    await Promise.resolve();
+    await Promise.resolve();
+    flush();
+  }
 
   return {
     seam: {
@@ -57,30 +96,19 @@ function deferredThinker(): {
       },
       terminate() {
         terminations++;
+        for (let i = 0; i < pending.length; i++) abandoned.add(i);
       },
     },
     pending,
-    async answer(index = 0) {
-      const request = pending[index];
-      resolvers[index]({
-        generation: request.generation,
-        ok: true,
-        choice: {
-          action: request.position.legalActions[0],
-          value: 0,
-          depth: 1,
-          nodes: 1,
-          complete: false,
-          curtailed: false,
-        },
-      });
-      // Two turns of the microtask queue: one for the seam's promise, one for
-      // the `.then` in the state module that submits the move.
-      await Promise.resolve();
-      await Promise.resolve();
-      flush();
+    answer(index = 0) {
+      live(index);
+      return settle(index);
+    },
+    answerAbandoned(index) {
+      return settle(index);
     },
     fail(message, index = 0) {
+      live(index);
       resolvers[index]({ generation: pending[index].generation, ok: false, message });
     },
     terminations: () => terminations,
@@ -381,8 +409,10 @@ describe('stale and failed replies [W6-15], [W6-16], [W6-17]', () => {
     const fresh = state.view().game.tilesLeft;
     expect(harness.pending[1].generation).not.toBe(stale.generation);
 
-    // Answering the *old* request must not advance the *new* game.
-    await harness.answer(0);
+    // Answering the *old* request must not advance the *new* game. The deal
+    // abandoned it, so the shipped seam would never deliver this [W6-42];
+    // the harness is made to, because the filter must hold even if it did.
+    await harness.answerAbandoned(0);
     expect(state.view().game.tilesLeft).toBe(fresh);
   });
 
@@ -534,11 +564,9 @@ describe('the worker ends with its game [W6-13], [W6-23]', () => {
     expect(harness.terminations(), 'New Game left the search running').toBe(2);
     expect(harness.pending).toHaveLength(3);
 
-    // The abandoned requests change nothing, and the live one is still played.
+    // The two abandoned requests are never answered — the real seam drops
+    // them with the worker [W6-42] — and the live one is still played.
     const tiles = state.view().game.tilesLeft;
-    await harness.answer(0);
-    await harness.answer(1);
-    expect(state.view().game.tilesLeft).toBe(tiles);
     await harness.answer(2);
     expect(state.view().game.tilesLeft).toBeLessThan(tiles);
     expect(state.view().thinking).toBeNull();
