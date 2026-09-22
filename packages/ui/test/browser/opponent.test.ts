@@ -179,7 +179,7 @@ describe('the opponent against a real worker [W6-30]', () => {
     expect(worst, `longest main-thread gap was ${worst.toFixed(0)}ms`).toBeLessThan(400);
   }, 900_000);
 
-  it('[W6-30] [W6-23] leaves the new-game control usable mid-search', async () => {
+  it('[W6-30] [W6-23] leaves the new-game control usable mid-search, and plays on after it', async () => {
     const { doc } = await load('sharp-human');
     await until(
       () => /thinking/i.test(doc.querySelector('.status')?.textContent ?? ''),
@@ -191,11 +191,22 @@ describe('the opponent against a real worker [W6-30]', () => {
     expect(control!.disabled).toBe(false);
     // Clickable, and it actually deals: the player's way out of a long think.
     const seedBefore = doc.querySelector('.status')?.textContent ?? '';
+    const opening = tilesLeft(doc);
     control!.click();
     await until(
       () => (doc.querySelector('.status')?.textContent ?? '') !== seedBefore,
       10_000,
       'a new game',
     );
+    // And the computer then plays in it. A New Game mid-search used to leave
+    // two requests on one worker, the old reply settle both, and the new game
+    // sit on "thinking" forever. Both deals are openings, so the count before
+    // the click is the new game's too.
+    //
+    // Seen red, on a copy, with both halves of that fix reverted: `deal` not
+    // terminating the worker [W6-13] *and* the seam's replies unrouted
+    // [W6-42]. Either half alone keeps it green — the new request merely
+    // waits behind the old search — so each is held by its own fast test.
+    await until(() => tilesLeft(doc) < opening, 20_000, 'the opponent to move in the new game');
   }, 60_000);
 });

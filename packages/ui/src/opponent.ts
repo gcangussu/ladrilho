@@ -82,47 +82,70 @@ export interface Thinker {
  * data, and not a dynamic `import()`; the bundler resolves it at build time and
  * emits a chunk beside the client.
  *
- * Created lazily [W6-13]: a two-person game never touches this file, so it
- * never spawns a worker or loads the search.
+ * Created lazily [W6-13]: a two-person game never asks, so it never spawns a
+ * worker or loads the search. The state module terminates it on every deal,
+ * and the next request builds a fresh one.
+ *
+ * One listener per worker, routing each reply to the request whose generation
+ * it carries [W6-42]. An earlier version put a listener per request on the one
+ * shared worker, each resolving on the first reply of any kind: a request made
+ * while another was outstanding took the other's reply — stale, so dropped —
+ * and its own then arrived to nobody, leaving `thinking` set and the computer
+ * silent for the rest of the session. The fast suite injected a seam with a
+ * resolver per request, which cannot cross its wires, so nothing saw it.
+ *
+ * A request still outstanding when the worker is terminated is **abandoned**:
+ * its promise never settles. Every caller of `terminate` bumps the generation
+ * in the same step ([W6-16]), so any reply it could be given would be
+ * discarded unread; settling it would manufacture one to throw away, and
+ * settling it `ok: false` would dress a cancellation up as the failure [W6-15]
+ * throws on. Dropping the worker drops its pending list, so nothing is
+ * retained.
  */
 export function workerThinker(): Thinker {
-  let worker: Worker | null = null;
+  type Pending = { generation: number; resolve: (reply: FromWorker) => void };
+  type Live = { worker: Worker; pending: Pending[] };
+  let live: Live | null = null;
 
-  const ensure = (): Worker => {
-    if (worker === null) {
-      worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
-    }
-    return worker;
+  const ensure = (): Live => {
+    if (live !== null) return live;
+    const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
+    const pending: Pending[] = [];
+    worker.addEventListener('message', (event: MessageEvent<FromWorker>) => {
+      // The oldest request carrying this reply's generation — the worker
+      // answers in the order it was asked. A reply nobody is waiting for is
+      // dropped here rather than handed to whoever is.
+      const at = pending.findIndex((p) => p.generation === event.data.generation);
+      if (at < 0) return;
+      const [waiting] = pending.splice(at, 1);
+      waiting.resolve(event.data);
+    });
+    worker.addEventListener('error', (event: ErrorEvent) => {
+      // [W6-15]. Not attributable to one request, so every outstanding one
+      // fails under its own generation; the caller drops the stale ones.
+      for (const waiting of pending.splice(0)) {
+        waiting.resolve({
+          generation: waiting.generation,
+          ok: false,
+          message: event.message || 'the worker failed',
+        });
+      }
+    });
+    live = { worker, pending };
+    return live;
   };
 
   return {
     think(request) {
-      const live = ensure();
+      const { worker, pending } = ensure();
       return new Promise<FromWorker>((resolve) => {
-        const onMessage = (event: MessageEvent<FromWorker>): void => {
-          // Only this request's reply. A stale generation is discarded by the
-          // caller [W6-16]; this listener is removed either way.
-          live.removeEventListener('message', onMessage);
-          live.removeEventListener('error', onError);
-          resolve(event.data);
-        };
-        const onError = (event: ErrorEvent): void => {
-          live.removeEventListener('message', onMessage);
-          live.removeEventListener('error', onError);
-          resolve({
-            generation: request.generation,
-            ok: false,
-            message: event.message || 'the worker failed',
-          });
-        };
-        live.addEventListener('message', onMessage);
-        live.addEventListener('error', onError);
-        live.postMessage(request);
+        pending.push({ generation: request.generation, resolve });
+        worker.postMessage(request);
       });
     },
     terminate() {
-      worker?.terminate();
-      worker = null;
+      live?.worker.terminate();
+      live = null;
     },
   };
 }

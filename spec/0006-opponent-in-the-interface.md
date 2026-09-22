@@ -178,6 +178,13 @@ type FromWorker =
   it did before" is about play, and this cost to loading is accepted here, in writing.
 - **[W6-13]** The worker MUST be created lazily — not at all in a two-person game — and MUST be
   terminated when the seating no longer needs it and when a new game is dealt.
+
+  *Dealing is the one place both happen: a seating change deals ([W6-3]), so terminating on every
+  deal covers both clauses. For a while nothing did. The comments said the worker ended with its
+  game and [W6-40] was argued from it, but only the fast suite's seam substitution ever terminated
+  anything, so a New Game queued its request behind the old search and the expert's sessions ran
+  on into every later game. Every test of this requirement injected a seam, and none of them
+  counted terminations.*
 - **[W6-14]** The message in each direction MUST be exactly `ToWorker` / `FromWorker` above. The
   main thread MUST NOT send an `AzulState`, and the worker MUST NOT return one.
 
@@ -210,6 +217,20 @@ type FromWorker =
   and every test in the fast suite passed anyway because each one injected a seam and injecting
   started the loop. Only [W6-30]'s lane, which injects nothing, could see it. A seam that changes
   behaviour when it is substituted is a seam that tests something other than what ships.*
+
+- **[W6-42]** The real seam MUST deliver each reply only to the request it answers: a reply MUST
+  NOT settle a request carrying a different generation, and a reply nobody is waiting for MUST be
+  dropped. The fast suite MUST exercise the real seam itself, against a stand-in `Worker`, with
+  two requests outstanding at once.
+
+  *Added after a freeze. The real seam put one listener per request on one shared worker, each
+  settling on the first reply of any kind. New Game mid-search left two requests on the worker;
+  the old reply settled both, so the new request got a stale generation and was dropped, and its
+  own reply then arrived to nobody. `thinking` stayed set and the computer never moved again.
+  [W6-13] now keeps two requests off one worker in the shipped client, and this requirement keeps
+  that from being the only thing standing between the player and the freeze. The fast suite
+  cannot see any of it through [W6-18]'s injected seam, which answers each request by its own
+  resolver and so cannot cross its wires.*
 
 ### While it thinks
 

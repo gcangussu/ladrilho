@@ -45,8 +45,9 @@ export function chooseFor(request: ToWorker, seats: ExpertSeats): Choice | Exper
  * position ([0008 A8-26]): asking seat 1's session about seat 0's position
  * throws there, and this is the structure that makes that unreachable.
  *
- * Nothing here ends a session, because nothing needs to: [W6-13] terminates
- * the worker on a new game and on a seating change, and these die with it.
+ * Nothing here ends a session, because nothing needs to: the state module's
+ * `deal` terminates the worker on a new game and on a seating change
+ * ([W6-13]), and these die with it.
  */
 export function createExpertSeats(create: () => Expert = createExpert): ExpertSeats {
   const seats = new Map<number, Expert>();

@@ -125,6 +125,7 @@ let lastScoring: RoundScoring | null = null;
 /**
  * The worker seam [W6-18]. Created lazily and replaced only by a test — a
  * two-person game never builds one, so it never spawns a worker [W6-13].
+ * Every deal terminates whatever worker is behind it; see {@link deal}.
  */
 let thinker: Thinker | null = null;
 
@@ -257,7 +258,14 @@ function deal(seed: number): ViewModel {
   state = newGame(seed);
   currentSeed = seed;
   previous = null;
-  // A new game abandons whatever the worker was thinking about [W6-16].
+  // A new game abandons whatever the worker was thinking about [W6-16], and
+  // ends the worker itself [W6-13]: New Game is the way out of a long think
+  // [W6-23], and the expert's sessions die with it [W6-40]. `thinker?.` and not
+  // `seam()`, so a game nobody has asked about still spawns nothing — which
+  // includes the opening deal, before any seam exists. The `Thinker` is kept:
+  // the real one builds a fresh worker on its next request, and an injected
+  // one stays injected [W6-18].
+  thinker?.terminate();
   generation++;
   thinking = null;
   lastChoice = null;
