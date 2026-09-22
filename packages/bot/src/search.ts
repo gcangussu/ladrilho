@@ -119,7 +119,7 @@ function orderingScore(s: AzulState, action: number): number {
  *
  * `legalActions` returns ascending [0001 E1-13] and `Array.prototype.sort` is
  * stable, so equal-scoring moves keep ascending action order — which is what
- * makes the root's tie-break in {@link chooseAction} reachable rather than
+ * makes the root's tie-break in {@link iterate} reachable rather than
  * decided here by accident.
  */
 function ordered(s: AzulState, actions: readonly number[]): number[] {
@@ -192,6 +192,23 @@ function negamax(s: AzulState, depth: number, alpha: number, beta: number, ctx: 
   return best;
 }
 
+/**
+ * The largest double strictly below `x` — one ulp, found from the bits rather
+ * than by subtracting an epsilon, which at these magnitudes either rounds back
+ * to `x` or overshoots past a value the evaluation can actually produce.
+ *
+ * Allocates its two views per call: a shared scratch buffer would be the
+ * module-level mutable state [B4-3] forbids, and this runs once per root move.
+ */
+function below(x: number): number {
+  if (x === -Infinity) return x;
+  if (x === 0) return -Number.MIN_VALUE;
+  const float = new Float64Array([x]);
+  const bits = new BigInt64Array(float.buffer);
+  bits[0] += x > 0 ? -1n : 1n;
+  return float[0];
+}
+
 /** What one completed root iteration decided. */
 interface Iteration {
   action: number;
@@ -222,16 +239,30 @@ function iterate(
     apply(child, action);
     ctx.nodes++;
 
+    // A move searched against `alpha` that fails low comes back as an upper
+    // bound, and a bound can land exactly on `alpha` — commonly, since plies
+    // commute and a refutation transposes into the leaf that set it. For a
+    // move that can only win by being strictly better, that is harmless. For
+    // one that would win a *tie* — a lower action number [B4-30] — it is not:
+    // a bound equal to the best value is not a value equal to it. So such a
+    // move is searched with the window's floor one ulp lower, which makes
+    // "equal to `alpha`" an exact result and "failed low" mean strictly worse.
+    // One search per move rather than a re-search, so each root move is still
+    // applied once per iteration [B4-22], and the only cutoffs lost are ones
+    // that landed exactly on `alpha` — measured at under 1% more nodes for a
+    // fixed depth of 3 or 4.
+    const floor = action < bestAction ? below(alpha) : alpha;
     const value = isBoundary(root, child)
       ? evaluate(child, root.currentPlayer)
       : child.currentPlayer === root.currentPlayer
-        ? negamax(child, depth - 1, alpha, Infinity, ctx)
-        : -negamax(child, depth - 1, -Infinity, -alpha, ctx);
+        ? negamax(child, depth - 1, floor, Infinity, ctx)
+        : -negamax(child, depth - 1, -Infinity, -floor, ctx);
 
     if (ctx.stopped) return null;
 
     // Ties go to the lower action number [B4-30], so the answer does not
-    // depend on the order `ordered` happened to produce.
+    // depend on the order `ordered` happened to produce — and `floor` above
+    // is what makes `value === bestValue` a comparison of two exact values.
     if (value > bestValue || (value === bestValue && action < bestAction)) {
       bestValue = value;
       bestAction = action;

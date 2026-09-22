@@ -49,8 +49,9 @@ import {
  *
  * Raised from 6000 after measuring. At 6000 `sharp` beat `steady` 62.5% against
  * a 60% threshold: one game of margin on forty, and the two tiers picked the
- * same move 77% of the time. At 20 000 it is 66.3% against a 40.0% self-play
- * null, which is a gap worth gating on.
+ * same move 77% of the time. At 20 000 it was 66.3% against a 40.0% self-play
+ * null, which is a gap worth gating on — and 75.0% against 52.5% once
+ * [0004 B4-30] stopped the root taking an alpha-beta bound for a tied value.
  */
 const LANE_NODES = 20_000;
 
@@ -125,19 +126,21 @@ describe('the ladder [M5-12], [M5-13]', () => {
   it('[M5-13] steady beats easy at least 70% of the time', () => {
     // 70, not 60: `easy vs easy` over these seeds is 62.5%, so a 60% bar is
     // cleared by substituting `easy` for `steady` and gates nothing. Measured
-    // 88.8% at this lane's budget.
+    // 90.0% at this lane's budget (88.8% before the [0004 B4-30] tie fix).
     expect(run('steady vs easy', steady(), easy(), easy)).toBeGreaterThanOrEqual(0.7);
   });
 
   it('[M5-13] [M5-17] sharp beats steady at least 55% of the time, at the same budget', () => {
     // Same node budget on both sides, so the whole difference is the horizon.
-    // The threshold sits between the measured null (40.0%) and the measured
-    // value (66.3%) rather than just above the null.
+    // The threshold was set between the measured null (40.0%) and the measured
+    // value (66.3%) rather than just above the null. Since the [0004 B4-30]
+    // tie fix those read 52.5% and 75.0%, and the threshold is unchanged.
     expect(run('sharp vs steady', sharp(), steady(), steady)).toBeGreaterThanOrEqual(0.55);
   });
 
   it('[M5-13] sharp beats easy at least 80% of the time', () => {
-    // 92.5% measured against the same 62.5% null, so 80% discriminates.
+    // 97.5% measured (92.5% before the [0004 B4-30] tie fix) against the same
+    // 62.5% null, so 80% discriminates.
     expect(run('sharp vs easy', sharp(), easy(), easy)).toBeGreaterThanOrEqual(0.8);
   });
 
@@ -235,9 +238,10 @@ describe('the blunder audit [M5-19]', () => {
     // cleared by a one-ply player and gates nothing.
     expect(report.meanRegret).toBeLessThanOrEqual(1.5);
     // No maximum clause. Uniform random measures 17.33, so any bar loose enough
-    // to admit the shipped opponent's 13.66 is one a random player also clears
-    // — it would be a decoration, not a gate. The maximum is printed above and
-    // the open question in 0005 is where it is pursued.
+    // to admit the shipped opponent's 13.66 was one a random player also cleared
+    // — it would have been a decoration, not a gate. Since the [0004 B4-30] tie
+    // fix the maximum is 5.94, which weakens that argument; the maximum is
+    // printed above and the open question in 0005 is where it is pursued.
     expect(report.scored).toBeGreaterThan(10);
   });
 });
