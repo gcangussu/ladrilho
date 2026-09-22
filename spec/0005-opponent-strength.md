@@ -200,9 +200,14 @@ interface Result {
   | Match | Null (self-play) | Measured | Threshold |
   | --- | --- | --- | --- |
   | `easy` vs uniform random | ~50% | 100.0% | ≥ 95% |
-  | `steady` vs `easy` | 62.5% | 88.8% | ≥ 70% |
-  | `sharp` vs `steady` | 40.0% | 66.3% | ≥ 55% |
-  | `sharp` vs `easy` | 62.5% | 92.5% | ≥ 80% |
+  | `steady` vs `easy` | 62.5% | 90.0% | ≥ 70% |
+  | `sharp` vs `steady` | 52.5% | 75.0% | ≥ 55% |
+  | `sharp` vs `easy` | 62.5% | 97.5% | ≥ 80% |
+
+  Re-measured when [0004 B4-30] was made to break ties on exact values only. Before it, the root
+  could take an alpha-beta bound equal to the best value as a tie and play a worse move, and the
+  same lane read 88.8%, 66.3% against a 40.0% null, and 92.5%. The thresholds were set from those
+  figures and are unchanged.
 
   Each threshold is set against the match's **null** — the same player against itself over the same
   seeds — because a threshold below its null gates nothing. The `steady` row is why the nulls are
@@ -216,10 +221,11 @@ interface Result {
   reported as a measurement of the shipped opponent, nor as establishing the ordering as a fact
   about Azul — that is [M5-16]'s wide lane.
 
-  The distinction is not pedantry. `sharp` over `steady` measures 66.3% with a one-sided 95% lower
-  bound near 50%, which does not exclude the two being equal. What the lane pins is that this bot,
-  on these forty deals, is ordered; the 40.0% self-play null beside it is the evidence that the
-  horizon buys *something*.
+  The distinction is not pedantry. `sharp` over `steady` measured 66.3% with a one-sided 95% lower
+  bound near 50%, which did not exclude the two being equal. It now measures 75.0% with a bound of
+  62.4%, and that is still forty deals at a reduced budget. What the lane pins is that this bot,
+  on these forty deals, is ordered; the self-play null beside it (now 52.5%) is the evidence that
+  the horizon buys *something*.
 
   *An honest proxy, and the reason it needs saying: `sharp` at its shipped 400 000 nodes is about
   1.2 seconds a move ([0004 B4-47]) and a game is about 70 plies, so forty games is roughly an
@@ -293,6 +299,13 @@ opponent without ever making a mistake worth pointing at.
   against a one-ply player where 2 would not. The maximum clause is **dropped** rather than
   loosened: any bar admitting the shipped opponent's 13.66 also admits a player choosing uniformly
   at random, which would be a decoration and not a gate.*
+
+  *Re-measured when [0004 B4-30] was made to break ties on exact values only: `sharp` 0 / 0.557 /
+  5.94 over 20 scored positions; `steady` 1 / 0.884 / 8.94; `easy` and random unchanged, as they
+  must be, because neither searches past one ply. 7.72 of the 13.66 was that bug, at the same
+  position (seed 4242 ply 32). That weakens the argument above for dropping the maximum, since
+  5.94 is far below random's 17.33. The clause is still absent, and whether to write one is the
+  open question below.*
 
   *One limit on what "no decisive blunder" establishes, and one thing that is **not** a limit. It
   rests on **three positions** — the corpus holds exactly three where any move is valued as a
@@ -422,6 +435,11 @@ used to is absent.
   and whether 13.66 is an evaluation weakness or just "400 000 is not 4 000 000 at a wide root" is
   open. It is not a tail of the distribution — the 95th percentile is 2.02 — it is a different
   animal, and it should be opened before any threshold is written around it.
+
+  *Partly opened since.* Most of it was neither the evaluation nor the budget. It was the root
+  taking an alpha-beta bound as a tie ([0004 B4-30]). With that fixed, the same position gives up
+  5.94, the mean falls from 1.076 to 0.557, and the figures in this paragraph describe the search
+  before the fix. What remains of 5.94 is the question above, at a smaller size.
 - **How many recorded seeds is enough for [M5-15]'s baseline to be a useful memory?** 200 puts the
   95% bound roughly ±6 points around a 75% winrate, which is wide enough that a genuine 4-point
   improvement is invisible. The answer is probably "more, run overnight", and the question is

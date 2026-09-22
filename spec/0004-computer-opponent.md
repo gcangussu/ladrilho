@@ -346,7 +346,17 @@ reader asking "what would it take" should see them.
 - **[B4-30]** Given the same position and the same options, `chooseMove` MUST return the same
   `action` — on any machine, on any run, at any load — unless it reports `curtailed`. Ties MUST be
   broken by the lowest action number, so the answer does not depend on iteration order over any
-  container.
+  container. A tie MUST be between **exact** values: a move whose search failed low against the
+  best value so far has returned a bound, not a value, and a bound equal to the best value MUST
+  NOT win the tie.
+
+  *Alpha-beta makes that a real case rather than a pedantic one. Plies commute inside a round, so
+  the reply that refutes a later root move often transposes into the very leaf that set the best
+  value, and the fail-soft bound comes back equal to it to the last bit. Taking it as a tie chose,
+  in one depth-3 search in twenty on narrow roots, a move strictly worse than the one the search
+  had found — once a certain loss over a live game — and because [B4-22] reorders the root every
+  iteration, *which* moves got bounds depended on iteration order, which is what this requirement
+  exists to rule out.*
 - **[B4-31]** `chooseMove` MUST NOT consult a random source. There is no `Math.random`, no `Rng`,
   and no seed input.
 
@@ -539,6 +549,16 @@ A regression is a bug to file. The measurements live in `packages/bot/bench`.
 
   *A directed test because random play reaches this often but never notices it: the parity bug
   changes a value, not a legality, so nothing else in the suite can see it.*
+
+- **[B4-63]** The suite MUST assert [B4-30]'s tie-break against a reference search with no
+  pruning — the same leaf rule, the same `evaluate`, the lowest action among exactly equal values
+  — by comparing the chosen action and value of fixed-depth searches of 2 and 3 plies. It MUST
+  include recorded positions where a pruned bound once tied the best value, each seen to fail
+  against the search that took the bound, and a sweep beyond them.
+
+  *[B4-57]'s reference compares values only, and a bound-for-value tie changes the move and never
+  the value — the value reported is the best one either way. Comparing the action is the whole of
+  what this adds.*
 
 - **[B4-58]** The suite MUST assert the engine additions it depends on: that `placementValue`
   ([B4-9]) agrees with the round scoring of *0002*'s whole vector corpus, and that `fromJSON`

@@ -32,7 +32,7 @@ import {
   type AzulJSON,
   type AzulState,
 } from 'engine';
-import { chooseMove } from '../src/index.js';
+import { WIN, chooseMove, evaluate } from '../src/index.js';
 // Not via the package entry: `search` takes a state and is not exported [B4-5].
 import { search } from '../src/search.js';
 
@@ -504,6 +504,133 @@ describe('the sign follows currentPlayer, not ply parity [B4-18]', () => {
       }
     }
   }, GAME_TIMEOUT_MS);
+});
+
+/**
+ * [B4-30]'s tie-break, against the one thing alpha-beta can get wrong about it.
+ *
+ * The root searches each later move against the best value so far, and a
+ * fail-soft search that fails low returns an **upper bound**, not a value. A
+ * bound that comes back exactly equal to the best value, on a lower action
+ * number, used to win the tie — and its true value could be far below. Exact
+ * equality sounds rare in a float evaluation and is not: plies commute inside
+ * a round, so a refutation routinely transposes into the very leaf that set
+ * the best value. Measured before the fix, over every position with at most
+ * twenty moves in thirty `at`-style games, one depth-3 search in twenty chose
+ * a move the unpruned search ranks strictly worse.
+ *
+ * So the oracle here is the unpruned search: same leaf rule, same `evaluate`,
+ * same lowest-action tie-break, taken over exact values only.
+ *
+ * Seen to fail, each of the three tests on its own, against four mutations of
+ * `iterate`'s `const floor = action < bestAction ? below(alpha) : alpha;` in
+ * `src/search.ts`, applied to a `git archive` copy: `floor` always `alpha`
+ * (the unfixed search), `below` returning its argument, `below` stepping up
+ * instead of down, and the widened floor given to `action > bestAction`.
+ */
+describe('ties are broken on exact values [B4-30], [B4-63]', () => {
+  function unpruned(s: AzulState, depth: number): number {
+    if (s.isTerminal || depth === 0) return evaluate(s, s.currentPlayer);
+    let best = -Infinity;
+    for (const a of legalActions(s)) {
+      const v = childValue(s, a, depth);
+      if (v > best) best = v;
+    }
+    return best;
+  }
+
+  /** The exact value of `a` at `s`, from `s.currentPlayer`'s seat. */
+  function childValue(s: AzulState, a: number, depth: number): number {
+    const child = clone(s);
+    apply(child, a);
+    const boundary = child.roundIndex !== s.roundIndex || child.isTerminal;
+    if (boundary) return evaluate(child, s.currentPlayer);
+    return child.currentPlayer === s.currentPlayer
+      ? unpruned(child, depth - 1)
+      : -unpruned(child, depth - 1);
+  }
+
+  /** What [B4-30] says the root must answer: the lowest action of the best. */
+  function oracle(s: AzulState, depth: number): { action: number; value: number } {
+    let action = -1;
+    let value = -Infinity;
+    for (const a of legalActions(s)) {
+      const v = childValue(s, a, depth);
+      if (v > value || (v === value && a < action)) {
+        value = v;
+        action = a;
+      }
+    }
+    return { action, value };
+  }
+
+  function searched(s: AzulState, depth: number): { action: number; value: number } {
+    const { action, value } = search(clone(s), {
+      maxDepth: depth,
+      nodes: Number.MAX_SAFE_INTEGER,
+      milliseconds: 600_000,
+    });
+    return { action, value };
+  }
+
+  /**
+   * Positions where the unfixed search took a bound for a value. Each was seen
+   * to fail: `[seed, ply, depth, what it chose, what it should have]`. The
+   * chosen move's true value is in the comment, and it is strictly worse
+   * every time — the reported value was always right, only the move was not.
+   */
+  const RECORDED: readonly (readonly [number, number, number, number, number])[] = [
+    [10, 5, 2, 171, 172], // true value -2.300 against -2.152
+    [100, 5, 2, 159, 160], // 2.102 against 2.250
+    [99, 12, 2, 91, 121], // -3.774 against -1.848
+    [5, 14, 3, 167, 171], // -3.174 against -3.026
+    [1, 23, 3, 162, 175], // -6.344 against -5.796
+    [4, 31, 3, 167, 172], // -34.634 against -32.894
+    [17, 41, 3, 166, 175], // a certain loss against -7.438
+  ];
+
+  it('[B4-63] [B4-30] matches the unpruned search where a bound once tied the best', () => {
+    for (const [seed, ply, depth, wrong, right] of RECORDED) {
+      const s = at(seed, ply);
+      const where = `seed ${seed} ply ${ply} depth ${depth}`;
+      const want = oracle(s, depth);
+      // The record still describes this position: the oracle agrees with it,
+      // and the move the old search chose really is worse.
+      expect(want.action, where).toBe(right);
+      expect(childValue(s, wrong, depth), where).toBeLessThan(want.value);
+      expect(searched(s, depth), where).toEqual(want);
+    }
+  });
+
+  it('[B4-63] [B4-30] matches the unpruned search at depths 2 and 3', () => {
+    // A sweep as well as the record, so a fix that only patches the recorded
+    // positions does not pass. Narrow roots only: the oracle is b³ a position.
+    let compared = 0;
+    for (const seed of [2, 3, 7, 11, 12, 13, 16]) {
+      for (let ply = 0; ; ply++) {
+        const s = at(seed, ply);
+        if (s.isTerminal) break;
+        if (legalActions(s).length > 16) continue;
+        for (const depth of [2, 3]) {
+          expect(searched(s, depth), `seed ${seed} ply ${ply} depth ${depth}`).toEqual(
+            oracle(s, depth),
+          );
+          compared++;
+        }
+      }
+    }
+    expect(compared).toBeGreaterThan(100);
+  }, GAME_TIMEOUT_MS);
+
+  it('[B4-63] [B4-30] does not play a certain loss that steady once chose over a live game', () => {
+    // `steady` is depth 3 [B4-34]. At seed 16 ply 42 the unfixed search chose
+    // 167, which loses the game outright (-1000008), over 172 at -19.942,
+    // because 167's bound came back equal to 172's value.
+    const s = at(16, 42);
+    const choice = chooseMove(toJSON(s), { tier: 'steady' });
+    expect(choice.action).toBe(oracle(s, 3).action);
+    expect(childValue(s, choice.action, 3)).toBeGreaterThan(-WIN / 2);
+  });
 });
 
 describe('determinism [B4-30], [B4-31]', () => {

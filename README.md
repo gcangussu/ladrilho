@@ -86,11 +86,11 @@ one below it. Current numbers, 40 recorded seeds:
 | Match | Null | Measured | Gate |
 | --- | --- | --- | --- |
 | `easy` vs uniform random | ~50% | 100.0% | ≥ 95% |
-| `steady` vs `easy` | 62.5% | 88.8% | ≥ 70% |
-| `sharp` vs `steady` | 40.0% | 66.3% | ≥ 55% |
-| `sharp` vs `easy` | 62.5% | 92.5% | ≥ 80% |
+| `steady` vs `easy` | 62.5% | 90.0% | ≥ 70% |
+| `sharp` vs `steady` | 52.5% | 75.0% | ≥ 55% |
+| `sharp` vs `easy` | 62.5% | 97.5% | ≥ 80% |
 
-`sharp` over `steady` is at the *same* node budget on both sides, so the whole 66.3% is the
+`sharp` over `steady` is at the *same* node budget on both sides, so the whole 75.0% is the
 horizon — the tiers differ in how far ahead they see, not in how long they are given.
 
 **`corpus`** regenerates the blunder audit's reference values. It is deliberate and rare: the
