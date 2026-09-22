@@ -1,11 +1,13 @@
 /**
  * The computer opponent in the interface: *0006 — Opponent in the interface*.
  *
- * Every test runs against the injected seam of [W6-18] rather than a real
- * worker, because jsdom has no `Worker`. That is not a shortcut — without the
- * seam every requirement in 0006 would fall to the slow browser lane of
+ * Nearly every test runs against the injected seam of [W6-18] rather than a
+ * real worker, because jsdom has no `Worker`. That is not a shortcut — without
+ * the seam every requirement in 0006 would fall to the slow browser lane of
  * [0003 U3-73] and the property test of [W6-29] would not exist. The real
- * worker is exercised there, by [W6-30].
+ * worker is exercised there, by [W6-30]. The exceptions are near the end: the
+ * real seam, `workerThinker`, driven against a stand-in `Worker` [W6-42],
+ * because an injected seam cannot show how the real one routes its replies.
  *
  * The seam resolves through a **deferred** promise, never immediately. One that
  * answered synchronously would make [W6-32] vacuous: the loop could never
@@ -20,8 +22,8 @@
 
 import { render } from '@solidjs/testing-library';
 import { flush } from 'solid-js';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { CENTER, apply, decodeAction, legalActions, newGame, type AzulJSON } from 'engine';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CENTER, apply, decodeAction, legalActions, newGame, toJSON, type AzulJSON } from 'engine';
 import { pickName, picksIn } from '../src/components/Displays.jsx';
 import { floorLineName } from '../src/components/FloorLine.jsx';
 import { patternLineName } from '../src/components/PatternLines.jsx';
@@ -29,6 +31,7 @@ import {
   EXPERT_AVAILABLE,
   seatingFromUrl,
   seatingToUrl,
+  workerThinker,
   type FromWorker,
   type Thinker,
   type ToWorker,
@@ -428,6 +431,240 @@ describe('stale and failed replies [W6-15], [W6-16], [W6-17]', () => {
     await harness.answer();
     expect(state.view().game.tilesLeft).toBeLessThan(before);
     expect(request.position.legalActions).toContain(state.view().lastChoice!.action);
+  });
+});
+
+/**
+ * A stand-in for the browser's `Worker`, which jsdom does not have, so the
+ * *real* seam — `workerThinker` — can run in the fast suite.
+ *
+ * Everything above injects a seam with a resolver per request, and that is
+ * exactly why a real defect went unseen: the real seam put one listener per
+ * request on one shared worker, each taking the first reply of any kind, so a
+ * request issued while another was outstanding took the other's reply and its
+ * own arrived to nobody. An injected seam cannot cross its wires that way.
+ *
+ * It behaves as the real one does in the ways that matter here: it answers in
+ * the order it was asked, one reply per request, and once terminated it
+ * answers nothing at all.
+ */
+class StubWorker extends EventTarget {
+  static made: StubWorker[] = [];
+  readonly posted: ToWorker[] = [];
+  terminated = false;
+  private replied = 0;
+
+  constructor() {
+    super();
+    StubWorker.made.push(this);
+  }
+
+  postMessage(request: ToWorker): void {
+    this.posted.push(request);
+  }
+
+  terminate(): void {
+    this.terminated = true;
+  }
+
+  /** Answer the oldest unanswered request with its first legal move. */
+  reply(): void {
+    if (this.terminated) return;
+    const request = this.posted[this.replied++];
+    const data: FromWorker = {
+      generation: request.generation,
+      ok: true,
+      choice: {
+        action: request.position.legalActions[0],
+        value: 0,
+        depth: 1,
+        nodes: 1,
+        complete: false,
+        curtailed: false,
+      },
+    };
+    this.dispatchEvent(new MessageEvent('message', { data }));
+  }
+
+  /** Answer everything still queued, in order — a worker left to finish. */
+  replyAll(): void {
+    while (!this.terminated && this.replied < this.posted.length) this.reply();
+  }
+}
+
+/** A task, by which every reply delivered so far has been acted on. */
+const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+/** A request as the state module would send it. */
+function request(generation: number): ToWorker {
+  return { generation, position: toJSON(newGame(7)), tier: 'easy' };
+}
+
+/** The state module, freshly dealt at `search`, with the real seam left in place. */
+async function loadReal(search: string): Promise<StateModule> {
+  history.replaceState({}, '', `/${search}`);
+  vi.resetModules();
+  const state = (await import('../src/game.js')) as StateModule;
+  await settle();
+  flush();
+  return state;
+}
+
+describe('the worker ends with its game [W6-13], [W6-23]', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    StubWorker.made.length = 0;
+  });
+
+  // Seen red, on a copy, with `thinker?.terminate()` deleted from `deal`.
+  it('[W6-13] [W6-23] terminates the seam on a new game or a seating change mid-search', async () => {
+    const { state, harness } = await load('?seed=42&seating=sharp-human');
+    expect(harness.pending).toHaveLength(1);
+    expect(harness.terminations()).toBe(0);
+
+    // A seating change while the opening search is outstanding.
+    state.startWithSeating({ players: ['easy', null] });
+    flush();
+    expect(harness.terminations(), 'a seating change left the search running').toBe(1);
+    expect(harness.pending).toHaveLength(2);
+
+    // And New Game while that one is outstanding — the way out of a long think.
+    state.startNewGame();
+    flush();
+    expect(harness.terminations(), 'New Game left the search running').toBe(2);
+    expect(harness.pending).toHaveLength(3);
+
+    // The abandoned requests change nothing, and the live one is still played.
+    const tiles = state.view().game.tilesLeft;
+    await harness.answer(0);
+    await harness.answer(1);
+    expect(state.view().game.tilesLeft).toBe(tiles);
+    await harness.answer(2);
+    expect(state.view().game.tilesLeft).toBeLessThan(tiles);
+    expect(state.view().thinking).toBeNull();
+  });
+
+  /**
+   * The freeze, end to end through the real seam: New Game mid-search, and
+   * the old worker then finishing what it was asked before the new request.
+   *
+   * Either half of the fix alone keeps it green, so it goes red only when both
+   * are gone — `deal` not ending the worker, *and* the seam letting one
+   * request take another's reply — or when `terminate` leaves the dead worker
+   * in place, so the new game asks something that will never answer. Each of
+   * those has its own test; this one is the user-visible symptom.
+   *
+   * Seen red, on a copy: both halves reverted together (and each alone,
+   * green); `live = null` deleted from `terminate`.
+   */
+  it('[W6-23] [W6-42] answers a new game dealt mid-search, whatever the old worker had queued', async () => {
+    vi.stubGlobal('Worker', StubWorker);
+    const state = await loadReal('?seed=42&seating=easy-human');
+    expect(state.view().thinking).toEqual({ seat: 0 });
+    expect(StubWorker.made).toHaveLength(1);
+
+    state.startNewGame();
+    flush();
+    const tiles = state.view().game.tilesLeft;
+
+    for (const worker of StubWorker.made) worker.replyAll();
+    await settle();
+    flush();
+    expect(state.view().game.tilesLeft, 'the new game froze waiting for its reply').toBeLessThan(
+      tiles,
+    );
+    expect(state.view().thinking).toBeNull();
+  });
+
+  it('[W6-13] never builds a worker in a two-person game, new games included', async () => {
+    vi.stubGlobal('Worker', StubWorker);
+    const state = await loadReal('?seed=42');
+    state.startNewGame();
+    state.startWithSeating({ players: [null, null] });
+    await settle();
+    flush();
+    expect(StubWorker.made, 'dealing a two-person game spawned a worker').toHaveLength(0);
+  });
+});
+
+describe('the real seam [W6-11], [W6-42]', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    StubWorker.made.length = 0;
+  });
+
+  // Seen red, on a copy, with the message listener settling every pending
+  // request on the first reply — the listener-per-request design it replaced.
+  it('[W6-42] hands each reply to the request it answers, and to no other', async () => {
+    vi.stubGlobal('Worker', StubWorker);
+    const seam = workerThinker();
+    expect(StubWorker.made, 'a worker before anything was asked [W6-13]').toHaveLength(0);
+
+    const got: { a: FromWorker | null; b: FromWorker | null } = { a: null, b: null };
+    void seam.think(request(1)).then((reply) => (got.a = reply));
+    void seam.think(request(2)).then((reply) => (got.b = reply));
+    expect(StubWorker.made).toHaveLength(1);
+    const [worker] = StubWorker.made;
+
+    worker.reply();
+    await settle();
+    expect(got.a?.generation).toBe(1);
+    expect(got.b, 'the second request took the first one’s reply').toBeNull();
+
+    worker.reply();
+    await settle();
+    expect(got.b?.generation).toBe(2);
+  });
+
+  // Seen red, on a copy, with the generation match replaced by oldest-first.
+  it('[W6-42] drops a reply nobody is waiting for, rather than handing it to whoever is', async () => {
+    // Taking replies oldest-first without reading them would pass the test
+    // above, because the stub answers in order. It fails here.
+    vi.stubGlobal('Worker', StubWorker);
+    const seam = workerThinker();
+    let got: FromWorker | null = null;
+    void seam.think(request(3)).then((reply) => (got = reply));
+    const [worker] = StubWorker.made;
+
+    const stray: FromWorker = { generation: 2, ok: false, message: 'a reply from another game' };
+    worker.dispatchEvent(new MessageEvent('message', { data: stray }));
+    await settle();
+    expect(got, 'a request was settled by a reply to a different generation').toBeNull();
+
+    worker.reply();
+    await settle();
+    expect(got).toMatchObject({ generation: 3, ok: true });
+  });
+
+  // Seen red, on a copy, with `live = null` deleted from `terminate`, and with
+  // `terminate` calling `ensure()` in place of `live?.`.
+  it('[W6-13] [W6-42] terminates the worker, and builds the next only when asked', async () => {
+    vi.stubGlobal('Worker', StubWorker);
+    const seam = workerThinker();
+    let abandoned = false;
+    void seam.think(request(1)).then(() => (abandoned = true));
+    const [first] = StubWorker.made;
+
+    seam.terminate();
+    seam.terminate(); // idempotent [W6-13]
+    expect(first.terminated).toBe(true);
+    expect(StubWorker.made, 'terminating built a worker').toHaveLength(1);
+
+    const fresh = seam.think(request(2));
+    expect(StubWorker.made, 'the next request went to the terminated worker').toHaveLength(2);
+    StubWorker.made[1].reply();
+    expect((await fresh).generation).toBe(2);
+    // The request outstanding at termination is abandoned, never settled: its
+    // caller has already moved to a new generation and would drop it [W6-16].
+    expect(abandoned).toBe(false);
+  });
+
+  it('[W6-15] [W6-42] fails an outstanding request on a worker error, under its own generation', async () => {
+    vi.stubGlobal('Worker', StubWorker);
+    const seam = workerThinker();
+    const pending = seam.think(request(5));
+    StubWorker.made[0].dispatchEvent(new ErrorEvent('error', { message: 'the module failed' }));
+    expect(await pending).toEqual({ generation: 5, ok: false, message: 'the module failed' });
   });
 });
 

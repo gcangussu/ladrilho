@@ -6,10 +6,12 @@
  * into the game ([0003 U3-18], [W6-8]). This file is the whole of the client
  * that ever runs a search, and it runs none of it on the main thread [W6-10].
  *
- * The expert's sessions live here for the worker's lifetime [W6-40]: a new
- * game or a seating change terminates the worker ([W6-13]), which is what ends
- * them. The per-seat logic is in `experts.ts` so the fast suite can reach it
- * without a `Worker`.
+ * The expert's sessions live here for the worker's lifetime [W6-40], and the
+ * state module ends that lifetime on every deal — a new game or a seating
+ * change ([W6-13]) — by terminating the worker; the next request starts a
+ * fresh one, with fresh seats. Nothing in this file ends a session. The
+ * per-seat logic is in `experts.ts` so the fast suite can reach it without a
+ * `Worker`.
  */
 
 import { chooseFor, createExpertSeats } from './experts.js';

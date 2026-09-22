@@ -20,13 +20,14 @@ import { flush } from 'solid-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { apply, legalActions, newGame, toJSON, type AzulJSON } from 'engine';
 import type { Expert, ExpertChoice } from 'ai-bot';
-import { chooseFor, createExpertSeats } from '../src/experts.js';
+import { chooseFor, createExpertSeats, type ExpertSeats } from '../src/experts.js';
 import {
   EXPERT_AVAILABLE,
   LEVELS,
   expertAvailable,
   seatingFromUrl,
   seatingToUrl,
+  type FromWorker,
 } from '../src/opponent.js';
 
 const BASELINE = join(
@@ -331,19 +332,72 @@ describe('one session per seat, for the worker’s lifetime [W6-40], [W6-41]', (
     expect(stub.created()).toBe(2);
   });
 
-  it('[W6-40] [W6-13] starts a new game with none, because the worker is replaced', () => {
-    // Nothing here ends a session: [W6-13] terminates the worker on a new game
-    // and on a seating change, and these die with it. What the interface must
-    // not do is carry one across — which is the same as saying a fresh set
-    // starts empty.
+  /**
+   * The lifetime, asserted where it is decided: in the state module.
+   *
+   * This used to build a second `createExpertSeats` and check that it started
+   * empty — true of any fresh object whatever the interface did, and the
+   * interface did nothing: no deal ever terminated the worker, so its sessions
+   * were carried into every later game. A title claiming [W6-13] on a test
+   * that never reached `game.ts` is how that stayed green.
+   *
+   * The seam here is `worker.ts` in miniature: one set of seats per worker,
+   * built on the first request and gone when the worker is terminated. So the
+   * only way the second game can meet fresh sessions is for the deal to end
+   * the worker. Seen red, on a copy, with `thinker?.terminate()` deleted from
+   * `deal`.
+   */
+  it('[W6-40] [W6-41] [W6-13] starts a new game with no sessions, because the deal ends the worker', async () => {
+    history.replaceState({}, '', '/?seed=42');
+    vi.resetModules();
+    const state = await import('../src/game.js');
     const asked: AzulJSON[][] = [];
-    const first = createExpertSeats(stubExpert(asked).create);
-    play(first, 6);
-    expect(first.sessions).toBeGreaterThan(0);
+    const stub = stubExpert(asked);
+    /** Requests the worker has been asked and not yet answered, oldest first. */
+    const queue: (() => void)[] = [];
+    let seats: ExpertSeats | null = null;
+    let workers = 0;
+    state.useThinker({
+      think(request) {
+        if (seats === null) {
+          seats = createExpertSeats(stub.create);
+          workers++;
+        }
+        const mine = seats;
+        return new Promise<FromWorker>((resolve) =>
+          queue.push(() =>
+            resolve({ generation: request.generation, ok: true, choice: chooseFor(request, mine) }),
+          ),
+        );
+      },
+      terminate() {
+        // A terminated worker answers nothing more, and its seats go with it.
+        seats = null;
+        queue.length = 0;
+      },
+    });
+    const answer = async (plies: number): Promise<void> => {
+      for (let ply = 0; ply < plies; ply++) {
+        queue.shift()!();
+        await Promise.resolve();
+        await Promise.resolve();
+        flush();
+      }
+    };
 
-    const next = stubExpert([]);
-    const second = createExpertSeats(next.create);
-    expect(second.sessions).toBe(0);
-    expect(next.created()).toBe(0);
+    state.startWithSeating({ players: ['expert', 'expert'] });
+    flush();
+    await answer(6);
+    expect(workers).toBe(1);
+    expect(stub.created(), 'one session per seat in the first game').toBe(2);
+    const first = [asked[0].length, asked[1].length];
+
+    state.startNewGame();
+    flush();
+    await answer(4);
+    expect(workers, 'the new game was answered by the old worker').toBe(2);
+    expect(stub.created(), 'the new game met the old game’s sessions').toBe(4);
+    // The first game's sessions were asked nothing about the second.
+    expect([asked[0].length, asked[1].length]).toEqual(first);
   });
 });
