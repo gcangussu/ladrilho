@@ -682,6 +682,21 @@ describe('the real seam [W6-11], [W6-42]', () => {
     expect(StubWorker.made, 'the next request went to the terminated worker').toHaveLength(2);
     StubWorker.made[1].reply();
     expect((await fresh).generation).toBe(2);
+
+    // A reply the old worker posted before it was terminated, delivered
+    // after — `StubWorker.reply` refuses once terminated, so dispatched by
+    // hand. Seen red, on a copy, with the `splice` deleted from `terminate`.
+    first.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          generation: 1,
+          ok: true,
+          choice: { action: 0, value: 0, depth: 1, nodes: 1, complete: false, curtailed: false },
+        } satisfies FromWorker,
+      }),
+    );
+    first.dispatchEvent(new ErrorEvent('error', { message: 'late' }));
+    await settle();
     // The request outstanding at termination is abandoned, never settled: its
     // caller has already moved to a new generation and would drop it [W6-16].
     expect(abandoned).toBe(false);

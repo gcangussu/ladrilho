@@ -99,8 +99,9 @@ export interface Thinker {
  * in the same step ([W6-16]), so any reply it could be given would be
  * discarded unread; settling it would manufacture one to throw away, and
  * settling it `ok: false` would dress a cancellation up as the failure [W6-15]
- * throws on. Dropping the worker drops its pending list, so nothing is
- * retained.
+ * throws on. Terminating empties the pending list before dropping the worker,
+ * so a reply the old worker sent just before it was terminated, delivered
+ * after, finds nobody to settle; and nothing is retained.
  */
 export function workerThinker(): Thinker {
   type Pending = { generation: number; resolve: (reply: FromWorker) => void };
@@ -144,6 +145,9 @@ export function workerThinker(): Thinker {
       });
     },
     terminate() {
+      // Emptied, not merely dropped: the old worker keeps its listener, and a
+      // reply it posted before termination may still be delivered after it.
+      live?.pending.splice(0);
       live?.worker.terminate();
       live = null;
     },
