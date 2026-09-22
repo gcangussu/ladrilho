@@ -544,6 +544,15 @@ setting.
 - **[A8-33]** The interface MUST offer `expert` if and only if the committed
   `packages/ai-bot/gate/baseline.json` has `passed: true`.
 
+  *The gate has now answered both ways. It first passed at 0.72 (143 of 200, lower bound 0.665,
+  null 0.4275). That `sharp` could break a root tie on an alpha-beta bound and play a strictly
+  worse move — up to a certain loss — which [0004 B4-30] now forbids and [0004 B4-63] tests. Rerun
+  against the fixed `sharp` at commit `a37f99e`, it read 0.45 (88 of 200, lower bound 0.393) over
+  the same seeds, with the null unchanged at 0.4275: the expert is deterministic and did not move,
+  `sharp` did. The failing result is committed, as [A8-32] requires, and `expert` is withdrawn
+  from the interface. The gate's opponent is `bot`'s code, so any change to `sharp`'s play is a
+  change to this gate's premise, and the lane has to be rerun when one lands.*
+
 ### Verification
 
 - **[A8-34]** A fixture generator MUST live under `packages/ai-bot/tools`. It MUST be pinned to the

@@ -8,6 +8,10 @@ A TypeScript implementation of the board game [Azul](https://en.wikipedia.org/wi
 2. **UI** — a web client built with [Solid.js](https://www.solidjs.com/) v2.
 3. **AI bot** — an agent that plays via the engine, running in the browser alongside the UI.
 
+Since then: the engine reports how it scored each round and the UI shows it (spec 0007), and a
+fourth package, `ai-bot`, ports a published trained player as an optional `expert` difficulty
+(spec 0008) — currently **not offered**, see [The expert](#the-expert).
+
 ## Structure
 
 pnpm monorepo:
@@ -17,6 +21,7 @@ pnpm monorepo:
 | `packages/engine` | done | Azul rules engine + conformance suite |
 | `packages/ui` | done | Solid.js v2 client, hot seat or against the bot |
 | `packages/bot` | done | The opponent: evaluation, search, three tiers, and the arena that measures it |
+| `packages/ai-bot` | done, not offered | The `expert`: a port of a published AlphaZero-style player; offered only while its gate passes |
 
 ## Intent and spec
 
@@ -41,6 +46,9 @@ pnpm -F engine bench             # the [E1-58] / [E1-59] budgets, non-gating
 pnpm -F ui dev                   # the client, on a local dev server
 pnpm -F ui test                  # the fast suite: jsdom, under 30s
 pnpm -F ui test:browser          # the [U3-73] lane: layout, reload and the real worker, in chromium
+
+pnpm -F ai-bot test              # the expert: board, network, search, sessions, the gate result
+pnpm -F ai-bot gate              # the [A8-30] gate against `sharp`; ~50 minutes, writes the baseline
 ```
 
 The engine's conformance fixtures are committed, so the suite needs neither network nor Python.
@@ -106,3 +114,40 @@ number from it.
 
 The search runs in a worker, so the page never blocks. It is handed the board as counts, never the
 bag's order, so it plays with no information a person does not have.
+
+## The expert
+
+`packages/ai-bot` is a port of the AlphaZero-style Azul player in
+[cestpasphoto/alpha-zero-general](https://github.com/cestpasphoto/alpha-zero-general) — its
+network, its trained weights, its search (100 simulations a move) and the tree it keeps for a
+whole game — onto this engine, as a fourth difficulty called `expert`. It lives beside `bot`
+rather than inside it: `bot` is code we can read and explain, and weights we cannot are kept
+apart from it. Spec 0008 has the details, including the fixtures that prove the port matches the
+original move for move.
+
+```bash
+pnpm -F ai-bot test              # fast suite, including parity with the original's recorded outputs
+pnpm -F ai-bot gate              # 200 games against `sharp`, plus the expert-vs-expert null; ~50 minutes
+pnpm -F ai-bot fixtures          # re-record from the original Python program; needs `uv`. Deliberate
+pnpm -F ai-bot weights           # regenerate src/weights.ts from the checkpoint. Deliberate
+```
+
+**It ships only if it beats `sharp`.** The gate plays it against `sharp` at shipped budgets and
+passes at a winrate of 60% or more; a full run writes `packages/ai-bot/gate/baseline.json`,
+which is committed whether it passed or not, and the interface offers `expert` if and only if
+that file says `passed: true`.
+
+**It does not pass today.** Its first gate won 72% (143 of 200), but that was measured against a
+`sharp` whose root search could break a tie on an alpha-beta bound and play a strictly worse
+move ([B4-30]). With that fixed, `sharp` itself got markedly stronger — 75.0% against `steady`,
+up from 66.3% — and the rerun gate reads:
+
+| | Winrate | Lower bound | W / L / D | Mean score (expert – `sharp`) |
+| --- | --- | --- | --- | --- |
+| First gate, old `sharp` | 72.0% | 66.5% | 143 / 55 / 2 | 43.5 – 36.4 |
+| Rerun, fixed `sharp` | **45.0%** | 39.3% | 88 / 108 / 4 | 41.0 – 45.4 |
+
+The null (expert against itself) is 42.75% both times — the expert is deterministic and did not
+change; `sharp` did. So `expert` is currently withdrawn from the interface, and a URL naming it
+is discarded like any other unknown setting. The package, its suite and its gate stay, so a
+stronger expert can be measured the same way.

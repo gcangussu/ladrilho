@@ -17,9 +17,12 @@ Since the three steps, two things have been added. The engine reports how it sco
 the vectors and the bot drive. And a fourth package, **`packages/ai-bot`** (spec 0008), ports a
 published AlphaZero-style player — network, search, and the deal it guesses — onto our engine as
 the `expert` difficulty. It sits beside `bot` rather than inside it: `bot` is code we can read and
-explain, and that is worth keeping separate from weights we cannot. It ships because a gate said
-so (`pnpm -F ai-bot gate`, 72% of 200 games against `sharp`), and `packages/ui` offers the setting
-only while the committed `packages/ai-bot/gate/baseline.json` says `passed: true`.
+explain, and that is worth keeping separate from weights we cannot. `packages/ui` offers the
+setting only while the committed `packages/ai-bot/gate/baseline.json` says `passed: true`, and
+**today it does not**: the gate (`pnpm -F ai-bot gate`) first passed at 72% of 200 games against
+`sharp`, but that `sharp` had a root tie-break bug ([0004 B4-30]); against the fixed `sharp` the
+expert wins 45% and is withdrawn. Anything that changes `sharp`'s play — its search, evaluation
+or budget — moves the expert's gate too, so rerun it and commit the result either way ([A8-32]).
 
 Two things about `ai-bot` cost real time if discovered late. Its fixtures are recorded from the
 original Python program by `pnpm -F ai-bot fixtures`, which needs `uv` and pinned wheels — and its
