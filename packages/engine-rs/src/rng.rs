@@ -81,3 +81,35 @@ impl Shuffler for Seeded {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Seeded;
+
+    /// Lemire's rejection step, which no game reaches: with a bag of at most
+    /// 100 tiles a draw is rejected with probability about `n / 2^64`. At
+    /// `n = 2^63 + 1` about half are, so this drives the branch directly and
+    /// holds each result to an independent redraw: take words until the low
+    /// half of `word * n` clears `2^64 mod n`, and return the high half.
+    #[test]
+    fn the_bounded_draw_rejects_and_redraws() {
+        let n = (1u64 << 63) + 1;
+        let threshold = n.wrapping_neg() % n;
+        let mut g = Seeded::new(7);
+        let mut words = Seeded::new(7);
+        let mut rejected = 0;
+        for _ in 0..200 {
+            let got = g.below(n);
+            let want = loop {
+                let m = u128::from(words.next_u64()) * u128::from(n);
+                if (m as u64) >= threshold {
+                    break (m >> 64) as u64;
+                }
+                rejected += 1;
+            };
+            assert_eq!(got, want);
+        }
+        assert!(rejected > 50, "the branch was taken {rejected} times");
+        assert_eq!(g, words, "the two consumed the same words");
+    }
+}

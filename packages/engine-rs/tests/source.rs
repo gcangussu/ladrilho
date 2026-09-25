@@ -33,7 +33,10 @@ fn rust_files(dir: &Path) -> Vec<PathBuf> {
 }
 
 /// Source with `//` comments removed, so documentation may name what the code
-/// may not use.
+/// may not use. Line-based: a `//` inside a string literal ends the line too,
+/// so code after `"http://"` on the same line is not scanned. Nothing in the
+/// crate writes such a line; a scan that parsed strings would buy that one
+/// shape.
 fn code(text: &str) -> String {
     text.lines().map(|l| l.split("//").next().unwrap_or("")).collect::<Vec<_>>().join("\n")
 }
@@ -295,7 +298,8 @@ fn the_state_is_plain_data_compared_whole() {
 /// Every `std` path or use tree in `text` that reaches outside the process's
 /// own memory: from each `std` token to the end of its statement, any of the
 /// module names `fs`, `net`, `time`, `env`, `thread` or `process`, and any
-/// alias of `std` itself, which would hide the rest from this scan.
+/// alias of `std` itself — `std as` or `self as` in a std use tree — which
+/// would hide the rest from this scan.
 fn outside_faults(text: &str) -> Vec<String> {
     let banned = ["fs", "net", "time", "env", "thread", "process"];
     let code = code(text);
@@ -308,7 +312,9 @@ fn outside_faults(text: &str) -> Vec<String> {
         }
         let statement = &rest[..rest.find(';').unwrap_or(rest.len())];
         let ws = words(statement);
-        if ws.first() == Some(&"as") {
+        // `use std as s` and `use std::{self as s}`: either would let the
+        // rest of the file reach `s::fs` where this scan cannot follow.
+        if ws.first() == Some(&"as") || ws.windows(2).any(|w| w == ["self", "as"]) {
             out.push("std aliased".to_string());
         }
         out.extend(ws.into_iter().filter(|w| banned.contains(w)).map(|w| format!("std … {w}")));
@@ -328,6 +334,8 @@ fn the_outside_check_rejects_its_fixtures() {
         process.as_str(),
         "use std::{\n    collections::HashMap,\n    net::TcpStream,\n};",
         "use std as s;",
+        "use std::{self as s};",
+        "use std::{io, self as s};",
     ] {
         assert!(!outside_faults(src).is_empty(), "not rejected: {src}");
     }
@@ -342,7 +350,9 @@ fn the_outside_check_rejects_its_fixtures() {
 /// hide one — but the crate has no dependencies to supply such a macro.
 ///
 /// Seen to fail against `use std::{fs, env};` added to `src/score.rs`, the
-/// grouped import an earlier, substring-matching version of this check missed.
+/// grouped import an earlier, substring-matching version of this check missed,
+/// and against `use std::{self as s};` with `s::fs` and `s::env` used below
+/// it, the alias the version after that missed.
 #[test]
 fn the_library_touches_nothing_outside() {
     let mut faults = Vec::new();
@@ -352,14 +362,36 @@ fn the_library_touches_nothing_outside() {
     assert!(faults.is_empty(), "{}", faults.join("\n"));
 }
 
-/// The names of the `pub fn`s in `text` whose receiver is mutable — `&mut self`
-/// or `self: &mut Self` — reading each signature up to its body or `;`,
-/// however it is wrapped across lines.
+/// The names of the public functions in `text` whose receiver is mutable —
+/// `&mut self` or `self: &mut Self` — reading each signature up to its body or
+/// `;`, however it is wrapped across lines. A public function is `pub`, then
+/// any of `const`, `async`, `unsafe` and `extern "…"`, then `fn`; `pub(crate)`
+/// and narrower are not public.
 fn mutable_receivers(text: &str) -> Vec<String> {
     let code = code(text);
     let mut out = Vec::new();
-    for (i, _) in code.match_indices("pub fn ") {
-        let rest = &code[i + "pub fn ".len()..];
+    for (i, _) in code.match_indices("pub") {
+        let before = code[..i].chars().last().is_none_or(|c| !(c.is_alphanumeric() || c == '_'));
+        let mut rest = &code[i + 3..];
+        if !before || !rest.starts_with(char::is_whitespace) {
+            continue;
+        }
+        loop {
+            rest = rest.trim_start();
+            let qualifiers = ["const ".to_string(), ["as", "ync "].concat(), "unsafe ".to_string()];
+            if let Some(r) = qualifiers.iter().find_map(|q| rest.strip_prefix(q.as_str())) {
+                rest = r;
+            } else if let Some(r) = rest.strip_prefix("extern") {
+                let r = r.trim_start();
+                rest = match r.strip_prefix('"') {
+                    Some(abi) => &abi[abi.find('"').map_or(abi.len(), |k| k + 1)..],
+                    None => r,
+                };
+            } else {
+                break;
+            }
+        }
+        let Some(rest) = rest.strip_prefix("fn ") else { continue };
         let end = rest.find(['{', ';']).unwrap_or(rest.len());
         let signature: String = rest[..end].split_whitespace().collect::<Vec<_>>().join(" ");
         let params = signature.split_once('(').map_or("", |(_, p)| p.trim_start());
@@ -370,20 +402,66 @@ fn mutable_receivers(text: &str) -> Vec<String> {
     out
 }
 
+/// Every `impl Trait for Type` block in `text` holding a method with a mutable
+/// receiver, named by its header. Trait methods carry no `pub`, so the scan
+/// above cannot see them; an `IndexMut` on the state would be a public setter.
+fn trait_mutators(text: &str) -> Vec<String> {
+    let code = code(text);
+    let mut out = Vec::new();
+    for (i, _) in code.match_indices("impl") {
+        let before = code[..i].chars().last().is_none_or(|c| !(c.is_alphanumeric() || c == '_'));
+        let rest = &code[i..];
+        let Some(open) = rest.find('{') else { continue };
+        let header: String = rest[..open].split_whitespace().collect::<Vec<_>>().join(" ");
+        if !before || !header.contains(" for ") || !rest[4..].starts_with([' ', '<']) {
+            continue;
+        }
+        let mut depth = 0;
+        let mut end = rest.len();
+        for (k, c) in rest[open..].char_indices() {
+            depth += match c {
+                '{' => 1,
+                '}' => -1,
+                _ => 0,
+            };
+            if depth == 0 {
+                end = open + k;
+                break;
+            }
+        }
+        let body: String = rest[open..end].split_whitespace().collect::<Vec<_>>().join(" ");
+        if body.contains("(&mut self") || body.contains("(self: &mut") || body.contains("(mut self: &mut") {
+            out.push(header);
+        }
+    }
+    out
+}
+
 #[test]
-fn the_receiver_scan_reads_wrapped_signatures() {
-    let src = "pub fn a(&mut self) {}\npub fn b(\n    &mut self,\n    x: u8,\n) -> u8 { x }\npub fn c(self: &mut Self) {}\npub fn d(&self) {}\npub fn e<T>(&mut self, t: T) {}";
-    assert_eq!(mutable_receivers(src), ["a", "b", "c", "e"]);
+fn the_receiver_scans_reject_their_fixtures() {
+    let src = "pub fn a(&mut self) {}\npub fn b(\n    &mut self,\n    x: u8,\n) -> u8 { x }\npub fn c(self: &mut Self) {}\npub fn d(&self) {}\npub fn e<T>(&mut self, t: T) {}\npub const fn f(&mut self, s: [i32; 2]) {}\npub unsafe extern \"C\" fn g(&mut self) {}\npub(crate) fn h(&mut self) {}";
+    assert_eq!(mutable_receivers(src), ["a", "b", "c", "e", "f", "g"]);
+    let traits = "impl core::ops::IndexMut<usize> for AzulState {\n    fn index_mut(&mut self, i: usize) -> &mut u8 { &mut self.x[i] }\n}\nimpl<S: Shuffler> AzulState<S> { fn own(&mut self) {} }\nimpl Clone for P { fn clone(&self) -> Self { P } }";
+    assert_eq!(trait_mutators(traits), ["impl core::ops::IndexMut<usize> for AzulState"]);
 }
 
 /// [E1-51] Only apply and apply_explained take a mutable receiver among the
-/// public functions, the shuffler's is the trait's, and the library holds no
-/// ambient mutable state.
+/// public functions; the only trait implementation with one is `Shuffler for
+/// Seeded`, whose receiver the trait requires; and the library holds no
+/// ambient mutable state. What counts as public is
+/// `the_receiver_scans_reject_their_fixtures` above; a mutable receiver
+/// produced by a macro is not seen, and the crate defines none.
+///
+/// Seen to fail against `pub const fn set_scores(&mut self, s: [i32; 2])`
+/// added to `impl AzulState` in `src/state.rs`, which an earlier version
+/// matching only `pub fn ` let through.
 #[test]
 fn only_the_ply_mutates_and_nothing_is_ambient() {
     let mut mutators = Vec::new();
+    let mut impls = Vec::new();
     for (path, text) in library_code() {
         mutators.extend(mutable_receivers(&read(&path)));
+        impls.extend(trait_mutators(&read(&path)));
         let w = words(&text);
         for banned in ["thread_local", "Cell", "RefCell", "OnceCell", "OnceLock", "Mutex", "RwLock", "LazyLock"] {
             assert!(!w.contains(&banned), "{}: {banned}", path.display());
@@ -393,6 +471,7 @@ fn only_the_ply_mutates_and_nothing_is_ambient() {
     }
     mutators.sort();
     assert_eq!(mutators, ["apply", "apply_explained"]);
+    assert_eq!(impls, ["impl Shuffler for Seeded"]);
     let rng = read(&crate_dir().join("src/rng.rs"));
     assert!(rng.contains("fn shuffle(&mut self, bag: &mut [u8], index: u32);"));
 }

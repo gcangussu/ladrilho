@@ -221,10 +221,10 @@ impl Shuffler for Seeded { /* … */ }
 
   The known answers, and an independent implementation compared over 200 seeds, pin the
   generator, its seeding, the bounded draw's multiply-shift and the shuffle's direction. They do
-  not pin the rejection step of Lemire's method, and no test can: with a bag of at most 100 tiles
-  a draw is rejected with probability about `n / 2^64`, so no game ever takes that branch. That
-  step is held by reading the code against the paper, and this sentence is here so that nobody
-  reads the known answers as covering it.
+  not pin the rejection step of Lemire's method: with a bag of at most 100 tiles a draw is
+  rejected with probability about `n / 2^64`, so no game ever takes that branch. A unit test in
+  `src/rng.rs` drives it directly, at `n = 2^63 + 1`, where about half of all draws are rejected,
+  against an independent redraw.
 
   *Deliberately not 0001's `xoshiro128**`. The intent does not ask the two engines to deal the
   same game from the same seed, and a generator that visibly differs keeps anyone from coming to
@@ -380,7 +380,7 @@ pub struct RoundScoring { pub round: u32, pub players: [PlayerRound; 2],
     "date": "2026-09-25",
     "machine": { "os": "…", "arch": "…", "cpu": "…" },
     "typescript": { "pliesPerSecond": 1048931, "cloneNs": 530 },
-    "rust":       { "pliesPerSecond": 0,       "cloneNs": 0 },
+    "rust":       { "pliesPerSecond": 0,       "cloneNs": 0, "plies": 0 },  // plies: its game's length
     "ratio": 0,                   // rust.pliesPerSecond / typescript.pliesPerSecond
     "passed": false               // ratio >= 5
   }

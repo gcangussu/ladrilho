@@ -117,9 +117,9 @@ fn the_seeded_shuffle_is_the_published_algorithm() {
 /// opening deal, and the deal, for seeds 0, 1 and 2. They pin the generator,
 /// its seeding, the multiply-shift of the bounded draw and the shuffle's
 /// direction: a change to any of those changes them. They do not pin Lemire's
-/// rejection step, and nothing here can: at `n <= 100` a draw is rejected with
-/// probability about `n / 2^64`, so no game reaches that branch. It is held by
-/// reading the code against the paper, as [R9-13] says.
+/// rejection step: at `n <= 100` a draw is rejected with probability about
+/// `n / 2^64`, so no game reaches that branch. A unit test in `src/rng.rs`
+/// drives it directly, at `n = 2^63 + 1`.
 ///
 /// Seen to fail [R9-24], with the test above, against `rotate_left(44)` for
 /// `rotate_left(45)` in `Seeded::next_u64`, `src/rng.rs`: both failed and no
