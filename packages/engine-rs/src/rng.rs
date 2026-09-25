@@ -91,6 +91,9 @@ mod tests {
     /// `n = 2^63 + 1` about half are, so this drives the branch directly and
     /// holds each result to an independent redraw: take words until the low
     /// half of `word * n` clears `2^64 mod n`, and return the high half.
+    ///
+    /// Seen to fail against `let threshold = 0u64;` in `below`, the mutation
+    /// the known-answer tests in `tests/determinism.rs` cannot see.
     #[test]
     fn the_bounded_draw_rejects_and_redraws() {
         let n = (1u64 << 63) + 1;

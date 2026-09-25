@@ -454,7 +454,8 @@ fn the_receiver_scans_reject_their_fixtures() {
 ///
 /// Seen to fail against `pub const fn set_scores(&mut self, s: [i32; 2])`
 /// added to `impl AzulState` in `src/state.rs`, which an earlier version
-/// matching only `pub fn ` let through.
+/// matching only `pub fn ` let through; and against an `impl IndexMut<usize>`
+/// for a type added to `src/score.rs`, which carries no `pub` at all.
 #[test]
 fn only_the_ply_mutates_and_nothing_is_ambient() {
     let mut mutators = Vec::new();
