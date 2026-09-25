@@ -2,7 +2,7 @@
 title: Engine in Rust
 author: Gabriel Cangussu
 date: 2026-09-25
-status: draft
+status: implemented
 intent: 0007 — Rules engine in Rust
 prefix: R9
 depends-on: 0001 — Engine core, 0002 — Engine conformance vectors, 0007 — Scoring explained
@@ -372,6 +372,11 @@ pub struct RoundScoring { pub round: u32, pub players: [PlayerRound; 2],
   ```
 
   Only a complete run writes the file; an interrupted or partial run MUST leave it alone.
+
+  *The tool is `examples/compare.rs`, run with `cargo run --release --example compare`: [R9-1]
+  makes the crate a single library, so the tool is an example target rather than a binary. It
+  shares its measurement with `benches/engine.rs` through `benches/measure.rs`, so the bench and
+  the gate measure one thing.*
 - **[R9-20]** The crate MUST sustain at least **five times** the TypeScript engine's
   `legal_actions` + `apply` throughput, as measured by [R9-19]. The committed `baseline.json` is
   the evidence: the suite MUST assert that it exists, parses, that `ratio` equals the quotient of
@@ -543,9 +548,13 @@ Nothing in 0001, 0002 or 0007 is amended. The crate reads them; they do not know
 
 ## Open questions
 
-- **The legal-action representation.** `ActionList` is fixed-capacity and sorted, to match
+- ~~**The legal-action representation.** `ActionList` is fixed-capacity and sorted, to match
   [0001 E1-13]. A bitmask would be smaller and faster to build, but an ascending iterator over it is
-  the same contract. Left to the benchmark: whichever [R9-20] needs.
+  the same contract. Left to the benchmark: whichever [R9-20] needs.~~ **Answered by the benchmark:
+  the sorted array.** It passes [R9-20] at 8.0× (8.22M plies per second against 1.03M, measured
+  2026-09-25). A bitmask is used only *inside* `legal_actions`, to visit the (source, colour) pairs
+  that hold tiles without a branch per pair — `legal_actions` was 100 ns of a 140 ns ply before it,
+  and a branch-free write of all thirty runs measured slower still, at 170 ns.
 
 ## References
 

@@ -6,13 +6,13 @@
     "os": "macos"
   },
   "passed": true,
-  "ratio": 8.173663657152309,
+  "ratio": 8.008303393213573,
   "rust": {
-    "cloneNs": 15.7,
-    "pliesPerSecond": 7313124.0
+    "cloneNs": 13.2,
+    "pliesPerSecond": 8224928.0
   },
   "typescript": {
-    "cloneNs": 550.5,
-    "pliesPerSecond": 894718.0
+    "cloneNs": 520.6,
+    "pliesPerSecond": 1027050.0
   }
 }
