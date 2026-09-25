@@ -99,12 +99,17 @@ fn owned(id: &str) -> bool {
     prefixes().iter().any(|p| id.starts_with(&format!("{p}-")))
 }
 
-/// Every `.rs` file under `tests/`: the whole harness.
+/// Every `.rs` file under `tests/` except the shared `support/` module: a
+/// citation belongs beside the test that checks it, and a helper checks
+/// nothing on its own.
 fn test_sources() -> Vec<(PathBuf, String)> {
     fn walk(dir: &Path, out: &mut Vec<(PathBuf, String)>) {
         for e in std::fs::read_dir(dir).unwrap() {
             let path = e.unwrap().path();
             if path.is_dir() {
+                if path.file_name().is_some_and(|n| n == "support") {
+                    continue;
+                }
                 walk(&path, out);
             } else if path.extension().is_some_and(|x| x == "rs") {
                 let text = std::fs::read_to_string(&path).unwrap();

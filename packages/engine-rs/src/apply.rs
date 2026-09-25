@@ -39,6 +39,16 @@ const fn row_runs() -> [([u8; ROW_RUN], usize); 1 << NUM_ROWS] {
     out
 }
 
+/// Tiles per colour, with anything that is not a colour counted in a sixth
+/// bucket, so a bag holding one can never compare equal to a lawful one.
+fn tile_counts(bag: &[u8]) -> [u8; NUM_COLORS + 1] {
+    let mut counts = [0u8; NUM_COLORS + 1];
+    for &t in bag {
+        counts[usize::from(t).min(NUM_COLORS)] += 1;
+    }
+    counts
+}
+
 /// `source * 30 + color * 6 + dest` ([0001 E1-6]); `None` outside the space.
 pub fn encode_action(source: u8, color: u8, dest: u8) -> Option<Action> {
     if source > CENTER || usize::from(color) >= NUM_COLORS || dest > FLOOR {
@@ -222,9 +232,22 @@ impl<S: Shuffler> AzulState<S> {
 
     /// The one place randomness enters ([0001 E1-47]): the seam, with the
     /// state's `shuffles_used` as the index, then the increment ([R9-12]).
+    ///
+    /// A shuffler is the caller's code. One that returns anything but a
+    /// reordering of the tiles it was handed has that call undone: the bag
+    /// keeps the order it had, and the counter still advances. A broken
+    /// shuffler therefore deals a lawful, unshuffled game rather than a panic
+    /// ([R9-7]).
+    ///
+    /// The counter saturates rather than wrapping at `u32::MAX`, a value only
+    /// a loaded snapshot can carry; past it the index repeats.
     pub(crate) fn run_shuffle(&mut self) {
         let len = usize::from(self.bag_len);
+        let before = self.bag;
         self.shuffler.shuffle(&mut self.bag[..len], self.shuffles_used);
+        if tile_counts(&before[..len]) != tile_counts(&self.bag[..len]) {
+            self.bag = before;
+        }
         self.shuffles_used = self.shuffles_used.saturating_add(1);
     }
 

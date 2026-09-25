@@ -77,9 +77,12 @@ fn the_crate_and_its_toolchain_are_pinned() {
     let pkg = read(&crate_dir().join("package.json"));
     let scripts: serde_json::Value = serde_json::from_str::<serde_json::Value>(&pkg).unwrap()["scripts"].clone();
     for (name, cmd) in scripts.as_object().unwrap() {
-        let cmd = cmd.as_str().unwrap();
-        if cmd.contains("cargo ") {
-            assert!(cmd.contains("--locked"), "script {name} runs cargo without --locked");
+        // Every cargo command in a chain, not the chain as a whole.
+        for part in cmd.as_str().unwrap().split(['&', '|', ';']) {
+            let part = part.trim();
+            if part.starts_with("cargo ") {
+                assert!(part.split_whitespace().any(|w| w == "--locked"), "script {name}: `{part}` is not locked");
+            }
         }
     }
 }
@@ -111,57 +114,101 @@ fn the_only_dependency_is_serde_json_for_the_tests() {
     assert!(!manifest.contains("[target."), "no platform-specific dependencies");
 }
 
-/// [R9-4] Synchronous throughout: no async function, block or closure, no
-/// await, no Future implemented, in any Rust file of the package; and no
-/// async runtime or futures crate in the lockfile.
+/// The words that make Rust asynchronous. None of them has any business in an
+/// engine that never waits: the keywords, and the names an implementation of
+/// `Future` cannot avoid.
+fn async_words() -> [String; 7] {
+    [
+        ["as", "ync"].concat(),
+        ["aw", "ait"].concat(),
+        ["Fut", "ure"].concat(),
+        ["IntoFut", "ure"].concat(),
+        ["Po", "ll"].concat(),
+        ["po", "ll"].concat(),
+        ["Wa", "ker"].concat(),
+    ]
+}
+
+/// Every asynchronous word in `text`, comments stripped. A word, not a phrase:
+/// `async` anywhere is an async function, block or closure, however it is
+/// spelled around; `await` anywhere is an await; `Future`, `poll` and friends
+/// anywhere are an implementation or a use of one, however its path is
+/// qualified or its generics bounded.
+fn async_faults(text: &str) -> Vec<String> {
+    let banned = async_words();
+    words(&code(text)).into_iter().filter(|w| banned.iter().any(|b| b == w)).map(str::to_string).collect()
+}
+
+/// Lockfile packages that are an async runtime or a futures crate.
+fn async_packages(lock: &str) -> Vec<String> {
+    let asy = ["as", "ync"].concat();
+    lock.lines()
+        .filter_map(|l| l.strip_prefix("name = "))
+        .map(|n| n.trim_matches('"'))
+        .filter(|n| {
+            ["tokio", &[&asy, "-std"].concat(), "smol", "futures"].contains(n)
+                || n.starts_with("futures-")
+                || n.starts_with(&[&asy, "-"].concat())
+        })
+        .map(str::to_string)
+        .collect()
+}
+
+/// The clauses of the no-async check, each against the sources it rejects,
+/// so what the check covers is legible rather than asserted. Each fixture is
+/// assembled from fragments so this file never matches itself.
+#[test]
+fn the_async_check_rejects_its_fixtures() {
+    let a = ["as", "ync"].concat();
+    let w = ["aw", "ait"].concat();
+    let f = ["Fut", "ure"].concat();
+    let p = ["po", "ll"].concat();
+    let rejected = [
+        format!("pub {a} fn probe() {{}}"),
+        format!("fn x() {{ let _ = {a} {{ 1 }}; }}"),
+        format!("fn x() {{ let _ = {a} move || 1; }}"),
+        format!("fn x() {{ let _ = {a} || 1; }}"),
+        format!("fn x(y: Y) {{ y.{w}; }}"),
+        format!("impl core::{}::{f} for Probe {{ type Output = (); }}", f.to_lowercase()),
+        format!("impl<T: Send> {f} for Probe<T> {{}}"),
+        format!("impl Probe {{ fn {p}(&mut self) {{}} }}"),
+        format!("fn x() -> impl Into{f}<Output = ()> {{ todo!() }}"),
+    ];
+    for src in &rejected {
+        assert!(!async_faults(src).is_empty(), "not rejected: {src}");
+    }
+    let accepted = [
+        format!("fn {a}hronous_ish() {{}} // {a} fn in a comment"),
+        "fn synchronous() -> u8 { 1 }".to_string(),
+    ];
+    for src in &accepted {
+        assert!(async_faults(src).is_empty(), "rejected: {src}");
+    }
+    for name in ["tokio", "smol", "futures", "futures-util", &[&a, "-std"].concat(), &[&a, "-trait"].concat()] {
+        assert_eq!(async_packages(&format!("name = \"{name}\"")), [name.to_string()], "{name}");
+    }
+    assert!(async_packages("name = \"serde_json\"").is_empty());
+}
+
+/// [R9-4] Synchronous throughout: no asynchronous word — `async`, `await`,
+/// `Future`, `IntoFuture`, `Poll`, `poll`, `Waker` — outside comments in any
+/// Rust file of the package, and no async runtime or futures crate in the
+/// lockfile. The clauses and what each rejects are
+/// `the_async_check_rejects_its_fixtures` above.
 ///
-/// Seen to fail [R9-24] against `pub async fn probe() {}` added to
-/// `src/score.rs`: this test failed and no other in this file.
+/// Seen to fail [R9-24] against each of these added to `src/score.rs`, one at
+/// a time: `pub async fn probe() {}`; an `async` block; a `.await`;
+/// `impl core::future::Future for Probe`; and `impl<T: Send> Future for P<T>`.
+/// This test failed each time, and no other in this file.
 #[test]
 fn nothing_is_async() {
-    let asy = ["as", "ync"].concat();
-    let awa = [".aw", "ait"].concat();
-    let fut = ["Fut", "ure"].concat();
-    let mut faults = Vec::new();
     let files = rust_files(&crate_dir());
     assert!(files.len() > 10, "the scan must see the package");
-    for path in &files {
-        let text = code(&read(path));
-        let w = words(&text);
-        for (i, word) in w.iter().enumerate() {
-            if *word == asy && matches!(w.get(i + 1), Some(&"fn") | Some(&"move") | Some(&"unsafe")) {
-                faults.push(format!("{}: `{asy} {}`", path.display(), w[i + 1]));
-            }
-        }
-        // An async block or closure: the keyword followed by `{` or `|`.
-        for (i, _) in text.match_indices(&asy) {
-            let before = text[..i].chars().last().is_none_or(|c| !(c.is_alphanumeric() || c == '_'));
-            let after = text[i + asy.len()..].trim_start();
-            if before && (after.starts_with('{') || after.starts_with('|')) {
-                faults.push(format!("{}: an {asy} block or closure", path.display()));
-            }
-        }
-        if text.contains(&awa) {
-            faults.push(format!("{}: `{awa}`", path.display()));
-        }
-        if w.windows(4).any(|x| x[0] == "impl" && x.contains(&fut.as_str()) && x.contains(&"for")) {
-            faults.push(format!("{}: implements {fut}", path.display()));
-        }
-    }
-    let lock = read(&crate_dir().join("Cargo.lock"));
-    let banned = |name: &str| {
-        ["tokio", &[&asy, "-std"].concat(), "smol", "futures"].contains(&name)
-            || name.starts_with("futures-")
-            || name.starts_with(&[&asy, "-"].concat())
-    };
-    for line in lock.lines() {
-        if let Some(name) = line.strip_prefix("name = ") {
-            let name = name.trim_matches('"');
-            if banned(name) {
-                faults.push(format!("Cargo.lock: {name}"));
-            }
-        }
-    }
+    let mut faults: Vec<String> = files
+        .iter()
+        .flat_map(|path| async_faults(&read(path)).into_iter().map(move |w| format!("{}: `{w}`", path.display())))
+        .collect();
+    faults.extend(async_packages(&read(&crate_dir().join("Cargo.lock"))).into_iter().map(|n| format!("Cargo.lock: {n}")));
     assert!(faults.is_empty(), "{}", faults.join("\n"));
 }
 
@@ -240,29 +287,98 @@ fn the_state_is_plain_data_compared_whole() {
     assert!(!body.contains("impl PartialEq"), "equality is derived, not hand-written");
 }
 
-/// [E1-50] No filesystem, network, clock, environment, threads or processes
-/// in the library.
-#[test]
-fn the_library_touches_nothing_outside() {
-    for (path, text) in library_code() {
-        for m in ["fs", "net", "time", "env", "thread", "process"] {
-            let path_text = ["std::", m].concat();
-            assert!(!text.contains(&path_text), "{}: {path_text}", path.display());
+/// Every `std` path or use tree in `text` that reaches outside the process's
+/// own memory: from each `std` token to the end of its statement, any of the
+/// module names `fs`, `net`, `time`, `env`, `thread` or `process`, and any
+/// alias of `std` itself, which would hide the rest from this scan.
+fn outside_faults(text: &str) -> Vec<String> {
+    let banned = ["fs", "net", "time", "env", "thread", "process"];
+    let code = code(text);
+    let mut out = Vec::new();
+    for (i, _) in code.match_indices("std") {
+        let before = code[..i].chars().last().is_none_or(|c| !(c.is_alphanumeric() || c == '_'));
+        let rest = &code[i + 3..];
+        if !before || rest.starts_with(|c: char| c.is_alphanumeric() || c == '_') {
+            continue;
         }
+        let statement = &rest[..rest.find(';').unwrap_or(rest.len())];
+        let ws = words(statement);
+        if ws.first() == Some(&"as") {
+            out.push("std aliased".to_string());
+        }
+        out.extend(ws.into_iter().filter(|w| banned.contains(w)).map(|w| format!("std … {w}")));
+    }
+    out
+}
+
+/// What the outside check rejects, as fixtures.
+#[test]
+fn the_outside_check_rejects_its_fixtures() {
+    let process = ["fn x() { let _ = ::std::", "process::id(); }"].concat();
+    for src in [
+        "use std::fs;",
+        "use std::{fs, env};",
+        "use std::{io, time::Instant};",
+        "fn x() { let _ = std::env::args(); }",
+        process.as_str(),
+        "use std::{\n    collections::HashMap,\n    net::TcpStream,\n};",
+        "use std as s;",
+    ] {
+        assert!(!outside_faults(src).is_empty(), "not rejected: {src}");
+    }
+    for src in ["use std::mem;", "fn x() { std::mem::swap(&mut a, &mut b); }", "use core::fmt; // std::fs"] {
+        assert!(outside_faults(src).is_empty(), "rejected: {src}");
     }
 }
 
-/// [E1-51] Only apply, apply_explained and the shuffler take `&mut self`, and
-/// the library holds no ambient mutable state.
+/// [E1-50] No filesystem, network, clock, environment, threads or processes
+/// in the library, as `the_outside_check_rejects_its_fixtures` defines them:
+/// named anywhere in a `std` path or use tree. Not a proof — a macro could
+/// hide one — but the crate has no dependencies to supply such a macro.
+///
+/// Seen to fail against `use std::{fs, env};` added to `src/score.rs`, the
+/// grouped import an earlier, substring-matching version of this check missed.
+#[test]
+fn the_library_touches_nothing_outside() {
+    let mut faults = Vec::new();
+    for path in rust_files(&crate_dir().join("src")) {
+        faults.extend(outside_faults(&read(&path)).into_iter().map(|f| format!("{}: {f}", path.display())));
+    }
+    assert!(faults.is_empty(), "{}", faults.join("\n"));
+}
+
+/// The names of the `pub fn`s in `text` whose receiver is mutable — `&mut self`
+/// or `self: &mut Self` — reading each signature up to its body or `;`,
+/// however it is wrapped across lines.
+fn mutable_receivers(text: &str) -> Vec<String> {
+    let code = code(text);
+    let mut out = Vec::new();
+    for (i, _) in code.match_indices("pub fn ") {
+        let rest = &code[i + "pub fn ".len()..];
+        let end = rest.find(['{', ';']).unwrap_or(rest.len());
+        let signature: String = rest[..end].split_whitespace().collect::<Vec<_>>().join(" ");
+        let params = signature.split_once('(').map_or("", |(_, p)| p.trim_start());
+        if params.starts_with("&mut self") || params.starts_with("self: &mut") || params.starts_with("mut self: &mut") {
+            out.push(signature.split(['(', '<']).next().unwrap().trim().to_string());
+        }
+    }
+    out
+}
+
+#[test]
+fn the_receiver_scan_reads_wrapped_signatures() {
+    let src = "pub fn a(&mut self) {}\npub fn b(\n    &mut self,\n    x: u8,\n) -> u8 { x }\npub fn c(self: &mut Self) {}\npub fn d(&self) {}\npub fn e<T>(&mut self, t: T) {}";
+    assert_eq!(mutable_receivers(src), ["a", "b", "c", "e"]);
+}
+
+/// [E1-51] Only apply and apply_explained take a mutable receiver among the
+/// public functions, the shuffler's is the trait's, and the library holds no
+/// ambient mutable state.
 #[test]
 fn only_the_ply_mutates_and_nothing_is_ambient() {
     let mut mutators = Vec::new();
     for (path, text) in library_code() {
-        for line in text.lines() {
-            if line.contains("fn ") && line.contains("&mut self") && line.trim_start().starts_with("pub fn") {
-                mutators.push(line.trim().split('(').next().unwrap().trim_start_matches("pub fn ").to_string());
-            }
-        }
+        mutators.extend(mutable_receivers(&read(&path)));
         let w = words(&text);
         for banned in ["thread_local", "Cell", "RefCell", "OnceCell", "OnceLock", "Mutex", "RwLock", "LazyLock"] {
             assert!(!w.contains(&banned), "{}: {banned}", path.display());

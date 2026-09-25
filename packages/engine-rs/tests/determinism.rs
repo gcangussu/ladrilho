@@ -114,8 +114,12 @@ fn the_seeded_shuffle_is_the_published_algorithm() {
 }
 
 /// [R9-13] Known answers, committed as literals: the bag left after the
-/// opening deal, and the deal, for seeds 0, 1 and 2. A change to any part of
-/// the algorithm changes these.
+/// opening deal, and the deal, for seeds 0, 1 and 2. They pin the generator,
+/// its seeding, the multiply-shift of the bounded draw and the shuffle's
+/// direction: a change to any of those changes them. They do not pin Lemire's
+/// rejection step, and nothing here can: at `n <= 100` a draw is rejected with
+/// probability about `n / 2^64`, so no game reaches that branch. It is held by
+/// reading the code against the paper, as [R9-13] says.
 ///
 /// Seen to fail [R9-24], with the test above, against `rotate_left(44)` for
 /// `rotate_left(45)` in `Seeded::next_u64`, `src/rng.rs`: both failed and no
@@ -268,6 +272,60 @@ fn the_shuffle_counter_only_rises_by_one() {
         for w in states.windows(2) {
             let d = w[1].shuffles_used() - w[0].shuffles_used();
             assert!(d <= 1, "seed {seed}");
+        }
+    }
+}
+
+/// Shufflers that break the seam's contract, and one that keeps it.
+#[derive(Clone, Debug, PartialEq)]
+enum Hostile {
+    OutOfRange,
+    Duplicate,
+    Zeroed,
+    Reversed,
+}
+
+impl Shuffler for Hostile {
+    fn shuffle(&mut self, bag: &mut [u8], _index: u32) {
+        match self {
+            Hostile::OutOfRange => {
+                if let Some(t) = bag.last_mut() {
+                    *t = 9;
+                }
+            }
+            Hostile::Duplicate => {
+                if let Some(&last) = bag.last() {
+                    bag[0] = last;
+                }
+            }
+            Hostile::Zeroed => bag.fill(0),
+            Hostile::Reversed => bag.reverse(),
+        }
+    }
+}
+
+/// [R9-7] A shuffler is the caller's code, and one that does anything but
+/// reorder its tiles cannot make the engine panic: that call is undone, the
+/// bag keeps its order, the counter advances, and the game stays lawful to its
+/// end. One that does reorder is honoured.
+#[test]
+fn a_shuffler_that_breaks_its_contract_is_undone() {
+    let unshuffled: Vec<u8> = (0..100).map(|i| (i / 20) as u8).collect();
+    for h in [Hostile::OutOfRange, Hostile::Duplicate, Hostile::Zeroed, Hostile::Reversed] {
+        let mut s = AzulState::new_game(h.clone());
+        assert_eq!(s.shuffles_used(), 1, "{h:?}");
+        assert_eq!(s.tile_census(), [20; 5], "{h:?}");
+        let mut want = unshuffled.clone();
+        if h == Hostile::Reversed {
+            want.reverse();
+        }
+        let c = s.to_canonical();
+        assert_eq!(c.bag[..], want[..80], "{h:?}: the bag after the deal");
+        let mut pick = support::Picker::new(3);
+        while !s.is_terminal() {
+            let legal = s.legal_actions();
+            s.apply(legal.as_slice()[pick.below(legal.len())]).unwrap();
+            assert_eq!(s.tile_census(), [20; 5], "{h:?}");
         }
     }
 }

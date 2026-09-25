@@ -7,6 +7,7 @@
 //!
 //! Only a complete run writes: the file is written to a temporary path and
 //! renamed into place at the end, so an interrupted run leaves the old one.
+//! The two engines' runs are interleaved, one of each per step.
 
 #[path = "../benches/measure.rs"]
 mod measure;
@@ -60,37 +61,43 @@ fn main() {
     let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let repo = crate_dir.join("../..");
 
-    let mut ts_plies = Vec::new();
-    let mut ts_clone = Vec::new();
-    for i in 0..measure::WARMUP_RUNS + measure::TIMED_RUNS {
-        let (p, c) = typescript_run(&repo);
-        eprintln!("typescript run {}: {p:.0} plies/s, {c:.1} ns/clone{}", i + 1, if i < measure::WARMUP_RUNS { " (warm-up)" } else { "" });
-        if i >= measure::WARMUP_RUNS {
-            ts_plies.push(p);
-            ts_clone.push(c);
-        }
-    }
-    let ts_plies = measure::median(ts_plies).round();
-    let ts_clone = (measure::median(ts_clone) * 10.0).round() / 10.0;
+    // The two engines' runs interleave, one of each per step, so a transient
+    // load on the machine slows both sides of the ratio rather than one.
+    let rust = measure::Workload::new();
+    let mut rust_runs = Vec::new();
+    let (ts_plies, ts_clone) = measure::protocol(|i| {
+        let ts = typescript_run(&repo);
+        let rs = rust.run_once();
+        let tag = if i < measure::WARMUP_RUNS { " (warm-up)" } else { "" };
+        eprintln!("run {}: typescript {:.0} plies/s, {:.1} ns/clone; rust {:.0} plies/s, {:.1} ns/clone{tag}", i + 1, ts.0, ts.1, rs.0, rs.1);
+        rust_runs.push(rs);
+        ts
+    });
+    let mut i = 0;
+    let (rust_plies, rust_clone) = measure::protocol(|_| {
+        i += 1;
+        rust_runs[i - 1]
+    });
+    let ts_plies = ts_plies.round();
+    let ts_clone = (ts_clone * 10.0).round() / 10.0;
+    let rust_plies = rust_plies.round();
+    let rust_clone = (rust_clone * 10.0).round() / 10.0;
 
-    let rust = measure::measure();
-    let rust_plies = rust.plies_per_second.round();
-    let rust_clone = (rust.clone_ns * 10.0).round() / 10.0;
-    eprintln!("rust: {rust_plies:.0} plies/s over a {}-ply game, {rust_clone:.1} ns/clone", rust.plies);
-
+    // The engines deal different games from the same seed ([R9-13]), so each
+    // times its own recorded game: the ratio compares plies per second, not
+    // one game's cost.
     let ratio = rust_plies / ts_plies;
     let doc = serde_json::json!({
         "date": run("date", &["+%F"]),
         "machine": { "os": std::env::consts::OS, "arch": std::env::consts::ARCH, "cpu": cpu() },
         "typescript": { "pliesPerSecond": ts_plies, "cloneNs": ts_clone },
-        "rust": { "pliesPerSecond": rust_plies, "cloneNs": rust_clone },
+        "rust": { "pliesPerSecond": rust_plies, "cloneNs": rust_clone, "plies": rust.plies() },
         "ratio": ratio,
         "passed": ratio >= 5.0,
     });
     let path = crate_dir.join("bench/baseline.json");
-    let tmp = path.with_extension("json.partial");
-    std::fs::write(&tmp, serde_json::to_string_pretty(&doc).unwrap() + "\n").unwrap();
-    std::fs::rename(&tmp, &path).unwrap();
+    // Only now, with every run done, is anything written ([R9-19]).
+    measure::write_whole(&path, &(serde_json::to_string_pretty(&doc).unwrap() + "\n")).unwrap();
     println!("ratio {ratio:.2}: {}", if ratio >= 5.0 { "passed" } else { "NOT passed" });
     println!("wrote {}", path.display());
 }

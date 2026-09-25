@@ -108,6 +108,11 @@ Constants are 0001's, unchanged, and exported under the same names ([R9-14]).
   to a sample of positions and assert that none panics and that every rejected one leaves the
   state unchanged. Seeds MUST be printed on failure.
 
+  A `Shuffler` is an argument too, and the caller's code. One that returns anything but a
+  reordering of the tiles it was handed — a colour past 4, a tile duplicated or lost — MUST NOT
+  make the engine panic: that call is undone, the bag keeps the order it had before it, and
+  `shuffles_used` still advances. A broken shuffler deals a lawful, unshuffled game.
+
 ## Data model
 
 ### The state
@@ -199,6 +204,9 @@ impl Shuffler for Seeded { /* … */ }
   in a test replays `recorded[index]` and keeps no cursor; the seeded one advances its own
   generator, which the clone carries.
 
+  The increment saturates at `u32::MAX` rather than wrapping, so the counter never decreases
+  ([0001 E1-64]); past that value, which only a loaded snapshot can carry, the index repeats.
+
   *This is how the crate gets 0001's indexed seam without a function pointer or a shared
   reference: an injected shuffler is a pure function of `(bag, index)` carried by value, and the
   seeded one is a value with state. Both constructors take the shuffler itself, so a state is
@@ -210,6 +218,13 @@ impl Shuffler for Seeded { /* … */ }
   All arithmetic MUST be on fixed-width integers, never `usize`, so a seed deals the same game on
   every platform. The suite MUST pin the algorithm with known answers: the opening bag of
   `new_game(Seeded::new(k))` for `k` in `0..3`, committed as literals in the test.
+
+  The known answers, and an independent implementation compared over 200 seeds, pin the
+  generator, its seeding, the bounded draw's multiply-shift and the shuffle's direction. They do
+  not pin the rejection step of Lemire's method, and no test can: with a bag of at most 100 tiles
+  a draw is rejected with probability about `n / 2^64`, so no game ever takes that branch. That
+  step is held by reading the code against the paper, and this sentence is here so that nobody
+  reads the known answers as covering it.
 
   *Deliberately not 0001's `xoshiro128**`. The intent does not ask the two engines to deal the
   same game from the same seed, and a generator that visibly differs keeps anyone from coming to
@@ -371,7 +386,11 @@ pub struct RoundScoring { pub round: u32, pub players: [PlayerRound; 2],
   }
   ```
 
-  Only a complete run writes the file; an interrupted or partial run MUST leave it alone.
+  Only a complete run writes the file; an interrupted or partial run MUST leave it alone. The
+  two engines' runs MUST interleave, one of each per step, so that a transient load on the
+  machine slows both sides of the ratio rather than one. Each engine times its own recorded game,
+  since the same seed deals the two engines different games ([R9-13]); the ratio compares plies
+  per second, not the cost of one game.
 
   *The tool is `examples/compare.rs`, run with `cargo run --release --example compare`: [R9-1]
   makes the crate a single library, so the tool is an example target rather than a binary. It
@@ -533,8 +552,7 @@ visible — the intent is met without it.*
 | --- | --- |
 | [0007 S7-3] | "Exactly one implementation" is a source property, as 0007's own exemption says. [0007 S7-28] and [0007 S7-29] catch a divergence in what the two paths do. |
 | [0007 S7-12] | A source property. 0007 enforces it with [0001 E1-71]'s TypeScript tripwire, which is not adopted; in the crate it rests on [0007 S7-30]'s corpus, which fails the first time a second fusion rule produces a different number. A second copy that agrees everywhere the corpus reaches is the residue, stated plainly. |
-| [R9-18], [R9-21] | Non-gating measurements, as [0001 E1-58] was. [R9-20] is the gate, and it is tested. |
-| [R9-19] | A tool, not a behaviour of the crate. Its output is what [R9-20] asserts on. |
+| [R9-21] | A non-gating budget, as [0001 E1-58] was. [R9-20] is the gate, and it is tested. |
 
 ## Amendments
 
