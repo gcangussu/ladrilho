@@ -197,9 +197,14 @@ fn the_async_check_rejects_its_fixtures() {
 /// `the_async_check_rejects_its_fixtures` above.
 ///
 /// Seen to fail [R9-24] against each of these added to `src/score.rs`, one at
-/// a time: `pub async fn probe() {}`; an `async` block; a `.await`;
-/// `impl core::future::Future for Probe`; and `impl<T: Send> Future for P<T>`.
-/// This test failed each time, and no other in this file.
+/// a time, each compiling: `pub async fn probe() {}`; a function holding an
+/// `async { 1 }` block; an `async fn` that awaits its argument; `impl
+/// core::future::Future for Probe`, fully written out; and `impl<T: Send +
+/// Unpin> core::future::Future for P<T>`, the bounded form an earlier,
+/// four-word-window version of this check let through. This test failed each
+/// time, and no other in this file. A `.await` alone cannot be a mutation —
+/// outside an async body it does not compile — so that clause rests on its
+/// fixture above.
 #[test]
 fn nothing_is_async() {
     let files = rust_files(&crate_dir());

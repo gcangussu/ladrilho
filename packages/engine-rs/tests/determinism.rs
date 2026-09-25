@@ -308,6 +308,9 @@ impl Shuffler for Hostile {
 /// reorder its tiles cannot make the engine panic: that call is undone, the
 /// bag keeps its order, the counter advances, and the game stays lawful to its
 /// end. One that does reorder is honoured.
+///
+/// Seen to fail against the undo removed from `run_shuffle`, `src/apply.rs`:
+/// this failed, with the out-of-range shuffler panicking inside the deal.
 #[test]
 fn a_shuffler_that_breaks_its_contract_is_undone() {
     let unshuffled: Vec<u8> = (0..100).map(|i| (i / 20) as u8).collect();
