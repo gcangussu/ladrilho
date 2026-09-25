@@ -116,7 +116,7 @@ fn the_only_dependency_is_serde_json_for_the_tests() {
 /// async runtime or futures crate in the lockfile.
 ///
 /// Seen to fail [R9-24] against `pub async fn probe() {}` added to
-/// `src/score.rs`: this test failed and no other.
+/// `src/score.rs`: this test failed and no other in this file.
 #[test]
 fn nothing_is_async() {
     let asy = ["as", "ync"].concat();

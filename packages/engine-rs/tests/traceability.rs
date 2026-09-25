@@ -165,8 +165,8 @@ fn scan() -> Scan {
 /// they do not declare.
 ///
 /// Seen to fail [R9-24] against the row adopting 0001's E1-3 deleted from
-/// 0009: this failed, and so did the citation check below, which no
-/// longer finds E1-3 required.
+/// 0009: this failed, and the citation check below did not — E1-3 is still
+/// cited, and still declared, so nothing it checks has changed.
 #[test]
 fn every_adopted_spec_requirement_is_classified_once() {
     let s = scan();

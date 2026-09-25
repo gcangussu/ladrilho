@@ -113,8 +113,8 @@ fn the_round_score_accounts_for_the_clamp() {
 ///
 /// Seen to fail [S7-31] against `score_after: score_before + total + total` in
 /// `finish_game`, `src/apply.rs` — the bonus added twice, to the record and the
-/// state alike. This failed and nothing else did: the state and the record
-/// agreed on the doubled number.
+/// state alike. This failed and nothing else in this file did: the state and
+/// the record agreed on the doubled number.
 #[test]
 fn bonuses_start_where_the_round_ended() {
     for o in corpus() {
@@ -132,7 +132,7 @@ fn bonuses_start_where_the_round_ended() {
 /// Seen to fail [S7-31] against `if !self.is_terminal { self.scores[0] += 1; }`
 /// just before the record is returned at the foot of `end_round`,
 /// `src/apply.rs` — a score change the record does not account for. This
-/// failed and nothing else did: every other invariant is an equation between
+/// failed and nothing else in this file did: every other invariant is an equation between
 /// numbers the record carries, and the mutation touched none of them. That is
 /// why this one is stated separately.
 #[test]
