@@ -171,6 +171,7 @@ against `to_canonical()` field by field.
 ```rust
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Player { P0 = 0, P1 = 1 }
+impl Player { pub fn index(self) -> usize; pub fn other(self) -> Player; }
 ```
 
 A seat is a type, not an integer, so a seat index of 2 cannot be written ([R9-7]).
@@ -237,13 +238,17 @@ pub fn decode_action(action: Action) -> Option<(u8, u8, u8)>;   // None when act
 pub fn wall_col(color: u8, row: u8) -> u8;
 pub fn wall_color_at(row: u8, col: u8) -> u8;
 
-pub fn placement_value(wall: &[u8; 25], row: usize, col: usize) -> i32;   // [0001 E1-68]
+pub fn placement_value(wall: &[u8; 25], row: usize, col: usize) -> i32;   // [0001 E1-68]; 0 off the wall
 pub fn wall_completed_rows(wall: &[u8; 25]) -> u8;                         // [0001 E1-70]
 pub fn wall_completed_cols(wall: &[u8; 25]) -> u8;
 pub fn wall_completed_colors(wall: &[u8; 25]) -> u8;
 
-pub struct ActionList { /* fixed capacity 180, no allocation */ }
-impl ActionList { pub fn as_slice(&self) -> &[Action]; pub fn len(&self) -> usize; }
+pub struct ActionList { /* fixed capacity, no allocation */ }
+impl ActionList {
+    pub fn as_slice(&self) -> &[Action];
+    pub fn len(&self) -> usize;
+    pub fn is_empty(&self) -> bool;
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct IllegalAction { pub action: Action }
@@ -485,10 +490,10 @@ The scanner reads every identifier in the first column and the class in the seco
 | [0002 V2-35] | reading | The harness half only: a vector under 100 tiles without `"census": "short"` fails; with it, conservation is checked as invariance alone. |
 | [0002 V2-36] | reading | `kind: "game"` starts with `new_game(recorded)`; `kind: "position"` with `from_canonical(&initial, recorded)`. |
 | [0002 V2-37] | adopted | |
-| [0002 V2-38] | reading | Each `f32` from `encode_for`, widened to `f64`, MUST equal the parsed JSON number exactly — the comparison the TypeScript harness makes. |
+| [0002 V2-38] | reading | Each `f32` from `encode_for`, widened to `f64`, MUST equal the parsed JSON number exactly — the comparison the TypeScript harness makes. Exactness needs `serde_json`'s `float_roundtrip` feature: its default parser is not correctly rounded, and reads some recorded values one bit away. The encoder computes in `f64` and rounds to `f32` once, on store, as a `Float32Array` does. |
 | [0007 S7-1] | reading | `apply_explained` returns `Result<Option<RoundScoring>, IllegalAction>`. |
 | [0007 S7-2] | reading | `apply` returns `Result<(), IllegalAction>` and never a record. The type is the assertion; a test binds it to `()` so a change fails to compile. |
-| [0007 S7-3] | reading | One private implementation generic over a sink, so the unexplained instantiation compiles the recording away. |
+| [0007 S7-3] | reading | One private implementation with a `const EXPLAIN: bool` parameter — the degenerate sink — so the unexplained instantiation compiles the recording away. |
 | [0007 S7-4] | reading | Observable in Rust, and gated by [R9-17]. |
 | [0007 S7-5] | adopted | |
 | [0007 S7-6] | reading | Nothing is added to `AzulState` or `Canonical`. |
