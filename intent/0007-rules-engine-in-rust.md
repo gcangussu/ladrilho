@@ -2,7 +2,7 @@
 title: Rules engine in Rust
 author: Gabriel Cangussu
 date: 2026-09-25
-status: pending
+status: done
 depends-on: 0001 — Rules engine
 summary: >
   A second, independent copy of the Azul referee written in Rust, which agrees
