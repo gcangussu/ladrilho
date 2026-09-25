@@ -12,7 +12,7 @@ TypeScript implementation of the board game Azul, delivered in three roadmap ste
    player (spec 0004), the arena (0005), and the interface seam (0006). The search runs in a
    worker; `packages/ui` reaches it only through `src/opponent.ts`.
 
-Since the three steps, two things have been added. The engine reports how it scored a round
+Since the three steps, three things have been added. The engine reports how it scored a round
 (`applyExplained`, spec 0007) and the interface shows it; `apply` is untouched and is still what
 the vectors and the bot drive. And a fourth package, **`packages/ai-bot`** (spec 0008), ports a
 published AlphaZero-style player — network, search, and the deal it guesses — onto our engine as
@@ -32,7 +32,18 @@ leak `fastmath` across compilations in one process while its cache is cold. And 
 rounding after every step, and `src/exp.ts` is a hand-written fdlibm `exp` because `Math.exp` may
 differ in the last bit between browsers.
 
-The repo is a **pnpm monorepo** of the four packages above.
+A fifth package, **`packages/engine-rs`** (spec 0009), is a second implementation of the engine
+in Rust: a synchronous library crate, no async anywhere, held to the same conformance vectors,
+which it reads in place from `packages/engine/test/vectors`. It is not a replacement and nothing
+drives it yet; it exists to be fast and to be a second opinion. It classifies every requirement of
+0001, 0002 and 0007 in 0009's *Adopted requirements* table, and its build fails until a
+requirement added to any of them is classified there — so a rule change is a change to both
+engines. Its throughput gate is the committed `packages/engine-rs/bench/baseline.json` (8.1× the
+TypeScript engine when it was written); rerun `pnpm -F engine-rs compare` on a quiet machine,
+because a busy one slows the TypeScript runs and flatters the ratio.
+
+The repo is a **pnpm monorepo** of the five packages above. `pnpm test` and `pnpm typecheck` run
+`cargo` for `engine-rs`, so a Rust toolchain is a prerequisite; `rust-toolchain.toml` pins it.
 
 Determinism matters: the only randomness is bag shuffling, which must be seedable so games replay
 exactly.
@@ -121,6 +132,12 @@ pnpm -F ai-bot gate              # the [A8-30] lane: 400 games, ~50 minutes. Onl
                                  # writes gate/baseline.json; `gate 8` prints and leaves it alone
 pnpm -F ai-bot fixtures          # re-record from the original; needs uv. A deliberate act
 pnpm -F ai-bot weights           # regenerate src/weights.ts from the checkpoint. Likewise
+
+pnpm -F engine-rs test           # the Rust engine: vectors, rules, record, allocation, traceability
+pnpm -F engine-rs typecheck      # clippy, warnings as errors
+pnpm -F engine-rs bench          # the [R9-18] figures, non-gating
+pnpm -F engine-rs compare        # the [R9-19] gate run against the TypeScript engine: minutes.
+                                 # Writes bench/baseline.json; run it with the machine idle
 
 pnpm -F bot test                 # the move chooser: evaluation, search, tiers
 pnpm -F bot bench                # the [B4-47]..[B4-50] budgets, non-gating, bundled

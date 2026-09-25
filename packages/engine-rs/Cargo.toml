@@ -1,0 +1,28 @@
+[package]
+name = "azul_engine"
+version = "0.0.0"
+edition = "2024"
+publish = false
+# benches/measure.rs is a module shared with examples/compare.rs, not a target.
+autobenches = false
+description = "Deterministic two-player Azul rules engine in Rust (spec 0009)."
+
+[lib]
+path = "src/lib.rs"
+
+# [R9-3]: no runtime or build dependencies. The one dev-dependency reads the
+# conformance vectors, as untyped values, without derive macros.
+[dependencies]
+
+[dev-dependencies]
+# `float_roundtrip`: the default parser is not correctly rounded, and
+# [V2-38] compares recorded encodings bit for bit.
+serde_json = { version = "1", features = ["float_roundtrip"] }
+
+[[bench]]
+name = "engine"
+harness = false
+
+[profile.release]
+codegen-units = 1
+lto = "fat"

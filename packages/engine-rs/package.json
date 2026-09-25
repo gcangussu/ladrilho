@@ -1,0 +1,12 @@
+{
+  "name": "engine-rs",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Deterministic two-player Azul rules engine in Rust (spec 0009).",
+  "scripts": {
+    "test": "cargo test --locked",
+    "typecheck": "cargo clippy --locked --all-targets -- -D warnings",
+    "bench": "cargo bench --locked --bench engine",
+    "compare": "cargo run --locked --release --example compare"
+  }
+}

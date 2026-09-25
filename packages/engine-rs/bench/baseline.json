@@ -1,0 +1,19 @@
+{
+  "date": "2026-09-25",
+  "machine": {
+    "arch": "x86_64",
+    "cpu": "Intel(R) Core(TM) i7-1068NG7 CPU @ 2.30GHz",
+    "os": "macos"
+  },
+  "passed": true,
+  "ratio": 8.099304763177463,
+  "rust": {
+    "cloneNs": 9.8,
+    "plies": 73,
+    "pliesPerSecond": 11818627.0
+  },
+  "typescript": {
+    "cloneNs": 379.6,
+    "pliesPerSecond": 1459215.0
+  }
+}

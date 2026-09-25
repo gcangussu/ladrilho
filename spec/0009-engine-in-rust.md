@@ -2,7 +2,7 @@
 title: Engine in Rust
 author: Gabriel Cangussu
 date: 2026-09-25
-status: draft
+status: implemented
 intent: 0007 — Rules engine in Rust
 prefix: R9
 depends-on: 0001 — Engine core, 0002 — Engine conformance vectors, 0007 — Scoring explained
@@ -108,6 +108,11 @@ Constants are 0001's, unchanged, and exported under the same names ([R9-14]).
   to a sample of positions and assert that none panics and that every rejected one leaves the
   state unchanged. Seeds MUST be printed on failure.
 
+  A `Shuffler` is an argument too, and the caller's code. One that returns anything but a
+  reordering of the tiles it was handed — a colour past 4, a tile duplicated or lost — MUST NOT
+  make the engine panic: that call is undone, the bag keeps the order it had before it, and
+  `shuffles_used` still advances. A broken shuffler deals a lawful, unshuffled game.
+
 ## Data model
 
 ### The state
@@ -171,6 +176,7 @@ against `to_canonical()` field by field.
 ```rust
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Player { P0 = 0, P1 = 1 }
+impl Player { pub fn index(self) -> usize; pub fn other(self) -> Player; }
 ```
 
 A seat is a type, not an integer, so a seat index of 2 cannot be written ([R9-7]).
@@ -198,6 +204,9 @@ impl Shuffler for Seeded { /* … */ }
   in a test replays `recorded[index]` and keeps no cursor; the seeded one advances its own
   generator, which the clone carries.
 
+  The increment saturates at `u32::MAX` rather than wrapping, so the counter never decreases
+  ([0001 E1-64]); past that value, which only a loaded snapshot can carry, the index repeats.
+
   *This is how the crate gets 0001's indexed seam without a function pointer or a shared
   reference: an injected shuffler is a pure function of `(bag, index)` carried by value, and the
   seeded one is a value with state. Both constructors take the shuffler itself, so a state is
@@ -209,6 +218,13 @@ impl Shuffler for Seeded { /* … */ }
   All arithmetic MUST be on fixed-width integers, never `usize`, so a seed deals the same game on
   every platform. The suite MUST pin the algorithm with known answers: the opening bag of
   `new_game(Seeded::new(k))` for `k` in `0..3`, committed as literals in the test.
+
+  The known answers, and an independent implementation compared over 200 seeds, pin the
+  generator, its seeding, the bounded draw's multiply-shift and the shuffle's direction. They do
+  not pin the rejection step of Lemire's method: with a bag of at most 100 tiles a draw is
+  rejected with probability about `n / 2^64`, so no game ever takes that branch. A unit test in
+  `src/rng.rs` drives it directly, at `n = 2^63 + 1`, where about half of all draws are rejected,
+  against an independent redraw.
 
   *Deliberately not 0001's `xoshiro128**`. The intent does not ask the two engines to deal the
   same game from the same seed, and a generator that visibly differs keeps anyone from coming to
@@ -237,13 +253,17 @@ pub fn decode_action(action: Action) -> Option<(u8, u8, u8)>;   // None when act
 pub fn wall_col(color: u8, row: u8) -> u8;
 pub fn wall_color_at(row: u8, col: u8) -> u8;
 
-pub fn placement_value(wall: &[u8; 25], row: usize, col: usize) -> i32;   // [0001 E1-68]
+pub fn placement_value(wall: &[u8; 25], row: usize, col: usize) -> i32;   // [0001 E1-68]; 0 off the wall
 pub fn wall_completed_rows(wall: &[u8; 25]) -> u8;                         // [0001 E1-70]
 pub fn wall_completed_cols(wall: &[u8; 25]) -> u8;
 pub fn wall_completed_colors(wall: &[u8; 25]) -> u8;
 
-pub struct ActionList { /* fixed capacity 180, no allocation */ }
-impl ActionList { pub fn as_slice(&self) -> &[Action]; pub fn len(&self) -> usize; }
+pub struct ActionList { /* fixed capacity, no allocation */ }
+impl ActionList {
+    pub fn as_slice(&self) -> &[Action];
+    pub fn len(&self) -> usize;
+    pub fn is_empty(&self) -> bool;
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct IllegalAction { pub action: Action }
@@ -360,13 +380,22 @@ pub struct RoundScoring { pub round: u32, pub players: [PlayerRound; 2],
     "date": "2026-09-25",
     "machine": { "os": "…", "arch": "…", "cpu": "…" },
     "typescript": { "pliesPerSecond": 1048931, "cloneNs": 530 },
-    "rust":       { "pliesPerSecond": 0,       "cloneNs": 0 },
+    "rust":       { "pliesPerSecond": 0,       "cloneNs": 0, "plies": 0 },  // plies: its game's length
     "ratio": 0,                   // rust.pliesPerSecond / typescript.pliesPerSecond
     "passed": false               // ratio >= 5
   }
   ```
 
-  Only a complete run writes the file; an interrupted or partial run MUST leave it alone.
+  Only a complete run writes the file; an interrupted or partial run MUST leave it alone. The
+  two engines' runs MUST interleave, one of each per step, so that a transient load on the
+  machine slows both sides of the ratio rather than one. Each engine times its own recorded game,
+  since the same seed deals the two engines different games ([R9-13]); the ratio compares plies
+  per second, not the cost of one game.
+
+  *The tool is `examples/compare.rs`, run with `cargo run --release --example compare`: [R9-1]
+  makes the crate a single library, so the tool is an example target rather than a binary. It
+  shares its measurement with `benches/engine.rs` through `benches/measure.rs`, so the bench and
+  the gate measure one thing.*
 - **[R9-20]** The crate MUST sustain at least **five times** the TypeScript engine's
   `legal_actions` + `apply` throughput, as measured by [R9-19]. The committed `baseline.json` is
   the evidence: the suite MUST assert that it exists, parses, that `ratio` equals the quotient of
@@ -485,10 +514,10 @@ The scanner reads every identifier in the first column and the class in the seco
 | [0002 V2-35] | reading | The harness half only: a vector under 100 tiles without `"census": "short"` fails; with it, conservation is checked as invariance alone. |
 | [0002 V2-36] | reading | `kind: "game"` starts with `new_game(recorded)`; `kind: "position"` with `from_canonical(&initial, recorded)`. |
 | [0002 V2-37] | adopted | |
-| [0002 V2-38] | reading | Each `f32` from `encode_for`, widened to `f64`, MUST equal the parsed JSON number exactly — the comparison the TypeScript harness makes. |
+| [0002 V2-38] | reading | Each `f32` from `encode_for`, widened to `f64`, MUST equal the parsed JSON number exactly — the comparison the TypeScript harness makes. Exactness needs `serde_json`'s `float_roundtrip` feature: its default parser is not correctly rounded, and reads some recorded values one bit away. The encoder computes in `f64` and rounds to `f32` once, on store, as a `Float32Array` does. |
 | [0007 S7-1] | reading | `apply_explained` returns `Result<Option<RoundScoring>, IllegalAction>`. |
 | [0007 S7-2] | reading | `apply` returns `Result<(), IllegalAction>` and never a record. The type is the assertion; a test binds it to `()` so a change fails to compile. |
-| [0007 S7-3] | reading | One private implementation generic over a sink, so the unexplained instantiation compiles the recording away. |
+| [0007 S7-3] | reading | One private implementation with a `const EXPLAIN: bool` parameter — the degenerate sink — so the unexplained instantiation compiles the recording away. |
 | [0007 S7-4] | reading | Observable in Rust, and gated by [R9-17]. |
 | [0007 S7-5] | adopted | |
 | [0007 S7-6] | reading | Nothing is added to `AzulState` or `Canonical`. |
@@ -523,8 +552,7 @@ visible — the intent is met without it.*
 | --- | --- |
 | [0007 S7-3] | "Exactly one implementation" is a source property, as 0007's own exemption says. [0007 S7-28] and [0007 S7-29] catch a divergence in what the two paths do. |
 | [0007 S7-12] | A source property. 0007 enforces it with [0001 E1-71]'s TypeScript tripwire, which is not adopted; in the crate it rests on [0007 S7-30]'s corpus, which fails the first time a second fusion rule produces a different number. A second copy that agrees everywhere the corpus reaches is the residue, stated plainly. |
-| [R9-18], [R9-21] | Non-gating measurements, as [0001 E1-58] was. [R9-20] is the gate, and it is tested. |
-| [R9-19] | A tool, not a behaviour of the crate. Its output is what [R9-20] asserts on. |
+| [R9-21] | A non-gating budget, as [0001 E1-58] was. [R9-20] is the gate, and it is tested. |
 
 ## Amendments
 
@@ -538,9 +566,13 @@ Nothing in 0001, 0002 or 0007 is amended. The crate reads them; they do not know
 
 ## Open questions
 
-- **The legal-action representation.** `ActionList` is fixed-capacity and sorted, to match
+- ~~**The legal-action representation.** `ActionList` is fixed-capacity and sorted, to match
   [0001 E1-13]. A bitmask would be smaller and faster to build, but an ascending iterator over it is
-  the same contract. Left to the benchmark: whichever [R9-20] needs.
+  the same contract. Left to the benchmark: whichever [R9-20] needs.~~ **Answered by the benchmark:
+  the sorted array.** It passes [R9-20] at 8.1× (11.8M plies per second against 1.46M, the two
+  engines' runs interleaved, measured 2026-09-25). A bitmask is used only *inside* `legal_actions`, to visit the (source, colour) pairs
+  that hold tiles without a branch per pair — `legal_actions` was 100 ns of a 140 ns ply before it,
+  and a branch-free write of all thirty runs measured slower still, at 170 ns.
 
 ## References
 
