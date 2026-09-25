@@ -32,8 +32,7 @@ leak `fastmath` across compilations in one process while its cache is cold. And 
 rounding after every step, and `src/exp.ts` is a hand-written fdlibm `exp` because `Math.exp` may
 differ in the last bit between browsers.
 
-The repo is a **pnpm monorepo**. Check what is actually on disk before assuming a package is
-present.
+The repo is a **pnpm monorepo** of the four packages above.
 
 Determinism matters: the only randomness is bag shuffling, which must be seedable so games replay
 exactly.
@@ -102,9 +101,9 @@ listed with a reason in its spec's *Traceability exemptions* table, or the build
 
 ## The engine/bot seam
 
-The bot will need the observation encoding — a fixed-length normalized float vector from the current
-player's perspective. `packages/engine/src/observe.ts` has it; keep the layout
-stable and documented.
+`packages/engine/src/observe.ts` exports the observation encoding — a fixed-length normalized float
+vector from the current player's perspective. Neither bot consumes it today (`ai-bot` encodes its
+own board in `src/board.ts`), but it is public engine API: keep the layout stable and documented.
 
 ## Commands
 
