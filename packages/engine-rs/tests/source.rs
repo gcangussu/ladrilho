@@ -362,8 +362,9 @@ fn the_library_touches_nothing_outside() {
     assert!(faults.is_empty(), "{}", faults.join("\n"));
 }
 
-/// The names of the public functions in `text` whose receiver is mutable —
-/// `&mut self` or `self: &mut Self` — reading each signature up to its body or
+/// The names of the public functions in `text` that take anything by `&mut` —
+/// a receiver (`&mut self`, `self: &mut Self`) or any other parameter, such as
+/// `s: &mut Self` in an associated function — reading each signature up to its body or
 /// `;`, however it is wrapped across lines. A public function is `pub`, then
 /// any of `const`, `async`, `unsafe` and `extern "…"`, then `fn`; `pub(crate)`
 /// and narrower are not public.
@@ -395,7 +396,7 @@ fn mutable_receivers(text: &str) -> Vec<String> {
         let end = rest.find(['{', ';']).unwrap_or(rest.len());
         let signature: String = rest[..end].split_whitespace().collect::<Vec<_>>().join(" ");
         let params = signature.split_once('(').map_or("", |(_, p)| p.trim_start());
-        if params.starts_with("&mut self") || params.starts_with("self: &mut") || params.starts_with("mut self: &mut") {
+        if params.contains("&mut") {
             out.push(signature.split(['(', '<']).next().unwrap().trim().to_string());
         }
     }
@@ -413,7 +414,7 @@ fn trait_mutators(text: &str) -> Vec<String> {
         let rest = &code[i..];
         let Some(open) = rest.find('{') else { continue };
         let header: String = rest[..open].split_whitespace().collect::<Vec<_>>().join(" ");
-        if !before || !header.contains(" for ") || !rest[4..].starts_with([' ', '<']) {
+        if !before || !header.contains(" for ") || !rest[4..].starts_with(|c: char| c.is_whitespace() || c == '<') {
             continue;
         }
         let mut depth = 0;
@@ -439,14 +440,14 @@ fn trait_mutators(text: &str) -> Vec<String> {
 
 #[test]
 fn the_receiver_scans_reject_their_fixtures() {
-    let src = "pub fn a(&mut self) {}\npub fn b(\n    &mut self,\n    x: u8,\n) -> u8 { x }\npub fn c(self: &mut Self) {}\npub fn d(&self) {}\npub fn e<T>(&mut self, t: T) {}\npub const fn f(&mut self, s: [i32; 2]) {}\npub unsafe extern \"C\" fn g(&mut self) {}\npub(crate) fn h(&mut self) {}";
-    assert_eq!(mutable_receivers(src), ["a", "b", "c", "e", "f", "g"]);
+    let src = "pub fn a(&mut self) {}\npub fn b(\n    &mut self,\n    x: u8,\n) -> u8 { x }\npub fn c(self: &mut Self) {}\npub fn d(&self) {}\npub fn e<T>(&mut self, t: T) {}\npub const fn f(&mut self, s: [i32; 2]) {}\npub unsafe extern \"C\" fn g(&mut self) {}\npub(crate) fn h(&mut self) {}\npub fn i(s: &mut Self, v: u8) {}\npub fn j(x: u8, bag: &mut [u8]) {}";
+    assert_eq!(mutable_receivers(src), ["a", "b", "c", "e", "f", "g", "i", "j"]);
     let traits = "impl core::ops::IndexMut<usize> for AzulState {\n    fn index_mut(&mut self, i: usize) -> &mut u8 { &mut self.x[i] }\n}\nimpl<S: Shuffler> AzulState<S> { fn own(&mut self) {} }\nimpl Clone for P { fn clone(&self) -> Self { P } }";
     assert_eq!(trait_mutators(traits), ["impl core::ops::IndexMut<usize> for AzulState"]);
 }
 
-/// [E1-51] Only apply and apply_explained take a mutable receiver among the
-/// public functions; the only trait implementation with one is `Shuffler for
+/// [E1-51] Only apply and apply_explained take anything by `&mut` among the
+/// public functions — receiver or parameter; the only trait implementation with one is `Shuffler for
 /// Seeded`, whose receiver the trait requires; and the library holds no
 /// ambient mutable state. What counts as public is
 /// `the_receiver_scans_reject_their_fixtures` above; a mutable receiver
