@@ -60,7 +60,11 @@ fn the_corpus_reaches_every_case() {
 
 /// [S7-23] tiling is the sum of the placements' points.
 ///
-/// Seen to fail: see the mutation record at the end of this file.
+/// Seen to fail [S7-31] against `points: points + 1` in the `sink.push` of
+/// `tile_wall`, `src/apply.rs`. The accumulator is untouched, so the round
+/// still scores what the rules say and only the record lies: this failed, and
+/// the other four invariants passed. The re-derivation of [S7-10] below failed
+/// too — the same lie read from the other side.
 #[test]
 fn tiling_is_the_sum_of_points() {
     for o in corpus() {
@@ -71,6 +75,12 @@ fn tiling_is_the_sum_of_points() {
 }
 
 /// [S7-24] the penalty is the sum of the rungs.
+///
+/// Seen to fail [S7-31] against `rungs: &FLOOR_PENALTIES[..usize::from(occupied)
+/// .min(FLOOR_SLOTS - 1)]` in `resolve_player`, `src/apply.rs` — one rung
+/// short on a full floor. This failed; the other four passed, because the
+/// number charged is `CUM_PENALTY`'s and the ladder is only reported beside
+/// it. The ladder check of [S7-16] failed too, stating the same lie directly.
 #[test]
 fn the_penalty_is_the_sum_of_the_rungs() {
     for o in corpus() {
@@ -82,6 +92,13 @@ fn the_penalty_is_the_sum_of_the_rungs() {
 
 /// [S7-25] score_after_round = score_before + tiling + penalty + forgiven,
 /// and = max(0, score_before + tiling + penalty).
+///
+/// Seen to fail [S7-31] against the clamp removed — `self.scores[pi] = charged;`
+/// in `resolve_player`, `src/apply.rs`. The second clause failed; the other
+/// four invariants passed. [S7-17] failed with it, and so did [S7-30]'s
+/// coverage check, with no forgiven round left to find. So did the vector
+/// replays and the snapshot round trip, loudly: removing the clamp is a rules
+/// change, and a negative score is a snapshot `from_canonical` refuses.
 #[test]
 fn the_round_score_accounts_for_the_clamp() {
     for o in corpus() {
@@ -93,6 +110,11 @@ fn the_round_score_accounts_for_the_clamp() {
 }
 
 /// [S7-26] bonuses start where the round left off and add their total.
+///
+/// Seen to fail [S7-31] against `score_after: score_before + total + total` in
+/// `finish_game`, `src/apply.rs` — the bonus added twice, to the record and the
+/// state alike. This failed and nothing else did: the state and the record
+/// agreed on the doubled number.
 #[test]
 fn bonuses_start_where_the_round_ended() {
     for o in corpus() {
@@ -106,6 +128,13 @@ fn bonuses_start_where_the_round_ended() {
 }
 
 /// [S7-27] the record accounts for the whole score change.
+///
+/// Seen to fail [S7-31] against `if !self.is_terminal { self.scores[0] += 1; }`
+/// just before the record is returned at the foot of `end_round`,
+/// `src/apply.rs` — a score change the record does not account for. This
+/// failed and nothing else did: every other invariant is an equation between
+/// numbers the record carries, and the mutation touched none of them. That is
+/// why this one is stated separately.
 #[test]
 fn the_record_accounts_for_the_whole_score() {
     for o in corpus() {

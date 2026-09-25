@@ -114,6 +114,9 @@ fn the_only_dependency_is_serde_json_for_the_tests() {
 /// [R9-4] Synchronous throughout: no async function, block or closure, no
 /// await, no Future implemented, in any Rust file of the package; and no
 /// async runtime or futures crate in the lockfile.
+///
+/// Seen to fail [R9-24] against `pub async fn probe() {}` added to
+/// `src/score.rs`: this test failed and no other.
 #[test]
 fn nothing_is_async() {
     let asy = ["as", "ync"].concat();

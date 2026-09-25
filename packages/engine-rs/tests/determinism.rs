@@ -116,6 +116,10 @@ fn the_seeded_shuffle_is_the_published_algorithm() {
 /// [R9-13] Known answers, committed as literals: the bag left after the
 /// opening deal, and the deal, for seeds 0, 1 and 2. A change to any part of
 /// the algorithm changes these.
+///
+/// Seen to fail [R9-24], with the test above, against `rotate_left(44)` for
+/// `rotate_left(45)` in `Seeded::next_u64`, `src/rng.rs`: both failed and no
+/// other test in this file did.
 #[test]
 fn the_seeded_opening_is_pinned() {
     let want: [(Vec<u8>, [[u8; 5]; 5]); 3] = [

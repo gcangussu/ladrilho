@@ -90,6 +90,11 @@ fn check_ply<S: Shuffler>(s: &mut AzulState<S>, action: Action, explained: bool)
 /// [R9-17] Over complete seeded games, through both entry points: nothing on
 /// the hot path allocates, and apply_explained allocates only on a
 /// round-ending ply [S7-4]. placement_value allocates nothing [E1-68].
+///
+/// Seen to fail [R9-24], with the vector test below, against
+/// `std::hint::black_box(Vec::<u8>::with_capacity(1));` at the top of
+/// `AzulState::apply`, `src/apply.rs`: both failed, and the counter check did
+/// not.
 #[test]
 fn seeded_games_allocate_nothing_on_the_hot_path() {
     for seed in 0..40u64 {

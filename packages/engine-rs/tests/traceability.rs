@@ -163,6 +163,10 @@ fn scan() -> Scan {
 /// [R9-22] The adoption table classifies every declared identifier of the
 /// three specs exactly once, with one of the four classes, and names nothing
 /// they do not declare.
+///
+/// Seen to fail [R9-24] against the row adopting 0001's E1-3 deleted from
+/// 0009: this failed, and so did the citation check below, which no
+/// longer finds E1-3 required.
 #[test]
 fn every_adopted_spec_requirement_is_classified_once() {
     let s = scan();
@@ -188,6 +192,10 @@ fn every_adopted_spec_requirement_is_classified_once() {
 /// reading, is cited by a test or exempt with a reason; no test cites an identifier that
 /// does not exist; no exemption names one that does not, or one that needs
 /// none.
+///
+/// Seen to fail [R9-24] against the one citation of E1-3 removed from
+/// `tests/rules.rs`: this failed, naming E1-3, and the classification check
+/// above did not.
 #[test]
 fn every_requirement_is_cited_or_exempt() {
     let s = scan();
