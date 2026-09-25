@@ -38,7 +38,7 @@ which it reads in place from `packages/engine/test/vectors`. It is not a replace
 drives it yet; it exists to be fast and to be a second opinion. It classifies every requirement of
 0001, 0002 and 0007 in 0009's *Adopted requirements* table, and its build fails until a
 requirement added to any of them is classified there — so a rule change is a change to both
-engines. Its throughput gate is the committed `packages/engine-rs/bench/baseline.json` (8.0× the
+engines. Its throughput gate is the committed `packages/engine-rs/bench/baseline.json` (8.1× the
 TypeScript engine when it was written); rerun `pnpm -F engine-rs compare` on a quiet machine,
 because a busy one slows the TypeScript runs and flatters the ratio.
 

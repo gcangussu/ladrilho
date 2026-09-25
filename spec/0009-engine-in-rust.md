@@ -569,8 +569,8 @@ Nothing in 0001, 0002 or 0007 is amended. The crate reads them; they do not know
 - ~~**The legal-action representation.** `ActionList` is fixed-capacity and sorted, to match
   [0001 E1-13]. A bitmask would be smaller and faster to build, but an ascending iterator over it is
   the same contract. Left to the benchmark: whichever [R9-20] needs.~~ **Answered by the benchmark:
-  the sorted array.** It passes [R9-20] at 8.0× (8.22M plies per second against 1.03M, measured
-  2026-09-25). A bitmask is used only *inside* `legal_actions`, to visit the (source, colour) pairs
+  the sorted array.** It passes [R9-20] at 8.1× (11.8M plies per second against 1.46M, the two
+  engines' runs interleaved, measured 2026-09-25). A bitmask is used only *inside* `legal_actions`, to visit the (source, colour) pairs
   that hold tiles without a branch per pair — `legal_actions` was 100 ns of a 140 ns ply before it,
   and a branch-free write of all thirty runs measured slower still, at 170 ns.
 
