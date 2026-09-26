@@ -30,10 +30,13 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import re
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Callable
+
+from corrections import CORRECTIONS
 
 # --------------------------------------------------------------------------
 # The shuffle patch [V2-10], [V2-32].
@@ -49,9 +52,22 @@ from typing import Any, Callable
 SHUFFLE_LOG: list[list[int]] = []
 _ORIGINAL_SHUFFLE = random.Random.shuffle
 
+# Orders to write instead of shuffling, by the log index the shuffle will take:
+# how a found vector replays the shuffles of the report it was recorded from
+# [0010 C10-31]. Empty for every other vector.
+SHUFFLE_SCRIPT: dict[int, list[int]] = {}
+
 
 def _recording_shuffle(self: random.Random, x: list[Any]) -> None:
-    _ORIGINAL_SHUFFLE(self, x)
+    order = SHUFFLE_SCRIPT.get(len(SHUFFLE_LOG))
+    if order is None:
+        _ORIGINAL_SHUFFLE(self, x)
+    else:
+        if sorted(order) != sorted(x):
+            raise AssertionError(
+                f"shuffle {len(SHUFFLE_LOG)}: the trace's order is not a permutation of the oracle's bag"
+            )
+        x[:] = order
     SHUFFLE_LOG.append(list(x))
 
 
@@ -61,6 +77,17 @@ SCHEMA = 1
 REPO = "RemiFabre/ludometer"
 SCRIPT = "tools/vectors/dump_vectors.py"
 MAX_PLIES = 400  # a lawful two-player game runs ~70; this is a runaway guard
+# A found vector may start short or steered and play on uniformly to its end;
+# a short census deals little per round, so the guard is wider.
+MAX_FOUND_PLIES = 4000
+FOUND_SEED_BASE = 1000000  # generator.pythonSeed of found-NN is this + NN [0010 C10-31]
+
+HERE = Path(__file__).resolve().parent
+TRACE_DIR = HERE / "traces"
+SPEC_0010 = HERE.parent.parent / "spec" / "0010-engines-cross-checked.md"
+
+# The corrections installed while recording, by name [0010 C10-33].
+ACTIVE_CORRECTIONS: list[str] = []
 
 # Filled in by `main` once the checkout is on `sys.path`.
 engine: Any = None
@@ -270,7 +297,11 @@ def build_vector(
 
 
 def provenance(
-    commit: str, date: str | None, python_seed: int, policy: str | None = None
+    commit: str,
+    date: str | None,
+    python_seed: int,
+    policy: str | None = None,
+    trace: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     gen: dict[str, Any] = {
         "repo": REPO,
@@ -284,6 +315,12 @@ def provenance(
         # a claim about *how* a vector was generated, and without it the suite
         # can only assert a proxy for steering rather than steering itself.
         gen["policy"] = policy
+    if trace is not None:
+        # [0010 C10-31] the report's `run` block: which run found it.
+        gen["trace"] = trace
+    if ACTIVE_CORRECTIONS:
+        # [0010 C10-33] every correction in force, sorted; absent when none.
+        gen["corrections"] = sorted(ACTIVE_CORRECTIONS)
     if date is not None:
         # [V2-11] the ludometer commit's date, never the clock.
         gen["generatedAt"] = date
@@ -329,7 +366,7 @@ def make_game(seed: int, policy: Policy, commit: str, date: str | None) -> dict[
 POSE_SEED = 0
 
 
-def pose() -> Any:
+def pose(seed: int = POSE_SEED) -> Any:
     """A blank, lawful, empty position to build on.
 
     `new_game` shuffles once before we overwrite everything, which is why a
@@ -337,7 +374,7 @@ def pose() -> Any:
     is always 1, and a vector recording 1 would make a *correct* engine ask for
     `shuffles[1]` at its first lid recycle.
     """
-    s = engine.AzulState.new_game(POSE_SEED)
+    s = engine.AzulState.new_game(seed)
     s.factories = [[0] * 5 for _ in range(5)]
     s.center = [0] * 5
     s.marker_in_center = True
@@ -634,6 +671,174 @@ def positions(commit: str, date: str | None) -> list[tuple[str, dict[str, Any]]]
 
 
 # --------------------------------------------------------------------------
+# Found vectors [0010 C10-29], [0010 C10-31]
+#
+# A report from the cross-check tool is copied unedited into `traces/`. Its
+# start, shuffles and actions are replayed in the oracle — the shuffles through
+# the patch above, which writes each recorded order after checking it is a
+# permutation of the bag the oracle is shuffling — and the game then plays on
+# uniformly to its end, so a found game vector is a complete game like any
+# other [V2-15].
+# --------------------------------------------------------------------------
+
+
+def ruling_titles() -> dict[str, str]:
+    """`found-NN-slug` -> `Ruling N: title`, read from spec 0010's *Rulings*.
+
+    The note of a found vector names its ruling [0010 C10-30], and the register
+    is the one place that says which ruling a found vector belongs to.
+    """
+    text = SPEC_0010.read_text(encoding="utf-8")
+    section = text[text.index("### Rulings") : text.index("### Found vectors")]
+    section = re.sub(r"```.*?```", "", section, flags=re.S)
+    out: dict[str, str] = {}
+    for block in re.split(r"^#### ", section, flags=re.M)[1:]:
+        heading = re.match(r"(?:~~)?Ruling (\d+) — (.+?)(?:~~)?$", block.split("\n", 1)[0])
+        position = re.search(r"^- \*\*Position:\*\* `(found-\d+-[a-z0-9-]+)\.json`$", block, flags=re.M)
+        if heading and position:
+            out[position.group(1)] = f"Ruling {heading.group(1)}: {heading.group(2).strip()}"
+    return out
+
+
+def pose_canonical(c: dict[str, Any], seed: int) -> Any:
+    """The oracle holding the canonical state `c`, posed like any position."""
+    s = pose(seed)
+    s.factories = [f[:] for f in c["factories"]]
+    s.center = c["center"][:]
+    s.marker_in_center = c["markerInCenter"]
+    s.bag = c["bag"][:]
+    s.lid = c["lid"][:]
+    s.walls = [w[:] for w in c["walls"]]
+    s.pl_color = [x[:] for x in c["plColor"]]
+    s.pl_count = [x[:] for x in c["plCount"]]
+    s.floor = [f[:] for f in c["floor"]]
+    s.floor_marker = list(c["floorMarker"])
+    s.scores = c["scores"][:]
+    s.current_player = c["currentPlayer"]
+    s.first_player = c["firstPlayer"]
+    s.round_index = c["roundIndex"]
+    s.is_terminal = c["isTerminal"]
+    s.exhausted = c["exhausted"]
+    s.recount()
+    if s.tiles_left != c["tilesLeft"]:
+        raise AssertionError(f"posed start holds {s.tiles_left} tiles on the board, the trace {c['tilesLeft']}")
+    return s
+
+
+def make_found(name: str, trace: dict[str, Any], note: str, commit: str, date: str | None) -> dict[str, Any]:
+    seed = FOUND_SEED_BASE + int(name.split("-")[1])
+    start = trace["start"]
+    shuffles: list[list[int]] = trace["shuffles"]
+    SHUFFLE_LOG.clear()
+    SHUFFLE_SCRIPT.clear()
+    try:
+        if start is None:
+            for i, order in enumerate(shuffles):
+                SHUFFLE_SCRIPT[i] = order
+            s = engine.AzulState.new_game(seed)  # the creation shuffle is the trace's index 0
+            base = 0
+        else:
+            s = pose_canonical(start, seed)
+            base = len(SHUFFLE_LOG)  # rebased like every position [V2-33]
+            used = start["shufflesUsed"]
+            for j in range(used, len(shuffles)):
+                SHUFFLE_SCRIPT[base + j - used] = shuffles[j]
+        position = start is not None
+        initial = canonical(s, base)
+        initial_encoded = encoded_pair(s) if position else None
+        pick = random.Random(seed)
+        plies = record_plies(
+            s, base, scripted(trace["actions"], uniform, pick), MAX_FOUND_PLIES, encode_states=position
+        )
+        if not s.is_terminal:
+            raise AssertionError(f"{name} did not finish in {MAX_FOUND_PLIES} plies")
+        short = sum(s.tile_census()) < engine.NUM_COLORS * engine.TILES_PER_COLOR
+    finally:
+        SHUFFLE_SCRIPT.clear()
+    if short:
+        note += " Short census: the tool found it from a start with tiles removed from the bag [V2-35]."
+    return build_vector(
+        "position" if position else "game",
+        provenance(commit, date, seed, "trace", trace["run"]),
+        initial,
+        base,
+        plies,
+        s,
+        note=note,
+        census="short" if short else None,
+        initial_encoded=initial_encoded,
+    )
+
+
+def found(commit: str, date: str | None, only: str | None = None) -> list[tuple[str, dict[str, Any]]]:
+    titles = ruling_titles()
+    out: list[tuple[str, dict[str, Any]]] = []
+    for path in sorted(TRACE_DIR.glob("found-*.json")):
+        name = path.stem
+        if only is not None and name != only:
+            continue
+        if name not in titles:
+            raise AssertionError(f"{path.name} is named by no ruling in spec 0010 [0010 C10-29]")
+        trace = json.loads(path.read_text(encoding="utf-8"))
+        out.append((name, make_found(name, trace, titles[name], commit, date)))
+    return out
+
+
+# --------------------------------------------------------------------------
+# Corrections [0010 C10-32], [0010 C10-33], [0010 C10-34]
+# --------------------------------------------------------------------------
+
+
+def install(names: list[str]) -> Callable[[], None]:
+    """Installs the named corrections and returns the undo for all of them."""
+    undo: list[Callable[[], None]] = []
+    for c in CORRECTIONS:
+        if c.name in names:
+            undo.append(c.install(engine))
+    ACTIVE_CORRECTIONS[:] = sorted(names)
+
+    def uninstall() -> None:
+        for u in reversed(undo):
+            u()
+        ACTIVE_CORRECTIONS.clear()
+
+    return uninstall
+
+
+def without_provenance(vec: dict[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in vec.items() if k != "generator"}
+
+
+def check_witnesses(commit: str, date: str | None, recorded: dict[str, dict[str, Any]]) -> list[str]:
+    """[0010 C10-34]: each correction must change its own witness.
+
+    The witness is recorded again with that correction alone removed. If the
+    two recordings are the same, the correction no longer lands — the oracle
+    was fixed upstream, or the patch no longer reaches the code it names — and
+    it is retired by a spec change, not carried along doing nothing.
+    """
+    failures: list[str] = []
+    everything = [c.name for c in CORRECTIONS]
+    for c in CORRECTIONS:
+        if not re.fullmatch(rf"ruling-{c.ruling}-[a-z0-9-]+", c.name):
+            failures.append(f"correction {c.name} is not named ruling-{c.ruling}-slug")
+        if c.witness not in recorded:
+            failures.append(f"correction {c.name}: its witness {c.witness} is not a found vector")
+            continue
+        uninstall = install([n for n in everything if n != c.name])
+        try:
+            [(_, bare)] = found(commit, date, only=c.witness)
+        finally:
+            uninstall()
+        if without_provenance(bare) == without_provenance(recorded[c.witness]):
+            failures.append(
+                f"correction {c.name} no longer changes {c.witness}: the oracle does not need it, "
+                "or it no longer reaches the code it names. Retire it by a spec change."
+            )
+    return failures
+
+
+# --------------------------------------------------------------------------
 # Writing
 # --------------------------------------------------------------------------
 
@@ -709,28 +914,40 @@ def main(argv: list[str] | None = None) -> int:
     commit = args.commit or git_field(checkout, "rev-parse", "HEAD")
     date = args.date or git_field(checkout, "show", "-s", "--format=%cd", "--date=short", "HEAD")
 
+    # Everything is recorded before anything is written, so a failed witness
+    # check [0010 C10-34] leaves the committed vectors exactly as they were.
+    vectors: list[tuple[str, dict[str, Any], str]] = []
+    uninstall = install([c.name for c in CORRECTIONS])
+    try:
+        for seed in range(args.games):
+            policy = GAME_POLICIES[seed % len(GAME_POLICIES)]
+            vec = make_game(seed, policy, commit, date)
+            vectors.append((f"game-{seed:02d}", vec, f"{policy.__name__:<13} "))
+        for name, vec in positions(commit, date):
+            vectors.append((name, vec, ""))
+        for name, vec in found(commit, date):
+            vectors.append((name, vec, ""))
+    finally:
+        uninstall()
+
+    failures = check_witnesses(commit, date, {name: vec for name, vec, _ in vectors})
+    if failures:
+        for f in failures:
+            print(f, file=sys.stderr)
+        print("nothing written", file=sys.stderr)
+        return 1
+
     out_dir: Path = args.out
     out_dir.mkdir(parents=True, exist_ok=True)
     for stale in out_dir.glob("*.json"):
         stale.unlink()
 
     written = 0
-    for seed in range(args.games):
-        policy = GAME_POLICIES[seed % len(GAME_POLICIES)]
-        vec = make_game(seed, policy, commit, date)
-        write_vector(out_dir / f"game-{seed:02d}.json", vec)
-        written += 1
-        print(
-            f"game-{seed:02d}  {policy.__name__:<13} "
-            f"plies {len(vec['plies']):>3}  shuffles {len(vec['shuffles'])}  "
-            f"scores {vec['final']['scores']}"
-        )
-
-    for name, vec in positions(commit, date):
+    for name, vec, label in vectors:
         write_vector(out_dir / f"{name}.json", vec)
         written += 1
         print(
-            f"{name:<34} plies {len(vec['plies']):>3}  "
+            f"{name:<34} {label}plies {len(vec['plies']):>3}  "
             f"shuffles {len(vec['shuffles'])}  scores {vec['final']['scores']}"
         )
 

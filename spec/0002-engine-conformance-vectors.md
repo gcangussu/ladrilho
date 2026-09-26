@@ -73,8 +73,9 @@ means two different bags.
 
 ## Vector format
 
-One JSON file per vector, under `packages/engine/test/vectors/`, named `game-NN.json` or
-`position-NN-slug.json`.
+One JSON file per vector, under `packages/engine/test/vectors/`, named `game-NN.json`,
+`position-NN-slug.json`, or `found-NN-slug.json` for a vector recorded from a cross-check report
+([0010 C10-31]).
 
 ```jsonc
 {
@@ -103,8 +104,11 @@ One JSON file per vector, under `packages/engine/test/vectors/`, named `game-NN.
 
 - **[V2-37]** Every field shown above is required except `note` (mandatory for handcrafted
   positions only, [V2-17]), `census` (only when short, [V2-35]), `generator.policy` (games only,
-  [V2-14]), `encoded` and `initialEncoded` (positions only, [V2-38]) and
-  `generator.generatedAt` (optional, [V2-11]). `kind` in particular is
+  [V2-14]), `encoded` and `initialEncoded` (positions only, [V2-38]),
+  `generator.generatedAt` (optional, [V2-11]), `generator.corrections` (present only while a
+  correction is installed, [0010 C10-33]) and `generator.trace` (found vectors only,
+  [0010 C10-31]). A found vector is named `found-NN-slug.json`; its `generator.policy` is
+  `"trace"`. `schema` stays `1`: nothing a harness reads changed. `kind` in particular is
   load-bearing rather than descriptive — [V2-36], [V2-33] and [V2-6] all branch on it — so a
   vector without it is not merely undocumented, it is unreplayable. `schema` is the version of
   this format; a harness MUST refuse a `schema` it does not know rather than guess.
@@ -155,14 +159,17 @@ its provenance fields matter as much as the vectors themselves.
   against a local ludometer checkout, takes the output directory as an argument, and is the only
   thing permitted to write to `packages/engine/test/vectors/`. Vectors are never hand-edited —
   a wrong vector is a bug in the script or a real disagreement, and editing it by hand hides
-  both.
+  both. It also records the *found* vectors of *0010 — Engines cross-checked*, from the reports
+  kept in `tools/vectors/traces/` ([0010 C10-31]); it remains the only writer.
 - **[V2-10]** The script MUST patch the oracle's shuffling to record the resulting bag order, and
   MUST read every other recorded value from the oracle — its accessors where they exist, its
   documented state attributes otherwise. The oracle has no canonical-state accessor of its own
   (`to_json` reports the bag as counts, which is exactly the information a vector needs in
   order), so reading attributes directly is expected. What the script MUST NOT do is *compute*
   anything a vector records — no re-deriving scores, legality, or tile totals in Python. A
-  fixture must be the oracle's opinion, or it proves nothing.
+  fixture must be the oracle's opinion, or it proves nothing — the oracle *as corrected*, where a
+  ruling of 0010 found it wrong: a correction patches the oracle's code, never a recorded value
+  ([0010 C10-32]).
 - **[V2-32]** `shufflesUsed` is the one canonical field the oracle cannot supply — it has no
   shuffle counter, so there is nothing to read. It MUST come from the same patch that records the
   bag orders, counting the calls it intercepts. Counting the script's own interceptions is not

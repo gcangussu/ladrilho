@@ -42,8 +42,19 @@ engines. Its throughput gate is the committed `packages/engine-rs/bench/baseline
 TypeScript engine when it was written); rerun `pnpm -F engine-rs compare` on a quiet machine,
 because a busy one slows the TypeScript runs and flatters the ratio.
 
-The repo is a **pnpm monorepo** of the five packages above. `pnpm test` and `pnpm typecheck` run
-`cargo` for `engine-rs`, so a Rust toolchain is a prerequisite; `rust-toolchain.toml` pins it.
+A sixth package, **`packages/crosscheck`** (spec 0010), plays invented games through both engines
+with the same bag orders and moves and stops at the first ply where they disagree about anything —
+board, legal moves, score, the round's record, the observation vector. The TypeScript engine runs
+in-process; the crate runs in `checker/`, a dependency-free Rust binary that replays each game and
+answers in a fixed word layout. A disagreement is written as a report that replays without a seed.
+When one is found, the rules decide, not either engine and not the Python oracle: the order of
+authority, the register of rulings, and how a ruling becomes a permanent `found-NN` vector —
+recorded from the oracle, *corrected in the open* where the oracle is wrong — are all in 0010. The
+pinned rulebook is Next Move's English web PDF, identified by its SHA-256 in [0010 C10-26].
+
+The repo is a **pnpm monorepo** of the six packages above. `pnpm test` and `pnpm typecheck` run
+`cargo` for `engine-rs` and for the cross-check's checker, so a Rust toolchain is a prerequisite;
+`rust-toolchain.toml` pins it, and the checker's copy must stay byte-identical to the engine's.
 
 Determinism matters: the only randomness is bag shuffling, which must be seedable so games replay
 exactly.
@@ -138,6 +149,12 @@ pnpm -F engine-rs typecheck      # clippy, warnings as errors
 pnpm -F engine-rs bench          # the [R9-18] figures, non-gating
 pnpm -F engine-rs compare        # the [R9-19] gate run against the TypeScript engine: minutes.
                                  # Writes bench/baseline.json; run it with the machine idle
+
+pnpm -F crosscheck test          # the cross-check: record, checker, the everyday run, mutations
+pnpm -F crosscheck check --games 100000 --seed 7   # the long run, on purpose: [C10-20]
+pnpm -F crosscheck check --steer floor --cap 600   # steering: mix, floor, prefer-lines, …
+pnpm -F crosscheck check --start short:40          # short census: reaches an empty bag and lid
+pnpm -F crosscheck replay <report.json>            # [C10-24]: exit 0 means it no longer reproduces
 
 pnpm -F bot test                 # the move chooser: evaluation, search, tiers
 pnpm -F bot bench                # the [B4-47]..[B4-50] budgets, non-gating, bundled
