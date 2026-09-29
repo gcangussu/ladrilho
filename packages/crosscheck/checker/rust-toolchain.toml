@@ -1,0 +1,5 @@
+# [R9-1]: an exact stable release, so every machine builds with the same compiler.
+[toolchain]
+channel = "1.98.1"
+components = ["clippy", "rustfmt"]
+profile = "minimal"

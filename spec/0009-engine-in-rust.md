@@ -346,7 +346,8 @@ pub struct RoundScoring { pub round: u32, pub players: [PlayerRound; 2],
   regeneration that the crate fails is read like any other diff 0002 [V2-11] produces.*
 
 - **[R9-16]** A disagreement between the crate and a vector is the crate's bug. The TypeScript
-  engine passes every vector (0002), and the oracle is authoritative for both. The crate's suite
+  engine passes every vector (0002), and the oracle — as corrected under *0010 — Engines
+  cross-checked*, and with a ruling of 0010 above it — is authoritative for both. The crate's suite
   MUST report a mismatch with the vector's file name, the ply index, the action, and the first
   differing `Canonical` field.
 

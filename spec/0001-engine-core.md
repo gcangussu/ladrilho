@@ -25,7 +25,9 @@ opponent*). The engine ranks nothing and prefers nothing.
 
 This is a port of the Python engine in [RemiFabre/ludometer](https://github.com/RemiFabre/ludometer)
 (`ludometer/azul/engine.py`). Where this document and that file disagree, this document is a bug
-unless it says otherwise explicitly. It deliberately diverges in three places: the random
+unless it says otherwise explicitly — or unless a ruling of *0010 — Engines cross-checked* says
+otherwise, in which case the ruling decides and this document is amended to match
+([0010 C10-28]). It deliberately diverges in three places: the random
 number generator ([E1-46]), the language-level API shape, and the injectable shuffle seam with
 its `shufflesUsed` counter ([E1-61]) — a data-model field the Python engine has no analogue for,
 added so conformance replays are possible at all.

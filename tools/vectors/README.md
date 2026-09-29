@@ -90,6 +90,35 @@ recorded `shuffles` array, never the seed.
   recycle, a deal that stops part-way, then a refill that deals nothing — because [0001 E1-34]
   and [0001 E1-37] cannot both happen at the same refill.
 
+## Found vectors, traces and corrections
+
+Spec [0010 — Engines cross-checked](../../spec/0010-engines-cross-checked.md) adds a third kind
+of vector: one recorded from a disagreement the cross-check tool found.
+
+- **Traces.** A report written by `pnpm -F crosscheck check` is copied, unedited, into
+  `traces/found-NN-slug.json` ([0010 C10-31]). The generator reads every trace on every run, so a
+  regeneration reproduces found vectors with the rest. It replays the trace's shuffles through the
+  shuffle patch — writing each recorded order after asserting it is a permutation of the bag the
+  oracle is shuffling — plays the trace's actions, then continues uniformly to the game's end,
+  seeded by `generator.pythonSeed` = `1000000 + NN`. A `new` start becomes a `game` vector; any
+  other start becomes a `position` vector, rebased ([V2-33]) and flagged short when it is
+  ([V2-35]).
+- **Notes.** A found vector's note is `Ruling N: title`, read from the ruling in spec 0010's
+  *Rulings* whose *Position* names the file. A trace no ruling names is refused.
+- **Corrections.** Where a ruling finds the oracle wrong, `corrections.py` holds a named patch
+  to the oracle's code ([0010 C10-32]). Every correction is installed for every vector, and every
+  vector then lists them in `generator.corrections` ([0010 C10-33]).
+- **The witness check.** Each correction's found vector is recorded a second time with that
+  correction removed; if the two are the same, the generator prints why and writes nothing
+  ([0010 C10-34]). It was seen to fail on 2026-09-26, in a scratch copy of the repository holding
+  two traces from the cross-check tool: a correction wrapping `AzulState._end_round` without
+  changing it was refused (`no longer changes found-02-two-runs … nothing written`, exit 1, the
+  output directory untouched), and one that changed a score was accepted and listed on all 39
+  vectors.
+
+Everything is recorded before anything is written, so a refused run leaves the committed vectors
+as they were.
+
 ## Do not hand-edit a vector
 
 [V2-9] makes this script the only writer of `packages/engine/test/vectors/`. A wrong vector is

@@ -2,7 +2,7 @@
 title: Engines cross-checked
 author: Gabriel Cangussu
 date: 2026-09-25
-status: accepted
+status: implemented
 intent: 0008 — Engines checked against each other
 prefix: C10
 depends-on: 0001 — Engine core, 0002 — Engine conformance vectors, 0007 — Scoring explained, 0009 — Engine in Rust
@@ -172,7 +172,7 @@ differing record a lockstep comparison would, with one message each way per game
   little-endian 32-bit words, each prefixed by its own length in words. A game message is:
   the game index (2 words); the start (`0` for a new game, or `1` followed by a canonical block of
   [C10-8]); the shuffle count and each shuffle as length then tiles; the action count and the
-  actions; and one probe per record. The checker answers with the record count and the records.
+  actions; and the probe count and one probe per record. The checker answers with the record count and the records.
 - **[C10-13]** The checker MUST construct with an injected shuffler that writes the recorded
   order for `index` — `new_game(recorded)` for a new game, `from_canonical(&start, recorded)`
   otherwise ([0002 V2-36]). The shuffler MUST record in itself, where the checker can read it back
@@ -212,19 +212,22 @@ like*): full floors, an empty bag and lid, games that go on for many rounds.
   | `centre-first` | any take from the centre |
   | `avoid-marker` | any take that does not take the marker, until forced |
   | `prefer-lines` | any destination but the floor |
-  | `floor` | the floor as destination, whenever legal |
+  | `floor` | the floor as destination, the biggest pile first, and the marker only onto a floor already holding seven |
   | `per-ply` | a policy drawn afresh from the others at every ply |
 
   `--steer mix` (the default) draws one policy per game, uniformly from all seven; `--steer
   NAME` fixes one. `floor` never completes a pattern line and so never ends a game ([0002 V2-14]);
-  it is what the cap is for.
+  it is what the cap is for. It fills fast and saves the marker for a full floor because that is
+  the only route to an eighth slot ([0002 V2-16]): filled a tile at a time, a floor is still short
+  of seven when the factories run out and the last centre take forces the marker onto it.
 - **[C10-18]** A game that reaches `--cap` plies (default 400) stops, and is counted as capped
   rather than failed. Records up to the cap are compared as usual.
 - **[C10-19]** Every run MUST report, beside its verdict, how often it reached the places steering
   is for: games ended by a completed row, ended by exhaustion, and capped; the highest
-  `roundIndex` seen; lid recycles; refills that dealt fewer than a full round; floors holding
-  seven or more; floors holding more than seven (the marker's eighth slot, [0001 E1-27]); and
-  plies per second. These are counted on the TypeScript side, from records both engines agreed on.
+  `roundIndex` seen; lid recycles; refills that dealt fewer than a full round; floors charged at
+  seven slots or more, and past seven (the marker's eighth slot, [0001 E1-27]) — counted from the
+  round's record, since a round's last take resolves the round in the same ply and the position
+  after it has already cleared the floor; and plies per second. These are counted on the TypeScript side, from records both engines agreed on.
 
 ## Running
 
@@ -378,8 +381,11 @@ the judge (intent 0008, *Constraints*).
 The tool's suite, run by `pnpm -F crosscheck test`.
 
 - **[C10-36]** **The everyday run.** The suite MUST run the tool, with fixed seeds, over: 40 games
-  with `--steer mix`; 8 games with a `short:K` start, `K` fixed in the test; and 4 games with
-  `--steer floor --cap 400`, and MUST assert that none disagrees. It MUST also assert, from [C10-19]'s counts, that each run
+  with `--steer mix`; 100 games with a `short:K` start, `K` and the policy fixed in the test; and
+  20 games with `--steer floor --cap 400`, and MUST assert that none disagrees. The sizes come
+  from measured rates, not from what one seed happens to reach: a short start ends in exhaustion
+  in about 4% of games whatever the policy, and a `floor` game charges an eighth slot about 0.15
+  times. It MUST also assert, from [C10-19]'s counts, that each run
   reached what it steers for — at least one exhausted game under the short start, at least one floor
   past seven under `floor`, at least one lid recycle under `mix` — so a steering option that
   quietly stopped steering fails rather than passing on uniform play.
@@ -397,7 +403,7 @@ The tool's suite, run by `pnpm -F crosscheck test`.
 
   | Mutation | Breaks | Expected among `fields` |
   | --- | --- | --- |
-  | A tile joining both runs counts itself twice | [0001 E1-24] | `scores`, `record` |
+  | A tile joining both runs is counted once, not in each run | [0001 E1-24] | `scores`, `record` |
   | The round's score is not clamped at zero | [0001 E1-28] | `scores`, `record` |
   | A lid recycle keeps the lid's tiles in the lid as well | [0001 E1-33] | `lid`, `census` |
 
@@ -407,7 +413,8 @@ The tool's suite, run by `pnpm -F crosscheck test`.
   mistake in the engine as it stands.*
 - **[C10-39]** **The other engine.** At least one mutation of a copy of `packages/engine-rs/src`,
   made with `git archive` by the `CLAUDE.md` procedure, MUST have been seen to produce a
-  disagreement in the everyday run, and MUST be recorded beside [C10-38]'s test, naming the
+  disagreement in the everyday run — the checker built against the copy and named by the
+  `CROSSCHECK_CHECKER` environment variable — and MUST be recorded beside [C10-38]'s test, naming the
   function and the line. It is recorded rather than run because it costs a build of the crate.
 - **[C10-40]** **Every field is compared.** For every field of [C10-8] and [C10-9], a unit test
   MUST alter that field in one side's record — in a record where it is present — and assert that

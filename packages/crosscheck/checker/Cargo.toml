@@ -1,0 +1,14 @@
+[package]
+name = "azul_crosscheck"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Replays cross-check games on the Rust engine and reports what it said (spec 0010)."
+
+# [C10-1]: the crate under test and nothing else, in any dependency section.
+[dependencies]
+azul_engine = { path = "../../engine-rs" }
+
+[profile.release]
+codegen-units = 1
+lto = "fat"

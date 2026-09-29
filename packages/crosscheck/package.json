@@ -1,0 +1,22 @@
+{
+  "name": "crosscheck",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Plays invented games through both engines and reports the first disagreement (spec 0010).",
+  "scripts": {
+    "test": "cargo build --locked --manifest-path checker/Cargo.toml && vitest run",
+    "typecheck": "tsc --noEmit && cargo clippy --locked --manifest-path checker/Cargo.toml --all-targets -- -D warnings",
+    "check": "cargo build --locked --release --manifest-path checker/Cargo.toml && node tools/bundle.mjs && node node_modules/.crosscheck/cli.mjs check",
+    "replay": "cargo build --locked --release --manifest-path checker/Cargo.toml && node tools/bundle.mjs && node node_modules/.crosscheck/cli.mjs replay"
+  },
+  "dependencies": {
+    "engine": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.1",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
+  }
+}

@@ -2,7 +2,7 @@
 title: Engines checked against each other
 author: Gabriel Cangussu
 date: 2026-09-25
-status: pending
+status: done
 depends-on: 0007 — Rules engine in Rust
 summary: >
   Play huge numbers of made-up games through both of our referees at once,
