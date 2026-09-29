@@ -788,23 +788,39 @@ percentile rather than the median, which is stricter and implies the intent's fi
 
 - **[Z11-57]** `playSimulations` MUST be a multiple of 100 whose full measurement meets **half**
   the budget on the machine of record — p95 at most 1500 ms and p99.9 at most 2500 ms — and whose
-  next multiple up was measured and seen to miss it. The lane MUST find it by timing the corpus at
-  a small count, predicting per simulation, starting at the largest multiple of 100 whose
-  predicted p95 is under 1200 ms, and running the full measurement there. If that meets half the
-  budget, it MUST step up by 100 and measure again until one does not; if it does not, it MUST
-  step down by 100 until one does. The record is the full measurement at the count it settles on,
-  with the measurement of the count above it beside it. The record states both verdicts: whether
-  the half-budget target was met, and whether [Z11-40]'s budget passed.
+  next multiple up was measured and seen to miss it. The lane MUST keep every full measurement it
+  takes for a run, with its count, p95 and p99.9, in `runs/<name>/latency-measurements.json`, across
+  attempts. It MUST find the count as follows:
+  - **Start.** With at least three kept measurements, fit a Theil–Sen line (the median of pairwise
+    slopes, then the median intercept) to p95 against the count and another to p99.9, solve each
+    for half the budget, and start at the lower crossing rounded down to a multiple of 100. With
+    fewer, time the corpus at a small count, predict per simulation, and start at the largest
+    multiple of 100 whose predicted p95 is under 1200 ms.
+  - **Gallop.** Measure the start. Step away from it in the direction of the verdict — up if it
+    met half the budget, down if not — by 100, 200, 400, … until the verdict flips, never below 100.
+  - **Bisect.** Between the highest count that met it and the lowest that missed, measure the
+    multiple of 100 nearest the middle, rounding down, until they are 100 apart.
+  - **Outliers.** A measurement that misses half the budget on p99.9 alone MUST be measured once
+    more at the same count, and the second pass decides.
+
+  The record is the full measurement at the count it settles on, with the measurement of the count
+  above it beside it, the prediction the search started from, and every measurement the search
+  took, in order, as `passes`. The record states both verdicts: whether the half-budget target was met, and
+  whether [Z11-40]'s budget passed.
 
   *Two things pull against each other. 800 simulations measured about 0.07–0.5 s a move against a
   3 s budget, and `sharp` takes up to 2 s: unused time is strength left on the table. But the
   intent asks for an "ordinary modern processor", and the machine of record is one laptop. Tuning
   to half the budget spends most of the available strength and leaves a machine twice as slow
-  inside the intent's limits. The prediction only chooses where to start: stepping both ways makes
-  the count one that the next count up was seen to exceed, rather than one a pessimistic guess
-  happened to pick. It is not claimed to be the largest: p99.9 over 2000 positions is the
-  third-largest time and noisy, so a count further up could pass where the next one missed. Each
-  step is a full pass of about 50 minutes, so a good prediction matters, but only for cost.*
+  inside the intent's limits. The prediction only chooses where to start: the gallop and bisection
+  make the count one that the next count up was seen to exceed, rather than one a guess happened to
+  pick. Each full pass takes 20–30 minutes on the machine of record, so the search's cost is its
+  number of passes. The first run's lane stepped by 100 from a probe that guessed 8500, measured ten
+  passes over three hours, and stopped at 9300 on a p99.9 of 2606 ms at 9400 whose p99 was 1262 ms:
+  one busy moment, not the search's cost growing. Theil–Sen ignores such a pass when fitting, and a
+  second pass keeps it from deciding the verdict. A miss on p95 is not remeasured, because p95 over
+  2000 positions is too far from the tail for one moment to move. The count is still not claimed to
+  be the largest: a count further up could pass where the next one missed.*
 
 - **[Z11-53]** `alphazero throughput` MUST measure, release build, network evaluations per second
   single-threaded and self-play games per hour at the run's `threads`, and write

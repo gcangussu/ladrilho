@@ -28,7 +28,7 @@ import {
   type MilestoneResults,
 } from './decision.js';
 import { readJson, writeAtomic, writeJson } from './files.js';
-import { findPlaySimulations, machine, meetsHalfBudget, measure, passesBudget, PROBE_SIMULATIONS } from './latency.js';
+import { findPlaySimulations, machine, meetsHalfBudget, measure, passesBudget, PROBE_SIMULATIONS, type Point } from './latency.js';
 import { withLock } from './lock.js';
 import { appendLog, readLog } from './log.js';
 import { runGate, runMilestone, type Player } from './milestone.js';
@@ -93,7 +93,20 @@ export async function latencyLane(name: string): Promise<void> {
     const log = (line: string): void => void process.stderr.write(`latency: ${line}\n`);
     const probe = measure(bin, checkpoint, CORPUS, p.config, PROBE_SIMULATIONS);
     log(`${PROBE_SIMULATIONS}: p95 ${probe.p95.toFixed(1)} ms`);
-    const found = findPlaySimulations(probe, (n) => measure(bin, checkpoint, CORPUS, p.config, n), log);
+    // Every full measurement this run has taken, kept across attempts: the
+    // regression of [Z11-57] starts from them.
+    const points: (Point & { date: string })[] = existsSync(p.latencyPoints) ? readJson(p.latencyPoints) : [];
+    const found = findPlaySimulations(
+      probe,
+      (n) => {
+        const m = measure(bin, checkpoint, CORPUS, p.config, n);
+        points.push({ simulations: n, p95: m.p95, p999: m.p999, date: new Date().toISOString() });
+        writeJson(p.latencyPoints, points);
+        return m;
+      },
+      log,
+      [...points],
+    );
     const s = found.settled;
     const record = {
       run: name,
@@ -122,7 +135,9 @@ export async function latencyLane(name: string): Promise<void> {
         halfBudgetMet: meetsHalfBudget(found.above),
       },
       probe: { simulations: PROBE_SIMULATIONS, p95: probe.p95 },
+      prediction: found.prediction,
       start: found.start,
+      passes: found.measured.map((m) => ({ simulations: m.simulations, p95: m.p95, p999: m.p999 })),
     };
     writeJson(join(LATENCY, `${name}.json`), record);
     const next = { ...config, playSimulations: s.simulations };

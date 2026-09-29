@@ -33,6 +33,7 @@ export function runPaths(name: string) {
     state: join(dir, 'state.json'),
     losses: join(dir, 'losses.json'),
     throughput: join(dir, 'throughput.json'),
+    latencyPoints: join(dir, 'latency-measurements.json'),
     checkpoint: (g: number) => join(dir, 'checkpoints', `${g}.bin`),
     manifest: (g: number) => join(dir, 'generations', `${g}.json`),
     samples: (g: number) => join(dir, 'samples', `${g}.bin`),

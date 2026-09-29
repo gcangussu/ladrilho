@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { fromCanonical } from 'engine';
 import { describe, expect, it } from 'vitest';
-import { findPlaySimulations, percentiles, type Measurement } from '../eval/latency.js';
+import { findPlaySimulations, percentiles, predictStart, theilSen, type Measurement, type Point } from '../eval/latency.js';
 import { CORPUS } from '../eval/paths.js';
 
 describe('percentiles [Z11-40]', () => {
@@ -16,31 +16,39 @@ describe('percentiles [Z11-40]', () => {
   });
 });
 
-/** A machine where a move costs `perSimulation` ms a simulation, and p99.9 is 1.5× p95. */
-function fake(perSimulation: number) {
+/**
+ * A machine where a move costs `perSimulation` ms a simulation, p99.9 is
+ * `tail`× p95, and the first pass at each count in `spikes` puts p99.9 at
+ * 3000 ms.
+ */
+function fake(perSimulation: number, tail = 1.5, spikes = new Set<number>()) {
   const measured: number[] = [];
   const full = (n: number): Measurement => {
     measured.push(n);
     const p95 = n * perSimulation;
-    return { simulations: n, count: 2000, p50: p95 / 2, p95, p99: p95 * 1.2, p999: p95 * 1.5, max: p95 * 2, skipped: 0, checkpointSha256: '' };
+    const p999 = spikes.delete(n) ? 3000 : p95 * tail;
+    return { simulations: n, count: 2000, p50: p95 / 2, p95, p99: p95 * 1.2, p999, max: p95 * 2, skipped: 0, checkpointSha256: '' };
   };
   return { full, measured };
 }
 
+const PROBE_1MS = { count: 2000, p50: 0, p95: 50, p99: 0, p999: 0, max: 0 };
+
 describe("playSimulations' search [Z11-57]", () => {
-  it('starts from the prediction and steps up until the next count misses half the budget', () => {
+  it('without earlier measurements, starts from the probe, gallops up, then bisects', () => {
     // Predicted 1.0 ms a simulation: 1200 would predict exactly 1200 ms, not
     // under it, so the start is 1100. Half the budget is p95 ≤ 1500: 1500
     // meets it and 1600 does not.
     const f = fake(1.0);
-    const r = findPlaySimulations({ count: 2000, p50: 0, p95: 50, p99: 0, p999: 0, max: 0 }, f.full);
+    const r = findPlaySimulations(PROBE_1MS, f.full);
     expect(r.start).toBe(1100);
-    expect(f.measured).toEqual([1100, 1200, 1300, 1400, 1500, 1600]);
+    expect(r.prediction.from).toBe('probe');
+    expect(f.measured).toEqual([1100, 1200, 1400, 1800, 1600, 1500]);
     expect(r.settled.simulations).toBe(1500);
     expect(r.above.simulations).toBe(1600);
   });
 
-  it('steps down when the prediction was optimistic', () => {
+  it('gallops down when the prediction was optimistic', () => {
     // The probe says 0.5 ms (start 2300); the real cost is 1.2 ms, so p95 is
     // 1440 at 1200 and 1560 at 1300.
     const f = fake(1.2);
@@ -48,12 +56,57 @@ describe("playSimulations' search [Z11-57]", () => {
     expect(r.start).toBe(2300);
     expect(r.settled.simulations).toBe(1200);
     expect(r.above.simulations).toBe(1300);
-    expect(f.measured).toEqual([2300, 2200, 2100, 2000, 1900, 1800, 1700, 1600, 1500, 1400, 1300, 1200]);
+    expect(f.measured).toEqual([2300, 2200, 2000, 1600, 800, 1200, 1400, 1300]);
   });
 
   it('refuses a network too big for even 100 simulations', () => {
     const f = fake(40);
     expect(() => findPlaySimulations({ count: 1, p50: 0, p95: 2000, p99: 0, p999: 0, max: 0 }, f.full)).toThrow(/too big/);
+  });
+
+  it('starts where a line through earlier measurements crosses half the budget, outliers and all', () => {
+    // A machine at 0.12 ms a simulation, p99.9 1.2× p95: p95 reaches 1500 at
+    // 12500. The earlier passes include the two a busy machine spoiled — a
+    // slow first pass, and a p99.9 spike at the top — which a least-squares
+    // line would follow: the spike alone drags its crossing below 11000.
+    const prior: Point[] = [];
+    for (let n = 8600; n <= 9300; n += 100) prior.push({ simulations: n, p95: 0.12 * n, p999: 0.144 * n });
+    prior.push({ simulations: 8500, p95: 1300, p999: 1500 }, { simulations: 9400, p95: 0.12 * 9400, p999: 2606 });
+    const p = predictStart(prior, PROBE_1MS);
+    expect(p.from).toBe('regression');
+    expect(p.start).toBe(12500);
+    const f = fake(0.12, 1.2);
+    const r = findPlaySimulations(PROBE_1MS, f.full, () => {}, prior);
+    expect(f.measured).toEqual([12500, 12600]);
+    expect(r.settled.simulations).toBe(12500);
+    expect(r.above.simulations).toBe(12600);
+  });
+
+  it('starts at the lower of the two crossings when p99.9 binds first', () => {
+    // p95 alone would cross at 12500; p99.9 at 2× p95 reaches 2500 at 10416.
+    const prior: Point[] = [8600, 8800, 9000].map((n) => ({ simulations: n, p95: 0.12 * n, p999: 0.24 * n }));
+    expect(predictStart(prior, PROBE_1MS)).toMatchObject({ from: 'regression', start: 10400 });
+  });
+
+  it('falls back to the probe with fewer than three earlier measurements', () => {
+    const prior: Point[] = [{ simulations: 9000, p95: 1080, p999: 1200 }, { simulations: 9100, p95: 1092, p999: 1210 }];
+    expect(predictStart(prior, PROBE_1MS)).toMatchObject({ from: 'probe', start: 1100 });
+  });
+
+  it('measures a p99.9-only miss again, and lets the second pass decide', () => {
+    // 1600 would meet half the budget but its first pass spikes on p99.9.
+    const f = fake(0.9, 1.2, new Set([1600]));
+    const r = findPlaySimulations(PROBE_1MS, f.full);
+    expect(f.measured).toEqual([1100, 1200, 1400, 1800, 1600, 1600, 1700]);
+    expect(r.settled.simulations).toBe(1600);
+    expect(r.above.simulations).toBe(1700);
+  });
+});
+
+describe('theilSen', () => {
+  it('recovers a line despite a wild point', () => {
+    expect(theilSen([1, 2, 3, 4, 5], [2, 4, 6, 100, 10])).toEqual({ slope: 2, intercept: 0 });
+    expect(theilSen([3, 3], [1, 2])).toBeNull();
   });
 });
 
