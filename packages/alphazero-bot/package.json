@@ -1,0 +1,29 @@
+{
+  "name": "alphazero-bot",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A player trained from scratch by self-play on the Rust engine (spec 0011).",
+  "scripts": {
+    "test": "cargo test --locked && vitest run",
+    "typecheck": "tsc --noEmit && cargo clippy --locked --all-targets -- -D warnings",
+    "test:train": "cargo build --locked && cargo test --locked --test selfplay a_sample_round_trips && bash train/venv.sh -m pytest -q tests",
+    "train": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs train",
+    "stop-simulation": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs stop-simulation",
+    "milestone": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs milestone",
+    "gate": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs gate",
+    "latency": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs latency",
+    "latency-corpus": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs latency-corpus",
+    "throughput": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs throughput"
+  },
+  "dependencies": {
+    "engine": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.1",
+    "bot": "workspace:*",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
+  }
+}

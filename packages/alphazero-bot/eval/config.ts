@@ -1,0 +1,67 @@
+/**
+ * A run's settings, `runs/<name>/config.json` ([Z11-25]). The crate reads the
+ * search's share of it ([Z11-60]); the trainer reads the rest.
+ */
+
+import { randomInt } from 'node:crypto';
+
+export interface RunConfig {
+  width: number;
+  blocks: number;
+  seed: number;
+  /** Unset (`null`) until the latency lane has measured it ([Z11-58]). */
+  playSimulations: number | null;
+  selfPlaySimulations: number;
+  milestoneSimulations: number;
+  cpuct: number;
+  fpu: number;
+  alpha: number;
+  epsilon: number;
+  tempPlies: number;
+  tau: number;
+  gamesPerGeneration: number;
+  window: number;
+  stepsPerGeneration: number;
+  batch: number;
+  boundaryWeight: number;
+  optimiser: 'sgd';
+  momentum: number;
+  learningRate: number;
+  weightDecay: number;
+  milestoneEvery: number;
+  threads: number;
+  torchThreads: number;
+  maxGenerationMinutes: number;
+}
+
+/** *Starting values*: the first run's settings, with a fresh random seed. */
+export function startingConfig(): RunConfig {
+  return {
+    width: 256,
+    blocks: 4,
+    // Below 2^48, so it is exact in every language that reads it.
+    seed: randomInt(0, 2 ** 48 - 1),
+    playSimulations: null,
+    selfPlaySimulations: 200,
+    milestoneSimulations: 800,
+    cpuct: 1.25,
+    fpu: 0.25,
+    alpha: 0.3,
+    epsilon: 0.25,
+    tempPlies: 10,
+    tau: 1,
+    gamesPerGeneration: 500,
+    window: 20,
+    stepsPerGeneration: 1000,
+    batch: 512,
+    boundaryWeight: 1,
+    optimiser: 'sgd',
+    momentum: 0.9,
+    learningRate: 0.02,
+    weightDecay: 1e-4,
+    milestoneEvery: 10,
+    threads: 8,
+    torchThreads: 4,
+    maxGenerationMinutes: 30,
+  };
+}

@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2025",
+    "lib": [
+      "ES2025"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": [
+      "node"
+    ],
+    "strict": true,
+    "noUncheckedIndexedAccess": false,
+    "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "exactOptionalPropertyTypes": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": [
+    "test",
+    "eval",
+    "tools",
+    "vitest.config.ts"
+  ]
+}

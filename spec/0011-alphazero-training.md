@@ -2,7 +2,7 @@
 title: AlphaZero training
 author: Gabriel Cangussu
 date: 2026-09-29
-status: accepted
+status: implemented
 intent: 0009 — An opponent we train ourselves
 prefix: Z11
 depends-on: 0001 — Engine core, 0005 — Opponent strength, 0009 — Engine in Rust, 0010 — Engines cross-checked
@@ -117,16 +117,35 @@ result, winrate) keep their meaning.
   may import `ai-bot` or `ui`.
 - **[Z11-2]** The crate MUST be named `azul_alphazero`, with its `Cargo.toml` at the package root,
   Rust edition 2024, `publish = false`, one library target and one binary target named
-  `alphazero`. It MUST depend on `azul_engine` by path (`../engine-rs`) and on nothing else, in any
-  dependency section. `Cargo.lock` MUST be committed, every `cargo` invocation the package makes
+  `alphazero`. It MUST depend on `azul_engine` by path (`../engine-rs`). Everything that is the
+  player — the network, the search, the pre-deal view, the sample, checkpoint and parity formats,
+  self-play — MUST be written in the crate on the engine alone. General-purpose functionality MAY
+  come from crates.io, and only from this list, which the source check of [Z11-47] holds the
+  manifest to:
+
+  | Section | Crates | For |
+  | --- | --- | --- |
+  | `[dependencies]` | `serde`, `serde_json` | `config.json` and the result files |
+  | | `sha2`, `hex` | the parity corpus's hash ([Z11-12]), checkpoints' hashes in results |
+  | | `rand`, `rand_xoshiro`, `rand_distr` | the crate's own generator and the Gamma draws behind the Dirichlet noise ([Z11-20]) |
+  | | `clap` | the binary's arguments ([Z11-60]) |
+  | `[dev-dependencies]` | `tempfile`, `proptest` | scratch directories; [Z11-22]'s property tests |
+
+  `[build-dependencies]` MUST be empty. `rand` MUST be built without its default features, so
+  nothing in the crate can reach the operating system's entropy or a thread-local generator: every
+  random draw comes from a generator seeded by the crate. Adding a crate to the list is a spec
+  change. `Cargo.lock` MUST be committed, every `cargo` invocation the package makes
   MUST pass `--locked`, and its `rust-toolchain.toml` MUST be byte-identical to
   `packages/engine-rs/rust-toolchain.toml`. It MUST satisfy [0009 R9-4] and [0009 R9-6] as though
   it were under `packages/engine-rs`: no async, `#![forbid(unsafe_code)]`.
 
-  *No dependencies means the forward pass, the generator, the Dirichlet sampler, and a reader and
-  writer for the JSON of `config.json` and the result files are written here. The first three are
-  small; the JSON reader is not, and like every input it falls under [Z11-22]. Each is then
-  something the suite can see all of ([Z11-52] is the sampler's test). It is the checker's discipline ([0010 C10-1]), for the checker's reason.*
+  *The line is between the player and plumbing. A JSON reader, a hash, a Gamma sampler and an
+  argument parser are well-established functionality whose hand-written versions would only be
+  more code for the suite to trust; the forward pass stays hand-written because [Z11-10] fixes
+  its summation order in the source, and a linear-algebra crate brings its own. The sampler is a
+  library's, but [Z11-52] still holds it to the distribution the noise needs, whatever it is.
+  The seed derivation of [Z11-20] and [Z11-26] — how a game's triple becomes its seeds — is the
+  spec's, and stays in the crate.*
 
 - **[Z11-3]** Nothing in the package may be derived from `ai-bot` or from the program it ports:
   no weights, no encoding table, no search code, no constants. A source check MUST fail on an
@@ -158,6 +177,11 @@ result, winrate) keep their meaning.
     entry ([Z11-34]), never from `runs/<name>/`, which is git-ignored and may be gone. This is what
     makes a logged milestone reproducible from the repository alone. Logged, not committed:
     whether a file is committed is a person's act the lane cannot check, and a logged entry is.
+
+  Two more, beside them: `latency-corpus` records [Z11-38]'s corpus, once and on purpose, as
+  `bot`'s `corpus` records its own; and the loop takes `--until <generation>` to stop cleanly
+  before a generation, for a smoke run. The lanes that play games take `--workers N`, the number
+  of processes games are shared across ([Z11-31]), half the machine's threads by default.
 
   The root `pnpm test` and `pnpm typecheck` therefore include the crate and the lanes. They do
   **not** include `test:train`: it needs `uv` and a PyTorch install, and the parts of the trainer
@@ -258,13 +282,17 @@ result, winrate) keep their meaning.
   | generation | u32 | the generation that produced it |
   | tensors | f32 | `S, s`, then per block `B1, b1, B2, b2`, then `P, p, V1, v1, v2, v2b` |
 
-  Matrices are row-major, `[out][in]`, as PyTorch's `nn.Linear.weight` stores them. The crate MUST
+  Matrices are row-major, `[out][in]`, as PyTorch's `nn.Linear.weight` stores them. A
+  checkpoint `x.bin`'s parity file ([Z11-12]) is `x.parity`, beside it. The crate MUST
   reject a file whose length differs from the one its header implies, whose magic or version is
   wrong, or whose input or policy size is not `182` or `180`, with an error naming the field.
 - **[Z11-55]** The **parity corpus** MUST be 64 observations with their legal sets, taken from
   positions of recorded-seed games, written once by the crate and committed as
   `train/parity-corpus.bin`. Half of them MUST be pre-deal views. The crate MUST compile it in with
-  `include_bytes!`, so a parity check needs only the checkpoint and its parity file. Its layout,
+  `include_bytes!`, so a parity check needs only the checkpoint and its parity file. The crate
+  writes it from an ignored test (`cargo test --locked --test corpus -- --ignored
+  write_the_corpus`), and an ordinary test holds the committed file to what the generator writes,
+  byte for byte: a corpus that drifted would orphan every parity file ever written. Its layout,
   little-endian:
 
   | Field | Type | Content |
@@ -356,16 +384,20 @@ network value `V` from when it was expanded.
 
 ```rust
 /// What the search asks for a leaf. `Network` is the one production implementation; the suite
-/// supplies others, such as one that counts its calls ([Z11-42]).
+/// supplies others, such as one that counts its calls ([Z11-42]). A boundary is evaluated with
+/// an empty legal set: its policy is not wanted.
 pub trait Evaluator: Sync {
-    fn evaluate(&self, observation: &[f32; ENCODED_SIZE], legal: &ActionList,
+    fn evaluate(&self, observation: &[f32; ENCODED_SIZE], legal: &[Action],
                 out: &mut Evaluation);                                            // [Z11-6]
 }
+impl<E: Evaluator + ?Sized> Evaluator for &E { /* … */ }
 
 pub struct Network { /* immutable after load; Send + Sync, shared by reference across threads */ }
 impl Network {
     pub fn load(checkpoint: &[u8], parity: &[u8]) -> Result<Network, LoadError>;  // [Z11-11], [Z11-13], [Z11-55]
     pub fn architecture(&self) -> (u32, u32);                                     // (W, B)
+    pub fn generation(&self) -> u32;                                              // from the header
+    pub fn forward(&self, x: &[f32; ENCODED_SIZE], logits: &mut [f32; 180]) -> f32; // raw logits, value
 }
 impl Evaluator for Network { /* … */ }
 pub struct Evaluation { pub policy: [f32; 180], pub value: f32 }
@@ -376,10 +408,21 @@ pub fn pre_deal_view<S: Shuffler>(before: &AzulState<S>, after: &AzulState<S>)
 pub struct SearchConfig { pub simulations: u32, pub cpuct: f32, pub fpu: f32 }
 pub struct SelfPlayNoise { pub alpha: f32, pub epsilon: f32 }
 pub struct SearchResult { pub action: Action, pub visits: [u32; 180], pub value: f32 }
+/// The finished tree by kind: expanded nodes (the root included), non-terminal boundaries,
+/// terminals. What [Z11-42]'s once-per-node case counts evaluator calls against.
+pub struct TreeStats { pub expanded: u32, pub boundaries: u32, pub terminals: u32 }
 
 pub fn choose<S: Shuffler, E: Evaluator>(net: &E, root: &AzulState<S>, config: &SearchConfig)
     -> Option<SearchResult>;                                                      // [Z11-19], [Z11-62]
+/// `choose` with self-play's noise, and the tree's shape. `choose` is this with no noise.
+pub fn search<S: Shuffler, E: Evaluator>(net: &E, root: &AzulState<S>, config: &SearchConfig,
+    noise: Option<(&SelfPlayNoise, &mut Rng)>) -> Option<(SearchResult, TreeStats)>;
 ```
+
+*The legal set is a slice, not `azul_engine`'s `ActionList`, because an `ActionList` can only
+come from `legal_actions()` — its constructor is private to the engine — and the only one a
+boundary could hand over is the dealt position's, whose legal set reads exactly the displays
+[Z11-15] keeps from the search.*
 
 - **[Z11-62]** `choose` MUST return `None` for a terminal root, which has no legal actions, and
   MUST NOT call the evaluator for it. `play` answers a terminal position with an error exit naming
@@ -402,12 +445,15 @@ The binary's commands, each loading one checkpoint and one run's settings:
   refuses it.
 
 - **[Z11-22]** No public function and no command may panic on any input. A malformed position,
-  checkpoint or corpus is an error exit with a message.
+  checkpoint or corpus is an error exit with a message. The one exception is a debug build's
+  census check of [Z11-51]: `pre_deal_view` is meaningful only when `after` is `before` with a
+  boundary ply applied, and a debug build asserts that its view then accounts for every tile. A
+  release build — the binary every lane runs — does not assert.
 - **[Z11-23]** `play` reads one position as the canonical block of [0010 C10-8], in the word
   framing of [0010 C10-12], builds the state with `from_canonical(&block, Seeded::new(0))`, and
   writes the action, the simulations run, the root value's `f32` bits and the search's own
-  milliseconds, as four words. It holds no state between invocations. The timing is read by the
-  command around `choose`, not by the library ([Z11-18]).
+  milliseconds, rounded to a whole number, as four words. It holds no state between invocations.
+  The timing is read by the command around `choose`, not by the library ([Z11-18]).
 - **[Z11-24]** Given the same checkpoint, the same config, the same `--search` and the same
   position, `play` MUST return the same action and value on the same build, on every run.
 
@@ -451,6 +497,11 @@ The binary's commands, each loading one checkpoint and one run's settings:
   5. if `g + 1` is a multiple of `milestoneEvery` and the log has no entry for it, run the
      milestone of [Z11-31] on checkpoint `g + 1` and act on its decision;
   6. advance the run's generation counter.
+
+  A run's directory holds `config.json`; `state.json`, the generation counter and the time the
+  run started, whose existence is what "generation `0` has started" means ([Z11-40]);
+  `checkpoints/<g>.bin` and `.parity`; `optimiser/<g>.pt`; `samples/<g>.bin`;
+  `generations/<g>.json`; `losses.json`; and `throughput.json`.
 
 - **[Z11-58]** `train init --run <name>` MUST create the run's directory, write `config.json` with
   `playSimulations` unset and a random `seed`, and write checkpoint `0` — the network at
@@ -566,20 +617,25 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
 
   | `sharp` at the milestone count | P(`stop`) | P(`done`) | mean gates run |
   | --- | --- | --- | --- |
-  | climbs 0.05 a milestone, 7 milestones | 0.08 | 0.75 | 1.7 |
-  | climbs 0.03 a milestone, 11 milestones | 0.32 | 0.57 | 1.7 |
-  | climbs 0.02 a milestone, 16 milestones | 0.60 | 0.34 | 1.4 |
-  | flat at 0.45 (0.50 shipped), 5 / 10 milestones | 0.38 / 0.73 | 0 / 0 | 0.7 / 0.9 |
-  | flat at 0.55 (0.60 shipped), 5 / 10 milestones | 0.13 / 0.20 | 0.73 / 0.76 | 1.4 / 1.4 |
+  | climbs 0.05 a milestone, 7 milestones | 0.08 | 0.74 | 1.7 |
+  | climbs 0.03 a milestone, 11 milestones | 0.33 | 0.56 | 1.7 |
+  | climbs 0.02 a milestone, 16 milestones | 0.61 | 0.34 | 1.3 |
+  | flat at 0.45 (0.50 shipped), 5 / 10 milestones | 0.39 / 0.74 | 0.00 / 0.00 | 0.7 / 0.9 |
+  | flat at 0.55 (0.60 shipped), 5 / 10 milestones | 0.13 / 0.19 | 0.74 / 0.77 | 1.4 / 1.4 |
+
+  *These are the committed simulation's figures, 20 000 runs a row, exactly as
+  `pnpm -F alphazero-bot stop-simulation` prints them. They replaced a first simulation's, made
+  while revising this spec, and differ from it by at most 0.02 — evidence that the rule as
+  implemented is the rule as drafted. A flat 0.45 is `done` a few times in a thousand, not never:
+  a true 0.50 at the shipped count clears 120 of 200 about 0.3% of the time.*
 
   *Read honestly, the intent's rule still stops a slow run more often than not: at 0.02 a
   milestone, two non-improving milestones in a row are likely from noise alone, and doubling the
   games buys little, because a plateau is stopped by the same coin flips at any sample size. The
   early trigger is what rescues a run that is already good enough: flat at a shipped 0.60, three
   runs in four end `done` rather than `stop`. The remaining remedy is the person: every `stop`
-  names its numbers ([Z11-34]), and [Z11-36] lets them continue. The figures are from a first
-  simulation made while revising this spec; [Z11-56] replaces them, and the 0.05 gap between the
-  two simulation counts is an assumption the first milestones and gates will measure.*
+  names its numbers ([Z11-34]), and [Z11-36] lets them continue. The 0.05 gap between the two
+  simulation counts is an assumption the first milestones and gates will measure.*
 
 - **[Z11-56]** The simulation behind [Z11-33]'s table MUST be committed as
   `eval/stop-rule-simulation.ts`, runnable by `pnpm -F alphazero-bot stop-simulation`, and MUST
@@ -601,8 +657,9 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
   `Result` fields of [0005 M5-6], the progress, the previous milestone's progress, whether it
   started afresh and why, whether the gate was due and ran, the losses of [Z11-54], the provenance
   of [Z11-63], the decision, and a **reason**: one sentence naming the numbers the decision was
-  taken on. Each milestone MUST also write its checkpoint and parity file to
-  `milestones/<run>/<generation>/`. The loop MUST print the reason when it stops. The loop MUST NOT
+  taken on. The per-move simulation counts are recorded as a histogram, count to moves, which is
+  every move's count without fourteen thousand copies of one number. Each milestone MUST also
+  write its checkpoint and parity file to `milestones/<run>/<generation>/`. The loop MUST print the reason when it stops. The loop MUST NOT
   run `git`; committing the milestone is a person's act.
 - **[Z11-63]** Every `milestone` entry and every gate result MUST record its **provenance**:
   - the repository's commit;
@@ -760,8 +817,8 @@ percentile rather than the median, which is stricter and implies the intent's fi
 
 ## Starting values
 
-The first run's `config.json`. These are recorded, not required: [Z11-25] makes the file the
-record, and a later run MAY change any of them.
+The first run's `config.json`, each setting under the key the table names. These are recorded,
+not required: [Z11-25] makes the file the record, and a later run MAY change any of them.
 
 | Setting | Value | |
 | --- | --- | --- |
@@ -772,14 +829,14 @@ record, and a later run MAY change any of them.
 | `milestoneSimulations` | 800 | [Z11-59]; lowered to `playSimulations` if that is smaller |
 | `cpuct`, `fpu` | 1.25, 0.25 | |
 | `alpha`, `epsilon` | 0.3, 0.25 | |
-| `tempPlies`, `τ` | 10, 1 | |
+| `tempPlies`, `tau` | 10, 1 | `τ` |
 | `gamesPerGeneration` | 500 | about 37 500 samples |
 | `window` | 20 generations | |
 | `stepsPerGeneration`, `batch` | 1000, 512 | draw ratio about 0.68; reuse about 14 |
 | `boundaryWeight` | 1 | boundary samples are about 7% of the data |
-| optimiser | SGD, momentum 0.9, learning rate 0.02, weight decay 1e-4 | |
+| `optimiser`, `momentum`, `learningRate`, `weightDecay` | `"sgd"`, 0.9, 0.02, 1e-4 | |
 | `milestoneEvery` | 10 generations | |
-| `threads` | 8 | self-play; torch uses 4 |
+| `threads`, `torchThreads` | 8, 4 | self-play's threads, and the trainer's |
 | `maxGenerationMinutes` | 30 | [Z11-53] |
 
 ## Amendments
@@ -855,10 +912,12 @@ this package, and MUST be corrected in the same change.
   - each component's **variance** is within 10% of `(1/k)(1 − 1/k)/(kα + 1)`.
 
   *The variance is the check that sees α. A symmetric Dirichlet's means are `1/k` for every α, so
-  a test of means passes whatever the sampler does to the noise's shape. The realistic bug in the
-  small-shape branch — returning a `Gamma(α + 1)` draw without its `U^(1/α)` factor — yields
-  `Dir(α + 1)`: noise too flat, which does not crash and quietly explores less. At `α = 0.3`,
-  `k = 20` the true variance is 0.00679 and the bug's is 0.00176, far outside 10%.*
+  a test of means passes whatever the sampler does to the noise's shape. The realistic bug —
+  drawing the Gammas at `α + 1`, which is also what a Gamma sampler's small-shape branch yields
+  without its `U^(1/α)` factor — gives `Dir(α + 1)`: noise too flat, which does not crash and
+  quietly explores less. At `α = 0.3`, `k = 20` the true variance is 0.00679 and the bug's is
+  0.00176, far outside 10%. The Gamma draws are `rand_distr`'s ([Z11-2]); this test is what
+  holds them, and the crate's normalising, to the noise the spec asks for.*
 
 - **[Z11-44]** The crate's suite MUST load the **fixture checkpoint** and every checkpoint under
   `milestones/`, which runs [Z11-13]'s parity check on each. The fixture is a small checkpoint
@@ -889,10 +948,10 @@ this package, and MUST be corrected in the same change.
   back by `alphazero` with parity, that a sample file written by the crate's test is read with
   every field intact, that [Z11-29]'s loss is unaffected by the logits of illegal actions, and that
   weight decay is applied once.
-- **[Z11-47]** A source check MUST cover [Z11-1], [Z11-2] and [Z11-3], each clause run against a
-  source it exists to reject, and MUST fail on a clock read (`Instant`, `SystemTime`) anywhere in
-  the crate's library, which is everything under `src/` except `src/main.rs` and the modules only
-  it declares.
+- **[Z11-47]** A source check MUST cover [Z11-1], [Z11-2] — its list of crates included — and
+  [Z11-3], each clause run against a source it exists to reject, and MUST fail on a clock read
+  (`Instant`, `SystemTime`) anywhere in the crate's library, which is everything under `src/`
+  except `src/main.rs` and the modules only it declares.
 - **[Z11-48]** Each mutation below MUST have been seen to turn the named assertion red before that
   assertion is kept, made in a copy with its landing confirmed, and recorded beside the assertion.
 
@@ -904,8 +963,8 @@ this package, and MUST be corrected in the same change.
   | Boundary values recomputed on every visit | [Z11-42]'s once-per-node case |
   | Values negated by ply parity | [Z11-17]'s case |
   | `>` replaced by `>=` in selection | [Z11-16]'s tie case |
-  | The small-shape branch's `U^(1/α)` factor omitted | [Z11-52]'s variance clause |
-  | The small-shape branch removed | [Z11-52]'s NaN clause |
+  | The Gammas drawn at `α + 1` instead of `α` | [Z11-52]'s variance clause |
+  | The Dirichlet draw not normalised | [Z11-52]'s sum clause |
   | One tensor read transposed | [Z11-13], via [Z11-44]'s fixture |
   | The generation left out of the self-play seed | [Z11-43]'s two-generation case |
   | The seed triple combined by adding, `seed + G + index` | [Z11-43]'s two-generation case |

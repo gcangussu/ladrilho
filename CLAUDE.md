@@ -52,9 +52,27 @@ authority, the register of rulings, and how a ruling becomes a permanent `found-
 recorded from the oracle, *corrected in the open* where the oracle is wrong — are all in 0010. The
 pinned rulebook is Next Move's English web PDF, identified by its SHA-256 in [0010 C10-26].
 
-The repo is a **pnpm monorepo** of the six packages above. `pnpm test` and `pnpm typecheck` run
-`cargo` for `engine-rs` and for the cross-check's checker, so a Rust toolchain is a prerequisite;
-`rust-toolchain.toml` pins it, and the checker's copy must stay byte-identical to the engine's.
+A seventh, **`packages/alphazero-bot`** (spec 0011), is a player we train ourselves, from scratch,
+by self-play on the Rust engine. It is three languages, each where it is strongest: a Rust crate,
+`azul_alphazero`, holds the network's forward pass, the search and self-play; a Python trainer
+under `train/` (PyTorch 2.2.2 and NumPy 1.26, pinned for this x86_64 Mac, CPU only) trains on the
+samples the crate writes and exports weights; and TypeScript lanes under `eval/` measure each
+milestone against `bot`'s ladder, apply the stop rule and run the gate against `sharp`. Nothing is
+taken from `ai-bot`, and a source check says so. The player itself is written on the engine alone;
+general-purpose plumbing (JSON, hashing, the random generator, arguments) comes from the crates
+[0011 Z11-2] lists, and adding one is a spec change. The search stops at the round boundary and
+values it on a *pre-deal view*, so no dealt tile is ever read ([0011 Z11-15], [Z11-21]). Two things
+cost time if forgotten. Every checkpoint loads only beside a parity file of PyTorch's own outputs,
+checked on every load ([Z11-13]); a checkpoint without one is not a checkpoint. And the loop
+writes, but never commits: `milestones/log.json`, the milestone checkpoints, `gate/` and `latency/`
+are for a person to commit, while `runs/` is git-ignored scratch. Like `ai-bot`'s gate, its
+milestones and gate play `sharp`, so a change to `sharp`'s play starts every run's comparison
+afresh ([Z11-63]). Nothing offers it in the interface yet.
+
+The repo is a **pnpm monorepo** of the seven packages above. `pnpm test` and `pnpm typecheck` run
+`cargo` for `engine-rs`, for the cross-check's checker and for `azul_alphazero`, so a Rust
+toolchain is a prerequisite; `rust-toolchain.toml` pins it, and the checker's and
+`alphazero-bot`'s copies must stay byte-identical to the engine's.
 
 Determinism matters: the only randomness is bag shuffling, which must be seedable so games replay
 exactly.
@@ -124,8 +142,11 @@ listed with a reason in its spec's *Traceability exemptions* table, or the build
 ## The engine/bot seam
 
 `packages/engine/src/observe.ts` exports the observation encoding — a fixed-length normalized float
-vector from the current player's perspective. Neither bot consumes it today (`ai-bot` encodes its
-own board in `src/board.ts`), but it is public engine API: keep the layout stable and documented.
+vector from the current player's perspective, which `packages/engine-rs` reproduces bit for bit.
+`alphazero-bot` consumes it: the Rust engine's `encode()` is its network's input, unmodified but
+for the pre-deal view ([0011 Z11-8], [Z11-9]). (`bot` does not use it, and `ai-bot` encodes its
+own board in `src/board.ts`.) So a change to the layout now invalidates trained models that
+exist: keep it stable and documented, and treat [0001 E1-57] as meaning it.
 
 ## Commands
 
@@ -155,6 +176,17 @@ pnpm -F crosscheck check --games 100000 --seed 7   # the long run, on purpose: [
 pnpm -F crosscheck check --steer floor --cap 600   # steering: mix, floor, prefer-lines, …
 pnpm -F crosscheck check --start short:40          # short census: reaches an empty bag and lid
 pnpm -F crosscheck replay <report.json>            # [C10-24]: exit 0 means it no longer reproduces
+
+pnpm -F alphazero-bot test       # the crate (search, network, self-play, formats) and the lanes
+pnpm -F alphazero-bot test:train # the trainer's pytest suite; needs uv. Not in the root suite
+pnpm -F alphazero-bot train init --run <name>  # [Z11-58]: checkpoint 0 and the config
+pnpm -F alphazero-bot latency --run <name>     # [Z11-57]: sets playSimulations; idle machine, hours
+pnpm -F alphazero-bot throughput --run <name>  # [Z11-53]: minutes per generation
+pnpm -F alphazero-bot train --run <name>       # [Z11-28]: the loop, over days; resumes where it stopped
+pnpm -F alphazero-bot milestone <checkpoint>   # [Z11-31] on one logged milestone, printed
+pnpm -F alphazero-bot gate <checkpoint>        # [Z11-35]: hours; writes gate/<run>/<generation>.json
+pnpm -F alphazero-bot stop-simulation          # [Z11-56]: the stop rule's table
+pnpm -F alphazero-bot latency-corpus           # [Z11-38]: re-record latency/corpus.bin; deliberate act
 
 pnpm -F bot test                 # the move chooser: evaluation, search, tiers
 pnpm -F bot bench                # the [B4-47]..[B4-50] budgets, non-gating, bundled

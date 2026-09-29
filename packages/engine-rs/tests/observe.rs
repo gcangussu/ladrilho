@@ -214,3 +214,65 @@ fn the_two_seats_mirror_pair_by_pair() {
         }
     }
 }
+
+/// [R9-25] Immediately after a boundary ply whose deal recycled the lid, the
+/// encoding's display, bag and lid fields, unscaled, with the walls, pattern
+/// lines and floors, account for all 100 tiles ([E1-40]) — the fields a
+/// recycle rearranges, read at the moment it rearranges them.
+///
+/// Seen red, in a copy: `bag_counts` in `src/state.rs` counting the whole bag
+/// array (`for &c in &self.bag`) instead of `&self.bag[..usize::from(self.bag_len)]`
+/// counts the drawn, zeroed slots as blue here.
+#[test]
+fn the_encoding_after_a_recycle_accounts_for_every_tile() {
+    let unscaled = |v: &[f32; ENCODED_SIZE]| -> [i32; 5] {
+        let n = |x: f32, s: f32| (x * s).round() as i32;
+        let mut out = [0i32; 5];
+        for c in 0..NUM_COLORS {
+            out[c] += n(v[OFF_BAG + c], 20.0) + n(v[OFF_LID + c], 20.0) + n(v[OFF_CENTER + c], 10.0);
+            for f in 0..NUM_FACTORIES {
+                out[c] += n(v[OFF_FACTORIES + f * 5 + c], FACTORY_SIZE as f32);
+            }
+            for off in [OFF_MY_FLOOR, OFF_OP_FLOOR] {
+                out[c] += n(v[off + c], FLOOR_SLOTS as f32);
+            }
+        }
+        for off in [OFF_MY_LINES, OFF_OP_LINES] {
+            for r in 0..NUM_ROWS {
+                let count = n(v[off + r * 6 + 5], (r + 1) as f32);
+                for c in 0..NUM_COLORS {
+                    if v[off + r * 6 + c] == 1.0 {
+                        out[c] += count;
+                    }
+                }
+            }
+        }
+        for off in [OFF_MY_WALL, OFF_OP_WALL] {
+            for i in 0..25 {
+                if v[off + i] == 1.0 {
+                    out[usize::from(wall_color_at((i / 5) as u8, (i % 5) as u8))] += 1;
+                }
+            }
+        }
+        out
+    };
+    let mut recycles = 0;
+    for seed in 0..40 {
+        let mut s = AzulState::seeded(seed);
+        let mut k = 0usize;
+        while !s.is_terminal() {
+            let legal = s.legal_actions();
+            let a = legal.as_slice()[(k * 7 + seed as usize) % legal.len()];
+            let before = s.clone();
+            s.apply(a).unwrap();
+            k += 1;
+            if !s.is_terminal() && s.round_index() != before.round_index() && s.shuffles_used() > before.shuffles_used() {
+                recycles += 1;
+                for p in [Player::P0, Player::P1] {
+                    assert_eq!(unscaled(&s.encode_for(p)), [20; 5], "seed {seed}, ply {k}");
+                }
+            }
+        }
+    }
+    assert!(recycles > 10, "only {recycles} recycles seen");
+}

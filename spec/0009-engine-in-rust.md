@@ -351,6 +351,15 @@ pub struct RoundScoring { pub round: u32, pub players: [PlayerRound; 2],
   MUST report a mismatch with the vector's file name, the ply index, the action, and the first
   differing `Canonical` field.
 
+- **[R9-25]** The crate's suite MUST include a case that encodes a state immediately after a
+  boundary ply whose deal recycled the lid, and asserts that the unscaled display, bag and lid
+  fields, with walls, pattern lines and floors, account for all 100 tiles ([0001 E1-40]).
+
+  *Added by 0011 — AlphaZero training, under CLAUDE.md's new-caller rule. [0001 E1-53]'s
+  observation had no production caller in Rust until `azul_alphazero`; its pre-deal view
+  ([0011 Z11-9]) reads the display, bag and lid fields at exactly the boundary where a recycle
+  rearranges them, and the vectors assert the encoding without ever asserting what it counts.*
+
 ## Allocation
 
 - **[R9-17]** The following MUST NOT allocate: `legal_actions`, `is_legal`, `apply`, `clone`,
