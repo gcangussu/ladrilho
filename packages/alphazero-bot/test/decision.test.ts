@@ -52,6 +52,47 @@ describe('the decision table [Z11-33]', () => {
     expect(step(log, 'a', results(0.27)).decision).toBe('continue');
   });
 
+  /** Four winrates, weakest rung first. */
+  const ladder = (u: number, g: number, st: number, sh: number): ReturnType<typeof results> => ({
+    rungs: { uniformRandom: { winrate: u }, greedy: { winrate: g }, steady: { winrate: st }, sharp: { winrate: sh } },
+    ladderHash: 'h',
+  });
+
+  /**
+   * Run `first`, generations 140 to 160: 1 + 0.55 + 0.3 + 0.04 sums to
+   * 1.8900000000000001 and 1 + 0.59 + 0.255 + 0.045 to 1.8899999999999997.
+   * Both are 1.89, so 160 improves on 150. Mutation, seen red: comparing the
+   * raw sums with `>=` stops here.
+   */
+  it('compares progress as the sum it is, not the floating-point sum it lands on', () => {
+    const log: LogEntry[] = [];
+    step(log, 'a', ladder(1, 0.655, 0.26, 0.04));
+    expect(step(log, 'a', ladder(1, 0.55, 0.3, 0.04)).decision).toBe('continue');
+    expect(step(log, 'a', ladder(1, 0.59, 0.255, 0.045)).decision).toBe('continue');
+    // The same pair, the other way round, as entries logged before the fix
+    // stored it: the raw sum. Still equal, so the one after it can fall once.
+    const stored: LogEntry[] = [
+      milestone('b', ladder(1, 0.655, 0.26, 0.04), 'continue'),
+      milestone('b', ladder(1, 0.55, 0.3, 0.04), 'continue'),
+    ];
+    expect(decide(stored, ladder(1, 0.59, 0.255, 0.045))).toBe('continue');
+    // And the walk that judges the milestone before: 160 logged as equal to
+    // 150 improved, so one fall after it continues. Mutation, seen red.
+    const walked: LogEntry[] = [
+      milestone('c', ladder(1, 0.55, 0.3, 0.04), 'continue'),
+      milestone('c', ladder(1, 0.59, 0.255, 0.045), 'continue'),
+    ];
+    expect(decide(walked, ladder(1, 0.5, 0.3, 0.04))).toBe('continue');
+  });
+
+  it('does not rerun a failed gate at progress equal to its own, however it was summed', () => {
+    // 1 + 0.5 + 0.15 + 0.5 sums to 2.15; 1 + 0.5 + 0.1 + 0.55 to 2.1500000000000004.
+    // Mutation, seen red: comparing the raw sums runs the gate again.
+    const failed = [milestone('a', ladder(1, 0.5, 0.15, 0.5), 'continue', { due: true, outcome: gate(false) })];
+    expect(due(failed, ladder(1, 0.5, 0.1, 0.55))).toBe(false);
+    expect(due(failed, ladder(1, 0.5, 0.1, 0.555))).toBe(true);
+  });
+
   it('starts the first milestone of a run afresh', () => {
     expect(decide([], results(0))).toBe('continue');
     expect(due([], results(0.5))).toBe(true);
