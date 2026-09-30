@@ -50,6 +50,8 @@ export interface RunOrigin {
   windowGenerations: number[];
   /** The run whose latency record `playSimulations` came from ([Z11-57]). */
   latencyRun: string;
+  /** The settings changed from the parent's, each with both values. Absent in run `second`'s. */
+  changes?: Record<string, { parent: number; run: number }>;
 }
 
 /** *Starting values*: the first run's settings, with a fresh random seed. */

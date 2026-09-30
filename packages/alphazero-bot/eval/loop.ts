@@ -9,7 +9,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { startingConfig, type RunConfig } from './config.js';
+import { startingConfig, type RunConfig, type RunOrigin } from './config.js';
 import { alphazero, buildRelease, trainer } from './crate.js';
 import {
   GATE_TRIGGER,
@@ -63,15 +63,78 @@ export function parseFrom(text: string): { run: string; generation: number } {
 }
 
 /**
+ * The settings a run started from another may change ([Z11-66]): how it
+ * trains and self-plays. Not the network, not the search the milestones and
+ * the gate measure, and not the latency record's `playSimulations`, all of
+ * which the parent's measurements stand on.
+ */
+export const CHANGEABLE = [
+  'gamesPerGeneration',
+  'window',
+  'stepsPerGeneration',
+  'batch',
+  'learningRate',
+  'momentum',
+  'weightDecay',
+  'boundaryWeight',
+  'selfPlaySimulations',
+  'threads',
+  'torchThreads',
+] as const;
+export type Changeable = (typeof CHANGEABLE)[number];
+
+/** `key=value` for one of [CHANGEABLE], a positive finite number. */
+export function parseSet(text: string): [Changeable, number] {
+  const m = /^([A-Za-z]+)=(.+)$/.exec(text);
+  if (m === null) throw new Error(`--set takes <setting>=<number>, not ${text}`);
+  const key = m[1] as Changeable;
+  if (!CHANGEABLE.includes(key)) throw new Error(`--set cannot change ${m[1]}: only ${CHANGEABLE.join(', ')}`);
+  const value = Number(m[2]);
+  if (!(Number.isFinite(value) && value > 0)) throw new Error(`--set ${key} needs a positive number, not ${m[2]}`);
+  return [key, value];
+}
+
+/**
+ * [Z11-66]'s config: the parent's, with a fresh seed, its own `augment`, the
+ * changes asked for, and `from` recording the parent and what differs from it.
+ */
+export function childConfig(
+  pc: RunConfig,
+  origin: Omit<RunOrigin, 'changes'>,
+  seed: number,
+  augment: 'none' | 'displays' | undefined,
+  set: Partial<Record<Changeable, number>> = {},
+): RunConfig {
+  const { from: _grandparent, augment: parentAugment, ...inherited } = pc;
+  const changes: RunOrigin['changes'] = {};
+  for (const [k, v] of Object.entries(set) as [Changeable, number][]) {
+    if (inherited[k] !== v) changes[k] = { parent: inherited[k], run: v };
+  }
+  return {
+    ...inherited,
+    ...set,
+    seed,
+    augment: augment ?? parentAugment ?? 'none',
+    from: { ...origin, changes },
+  };
+}
+
+/**
  * [Z11-58]: the run's directory, its config with a random seed, and checkpoint 0.
  * With `from` ([Z11-66]), the config is the parent's with a fresh seed, and
  * checkpoint 0 is the parent's checkpoint at that generation; `augment` is
  * the one setting that may differ from the parent's ([Z11-65]).
  */
-export function initRun(name: string, from?: { run: string; generation: number }, augment?: 'none' | 'displays'): void {
+export function initRun(
+  name: string,
+  from?: { run: string; generation: number },
+  augment?: 'none' | 'displays',
+  set: Partial<Record<Changeable, number>> = {},
+): void {
   checkRunName(name);
   const p = runPaths(name);
   if (existsSync(p.dir)) throw new Error(`${p.dir} already exists`);
+  if (from === undefined && Object.keys(set).length > 0) throw new Error('--set goes with --from');
   if (from === undefined) {
     const config: RunConfig = { ...startingConfig(), ...(augment === undefined ? {} : { augment }) };
     mkdirSync(p.dir, { recursive: true });
@@ -97,19 +160,19 @@ export function initRun(name: string, from?: { run: string; generation: number }
     if (!existsSync(parent.samples(k))) throw new Error(`run ${from.run} has no samples for generation ${k}`);
     windowGenerations.push(k);
   }
-  const { from: _grandparent, augment: parentAugment, ...inherited } = pc;
-  const config: RunConfig = {
-    ...inherited,
-    seed: startingConfig().seed,
-    augment: augment ?? parentAugment ?? 'none',
-    from: {
+  const config = childConfig(
+    pc,
+    {
       run: from.run,
       generation: from.generation,
       checkpointSha256: sha256File(parent.checkpoint(from.generation)),
       windowGenerations,
       latencyRun: pc.from?.latencyRun ?? from.run,
     },
-  };
+    startingConfig().seed,
+    augment,
+    set,
+  );
   mkdirSync(p.dir, { recursive: true });
   writeJson(p.config, config);
   trainer([

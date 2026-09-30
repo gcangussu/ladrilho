@@ -1,6 +1,7 @@
 /**
  * Display permutation ([Z11-65]): the layout the trainer permutes by, and the
- * fixture its permutation is checked against, both read from the engine.
+ * fixture its permutation is checked against, both read from the engine. The
+ * layout also carries the score and round fields [Z11-54]'s value by round reads.
  *
  * The trainer is Python and cannot import the engine, so [Z11-8]'s "only
  * through the offsets the engine exports" is kept by writing them to
@@ -16,6 +17,8 @@ import {
   NUM_FACTORIES,
   OFF_FACTORIES,
   OFF_FACTORY_FLAGS,
+  OFF_ROUND,
+  OFF_SCORES,
   applyExplained,
   clone,
   encode,
@@ -42,6 +45,23 @@ export interface DisplayLayout {
   center: number;
   /** How far apart two sources' actions are: `encodeAction(1, 0, 0) - encodeAction(0, 0, 0)`. */
   perSource: number;
+  /** [Z11-54]'s value by round: the seat to move's score, then the other's, each over `scoreScale`. */
+  offScores: number;
+  scoreScale: number;
+  /** The round index over `roundScale`. */
+  offRound: number;
+  roundScale: number;
+}
+
+/**
+ * What the encoder divides a field by, read back from the engine: encode a
+ * state holding `raw` in that field and divide. Rounded, because the
+ * division is a float's.
+ */
+function scaleOf(set: (s: AzulState) => void, offset: number, raw: number): number {
+  const s = newGame(1);
+  set(s);
+  return Math.round(raw / encode(s)[offset]);
 }
 
 export function displayLayout(): DisplayLayout {
@@ -54,6 +74,10 @@ export function displayLayout(): DisplayLayout {
     offFactoryFlags: OFF_FACTORY_FLAGS,
     center: CENTER,
     perSource: encodeAction(1, 0, 0) - encodeAction(0, 0, 0),
+    offScores: OFF_SCORES,
+    scoreScale: scaleOf((s) => (s.scores = [37, 0]), OFF_SCORES, 37),
+    offRound: OFF_ROUND,
+    roundScale: scaleOf((s) => (s.roundIndex = 3), OFF_ROUND, 3),
   };
 }
 
