@@ -10,6 +10,7 @@ import numpy as np
 import torch
 
 from .augment import permute_samples, random_perms
+from .measure import FitData, predict_values, value_by_round
 from .formats import (legal_bits, read_checkpoint, read_samples, sha256, write_atomic,
                       write_checkpoint, write_json)
 from .model import Net
@@ -168,7 +169,12 @@ def train_generation(run: Path, g: int) -> None:
         raise ValueError(f"checkpoint {g} says it is generation {header_generation}")
     bw = float(config["boundaryWeight"])
 
-    # Step 2: checkpoint g on its own samples, before training on them [Z11-54].
+    first = max(0, g - config["window"] + 1)
+    files, inherited = window_files(run, config, g)
+    parts = [read_samples(f) for f in files]
+
+    # Step 2: checkpoint g on its own samples, before training on them [Z11-54],
+    # in total and by round beside the formula fitted on the rest of the window.
     record = read_losses(run)
     key = str(g)
     entry = record.get(key, {})
@@ -176,13 +182,18 @@ def train_generation(run: Path, g: int) -> None:
     if "before" not in entry:
         pol, val = evaluate(net, own, bw)
         entry = {"generation": g, "before": {"policy": pol, "value": val, "samples": len(own)}}
-        record[key] = entry
-        write_json(run / "losses.json", record)
+    if "byRound" not in entry["before"]:
+        fit = FitData()
+        for f, part in zip(files, parts):
+            if f != p["samples"]:
+                fit.add(part)
+        entry["before"]["byRound"] = value_by_round(predict_values(net, own), own, fit.weights())
+    record[key] = entry
+    write_json(run / "losses.json", record)
 
     # Step 3: the last `window` generations, `stepsPerGeneration` steps.
-    first = max(0, g - config["window"] + 1)
-    files, inherited = window_files(run, config, g)
-    window = np.concatenate([read_samples(f) for f in files])
+    window = np.concatenate(parts)
+    del parts
     augment = config.get("augment", "none")
     if augment not in ("none", "displays"):
         raise ValueError(f"config: augment {augment!r} is neither none nor displays")

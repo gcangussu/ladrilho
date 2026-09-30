@@ -8,7 +8,17 @@ import { resolve } from 'node:path';
 import { DISPLAYS_FIXTURE, LAYOUT, displayFixture, displayLayout } from './augment.js';
 import { writeAtomic, writeJson } from './files.js';
 import { recordCorpus } from './latency.js';
-import { gateCommand, initRun, latencyLane, milestoneCommand, parseFrom, throughputLane, trainLoop } from './loop.js';
+import {
+  gateCommand,
+  initRun,
+  latencyLane,
+  milestoneCommand,
+  parseFrom,
+  parseSet,
+  throughputLane,
+  trainLoop,
+  type Changeable,
+} from './loop.js';
 import { CORPUS } from './paths.js';
 import { seriesWorker } from './series.js';
 import { table } from './stop-rule-simulation.js';
@@ -44,7 +54,15 @@ async function main(): Promise<void> {
         if (augment !== undefined && augment !== 'none' && augment !== 'displays') {
           throw new Error('--augment takes none or displays');
         }
-        return initRun(option(rest, 'run') ?? '', from === undefined ? undefined : parseFrom(from), augment);
+        const set: Partial<Record<Changeable, number>> = {};
+        rest.forEach((a, i) => {
+          if (a !== '--set') return;
+          const v = rest[i + 1];
+          if (v === undefined || v.startsWith('--')) throw new Error('--set needs <setting>=<number>');
+          const [k, n] = parseSet(v);
+          set[k] = n;
+        });
+        return initRun(option(rest, 'run') ?? '', from === undefined ? undefined : parseFrom(from), augment, set);
       }
       {
         const until = option(rest, 'until');
@@ -82,7 +100,7 @@ async function main(): Promise<void> {
       return seriesWorker();
     default:
       throw new Error(
-        'usage: train init --run <name> [--from <run>:<generation>] [--augment none|displays] | train --run <name> [--override "<reason>"] | latency --run <name> | ' +
+        'usage: train init --run <name> [--from <run>:<generation>] [--augment none|displays] [--set <setting>=<n>]… | train --run <name> [--override "<reason>"] | latency --run <name> | ' +
           'throughput --run <name> | milestone <checkpoint> | gate <checkpoint> | stop-simulation | latency-corpus | ' +
           'augment-fixtures',
       );

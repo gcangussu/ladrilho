@@ -6,5 +6,9 @@
   "offFactories": 126,
   "offFactoryFlags": 151,
   "center": 5,
-  "perSource": 30
+  "perSource": 30,
+  "offScores": 124,
+  "scoreScale": 100,
+  "offRound": 175,
+  "roundScale": 10
 }
