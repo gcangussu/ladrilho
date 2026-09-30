@@ -463,7 +463,8 @@ The binary's commands, each loading one checkpoint and one run's settings:
 ## Self-play and training
 
 - **[Z11-25]** A run's settings MUST live in one file, `runs/<name>/config.json`, fixed once
-  generation `0` starts ([Z11-58]), and copied into every milestone record. The shipped settings
+  generation `0` starts ([Z11-58]), and copied into every milestone record. `augment` ([Z11-65])
+  and `from` ([Z11-66]) are settings like any other, fixed with the rest. The shipped settings
   are its `width`, `blocks` and `playSimulations`. *Starting values* lists the first run's.
 - **[Z11-26]** `selfplay` MUST play its games with `threads` threads over one shared `Network`,
   each game on `AzulState<Seeded>` seeded from the triple (the config's `seed`, the generation
@@ -492,7 +493,10 @@ The binary's commands, each loading one checkpoint and one run's settings:
      sample file is already complete;
   2. measure checkpoint `g`'s losses on those samples before training on them ([Z11-54]);
   3. train on the samples of the last `window` generations for `stepsPerGeneration` steps,
-     starting from checkpoint `g`'s weights and generation `g`'s optimiser state;
+     starting from checkpoint `g`'s weights and generation `g`'s optimiser state — for a run
+     started from another, the parent's latest generations fill the window while the run has
+     fewer of its own ([Z11-66]), and with `augment: displays` each drawn sample is permuted
+     ([Z11-65]);
   4. write the optimiser state as its own file for generation `g + 1`, never overwriting
      generation `g`'s, then checkpoint `g + 1` and its parity file, then the manifest
      `generations/<g + 1>.json` naming all three with their sha256. The manifest is the commit
@@ -511,7 +515,8 @@ The binary's commands, each loading one checkpoint and one run's settings:
   initialisation — with its parity file, generation `0`'s optimiser state (fresh), and manifest.
   `--augment none|displays` sets [Z11-65]'s setting; `--from` starts the run from another's
   checkpoint instead ([Z11-66]).
-  The latency lane ([Z11-57]) and the throughput lane ([Z11-53]) then run on checkpoint `0`, and the
+  The latency lane ([Z11-57]) and the throughput lane ([Z11-53]) then run on checkpoint `0` — for a
+  run started from another, the throughput lane alone ([Z11-66]) — and the
   latency lane writes `playSimulations` into the config, lowering `milestoneSimulations` to it if
   it is smaller ([Z11-59]). While it is
   unset, `alphazero latency` MUST require `--simulations`, which [Z11-57]'s search supplies at
@@ -832,7 +837,9 @@ percentile rather than the median, which is stricter and implies the intent's fi
   p99, p99.9 and max, where pN is the value at rank `⌈N/100 · n⌉` of the sorted times, and
   `passed: p95 < 3000 ms && p99.9 < 5000 ms`. It MUST be run with the machine otherwise idle, as
   [0009 R9-19] is. Once the run's generation `0` has started, the lane MUST refuse to run for that
-  run: the record and `playSimulations` are fixed with the config ([Z11-25]).
+  run: the record and `playSimulations` are fixed with the config ([Z11-25]). A run started from
+  another has no record of its own: the lane MUST refuse it, and the record its config's `from`
+  names holds for it ([Z11-66]).
 
   *Over 2000 positions p99.9 is the third-largest time. With a fixed simulation count a move's
   cost barely varies, so in practice it is the machine's noise that p99.9 measures, which is what
@@ -894,15 +901,16 @@ not required: [Z11-25] makes the file the record, and a later run MAY change any
 | --- | --- | --- |
 | `width`, `blocks` | 256, 4 | about 640 000 weights, 2.5 MB a checkpoint |
 | `seed` | random, chosen by `train init` | [Z11-26] |
+| `augment` | absent, meaning `none` | [Z11-65] |
 | `playSimulations` | set by [Z11-57] | the shipped setting |
 | `selfPlaySimulations` | 200 | |
 | `milestoneSimulations` | 800 | [Z11-59]; lowered to `playSimulations` if that is smaller |
 | `cpuct`, `fpu` | 1.25, 0.25 | |
 | `alpha`, `epsilon` | 0.3, 0.25 | |
 | `tempPlies`, `tau` | 10, 1 | `τ` |
-| `gamesPerGeneration` | 500 | about 37 500 samples |
+| `gamesPerGeneration` | 500 | about 37 500 samples; run `first` measured 28 000 to 33 000 |
 | `window` | 20 generations | |
-| `stepsPerGeneration`, `batch` | 1000, 512 | draw ratio about 0.68; reuse about 14 |
+| `stepsPerGeneration`, `batch` | 1000, 512 | draw ratio about 0.68, reuse about 14; run `first` measured 0.91 and 18 |
 | `boundaryWeight` | 1 | boundary samples are about 7% of the data |
 | `optimiser`, `momentum`, `learningRate`, `weightDecay` | `"sgd"`, 0.9, 0.02, 1e-4 | |
 | `milestoneEvery` | 10 generations | |
@@ -1016,8 +1024,9 @@ this package, and MUST be corrected in the same change.
   `passed` verdicts that agree with the numbers it records.
 - **[Z11-46]** The trainer's suite (`test:train`) MUST assert that a checkpoint it exports is read
   back by `alphazero` with parity, that a sample file written by the crate's test is read with
-  every field intact, that [Z11-29]'s loss is unaffected by the logits of illegal actions, and that
-  weight decay is applied once.
+  every field intact, that [Z11-29]'s loss is unaffected by the logits of illegal actions, that
+  weight decay is applied once, that [Z11-65]'s permutation is the engine's, and that a run started
+  from another ([Z11-66]) begins from its parent's weights, optimiser and window.
 - **[Z11-47]** A source check MUST cover [Z11-1], [Z11-2] — its list of crates included — and
   [Z11-3], each clause run against a source it exists to reject, and MUST fail on a clock read
   (`Instant`, `SystemTime`) anywhere in the crate's library, which is everything under `src/`
@@ -1043,6 +1052,11 @@ this package, and MUST be corrected in the same change.
   | The stop rule comparing against the best milestone instead of the previous one | [Z11-45] |
   | An override not resetting the comparison | [Z11-45] |
   | The gate due at every milestone above 0.50, ignoring the last failure | [Z11-45] |
+  | Progress compared as raw floating-point sums, in `decide`, in the walk, or in `due` | [Z11-33]'s run `first` cases |
+  | The inverse permutation, of the displays or of the actions | [Z11-65]'s fixture case |
+  | The display flags left in place | [Z11-65]'s fixture case |
+  | The permutation skipped with `augment: displays` | [Z11-66]'s window case |
+  | The parent's samples left out of the window, or a fresh optimiser at checkpoint `0` | [Z11-66]'s window case |
 
 - **[Z11-49]** Every requirement in this document MUST be either cited by at least one test — Rust,
   TypeScript or Python — by identifier, or listed with a reason in *Traceability exemptions*,
