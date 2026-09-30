@@ -32,6 +32,24 @@ export interface RunConfig {
   threads: number;
   torchThreads: number;
   maxGenerationMinutes: number;
+  /**
+   * [Z11-65]: `displays` trains on each drawn sample under a random
+   * permutation of the five displays. Absent means `none`: run `first`'s
+   * config predates it.
+   */
+  augment?: 'none' | 'displays';
+  /** [Z11-66]: the run and generation this run's checkpoint 0 was taken from. */
+  from?: RunOrigin;
+}
+
+export interface RunOrigin {
+  run: string;
+  generation: number;
+  checkpointSha256: string;
+  /** The parent's generations whose samples start this run's window, oldest first. */
+  windowGenerations: number[];
+  /** The run whose latency record `playSimulations` came from ([Z11-57]). */
+  latencyRun: string;
 }
 
 /** *Starting values*: the first run's settings, with a fresh random seed. */

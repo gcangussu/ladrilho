@@ -180,6 +180,9 @@ pnpm -F crosscheck replay <report.json>            # [C10-24]: exit 0 means it n
 pnpm -F alphazero-bot test       # the crate (search, network, self-play, formats) and the lanes
 pnpm -F alphazero-bot test:train # the trainer's pytest suite; needs uv. Not in the root suite
 pnpm -F alphazero-bot train init --run <name>  # [Z11-58]: checkpoint 0 and the config
+pnpm -F alphazero-bot train init --run <name> --from <run>:<g> --augment displays
+                                               # [Z11-66], [Z11-65]: start from another run's
+                                               # checkpoint, window and latency record
 pnpm -F alphazero-bot latency --run <name>     # [Z11-57]: sets playSimulations; idle machine, hours
 pnpm -F alphazero-bot throughput --run <name>  # [Z11-53]: minutes per generation
 pnpm -F alphazero-bot train --run <name>       # [Z11-28]: the loop, over days; resumes where it stopped
@@ -187,6 +190,7 @@ pnpm -F alphazero-bot milestone <checkpoint>   # [Z11-31] on one logged mileston
 pnpm -F alphazero-bot gate <checkpoint>        # [Z11-35]: hours; writes gate/<run>/<generation>.json
 pnpm -F alphazero-bot stop-simulation          # [Z11-56]: the stop rule's table
 pnpm -F alphazero-bot latency-corpus           # [Z11-38]: re-record latency/corpus.bin; deliberate act
+pnpm -F alphazero-bot augment-fixtures         # [Z11-65]: train/layout.json and the display fixture
 
 pnpm -F bot test                 # the move chooser: evaluation, search, tiers
 pnpm -F bot bench                # the [B4-47]..[B4-50] budgets, non-gating, bundled

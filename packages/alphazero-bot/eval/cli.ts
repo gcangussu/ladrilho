@@ -5,9 +5,10 @@
 
 import { cpus } from 'node:os';
 import { resolve } from 'node:path';
-import { writeAtomic } from './files.js';
+import { DISPLAYS_FIXTURE, LAYOUT, displayFixture, displayLayout } from './augment.js';
+import { writeAtomic, writeJson } from './files.js';
 import { recordCorpus } from './latency.js';
-import { gateCommand, initRun, latencyLane, milestoneCommand, throughputLane, trainLoop } from './loop.js';
+import { gateCommand, initRun, latencyLane, milestoneCommand, parseFrom, throughputLane, trainLoop } from './loop.js';
 import { CORPUS } from './paths.js';
 import { seriesWorker } from './series.js';
 import { table } from './stop-rule-simulation.js';
@@ -37,7 +38,14 @@ async function main(): Promise<void> {
   };
   switch (command) {
     case 'train':
-      if (rest[0] === 'init') return initRun(option(rest, 'run') ?? '');
+      if (rest[0] === 'init') {
+        const from = option(rest, 'from');
+        const augment = option(rest, 'augment');
+        if (augment !== undefined && augment !== 'none' && augment !== 'displays') {
+          throw new Error('--augment takes none or displays');
+        }
+        return initRun(option(rest, 'run') ?? '', from === undefined ? undefined : parseFrom(from), augment);
+      }
       {
         const until = option(rest, 'until');
         const override = option(rest, 'override');
@@ -64,12 +72,19 @@ async function main(): Promise<void> {
       process.stdout.write(`latency/corpus.bin: ${c.positions} positions from ${c.games} games\n`);
       return;
     }
+    case 'augment-fixtures': {
+      writeJson(LAYOUT, displayLayout());
+      writeJson(DISPLAYS_FIXTURE, displayFixture());
+      process.stdout.write('train/layout.json and train/tests/fixtures/displays.json written from the engine\n');
+      return;
+    }
     case 'series-worker':
       return seriesWorker();
     default:
       throw new Error(
-        'usage: train init --run <name> | train --run <name> [--override "<reason>"] | latency --run <name> | ' +
-          'throughput --run <name> | milestone <checkpoint> | gate <checkpoint> | stop-simulation | latency-corpus',
+        'usage: train init --run <name> [--from <run>:<generation>] [--augment none|displays] | train --run <name> [--override "<reason>"] | latency --run <name> | ' +
+          'throughput --run <name> | milestone <checkpoint> | gate <checkpoint> | stop-simulation | latency-corpus | ' +
+          'augment-fixtures',
       );
   }
 }
