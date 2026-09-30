@@ -138,6 +138,20 @@ result, winrate) keep their meaning.
   MUST pass `--locked`, and its `rust-toolchain.toml` MUST be byte-identical to
   `packages/engine-rs/rust-toolchain.toml`. It MUST satisfy [0009 R9-4] and [0009 R9-6] as though
   it were under `packages/engine-rs`: no async, `#![forbid(unsafe_code)]`.
+  The package's `.cargo/config.toml` MUST hold exactly one section,
+  `[target.'cfg(target_arch = "x86_64")']`, holding exactly
+  `rustflags = ["-C", "target-feature=+avx2"]`, so every `cargo` invocation from the package builds
+  the crate with AVX2 on x86_64 and with the defaults elsewhere.
+
+  *AVX2 alone, not `target-cpu=native` or `x86-64-v3`: it is the one feature the measured gain
+  needs, and it names the same instructions on every x86_64 machine, where `native` would build a
+  different binary on each. The flag changes instructions, not results: the forward pass's order is
+  in the source ([Z11-10]) and Rust never fuses a multiply and an add unless asked, so the
+  baseline build and this one gave byte-identical self-play sample files for the same checkpoint,
+  config and seed, at one thread and at two. With [Z11-10]'s kernel it halved self-play's CPU time
+  on the machine of record. `unsafe` being forbidden, runtime feature detection is not available;
+  the feature is a build setting or nothing. A `RUSTFLAGS` set in the environment replaces the
+  file's flags, and a machine without AVX2 cannot run what it builds.*
 
   *The line is between the player and plumbing. A JSON reader, a hash, a Gamma sampler and an
   argument parser are well-established functionality whose hand-written versions would only be
@@ -269,6 +283,19 @@ result, winrate) keep their meaning.
   source. That order MAY use a fixed number of independent lane accumulators combined in a fixed
   order, which is what lets the compiler vectorise a dot product without reassociating it. It MUST
   NOT allocate.
+
+  The order is this, for every dot product of a row `w` with an input `x`: lane `l` of 16 sums
+  `w[16j + l] · x[16j + l]` over the whole chunks `j`, in ascending `j`; the elements past the last
+  whole chunk are summed on their own, from zero, in ascending order; the lanes fold in halves,
+  `acc[i] += acc[i + n]` for `n = 8, 4, 2, 1`; the tail is added to `acc[0]`, then the bias. A
+  layer MAY compute two rows at once, each row's lanes in exactly that order. The accumulation
+  loops MUST live in functions of their own, marked `#[inline(never)]`, apart from the fold.
+
+  *Inlined beside the fold, LLVM vectorised the sixteen lanes as eight pairs — two floats to an
+  instruction, half an SSE register and a quarter of an AVX2 one — in the baseline build and with
+  AVX2 alike. On their own the loops fill whole registers, and two rows at once give the adder
+  twice the independent chains. Measured on the machine of record: the forward pass 1.45× faster
+  in the baseline build, 2.1× with [Z11-2]'s AVX2, and the same bits.*
 
   *A single sequential accumulator also satisfies "fixed", and measured 7–12× slower than 16
   lanes on the machine of record. [Z11-53] is what keeps that from happening quietly.*
@@ -1050,7 +1077,8 @@ this package, and MUST be corrected in the same change.
   from another ([Z11-66]) begins from its parent's weights, optimiser and window, and that
   [Z11-54]'s value by round reads rounds as the engine encodes them and fits its formula out of
   sample.
-- **[Z11-47]** A source check MUST cover [Z11-1], [Z11-2] — its list of crates included — and
+- **[Z11-47]** A source check MUST cover [Z11-1], [Z11-2] — its list of crates and its build flag
+  in `.cargo/config.toml` included, failing if the file is absent or its flags differ — and
   [Z11-3], each clause run against a source it exists to reject, and MUST fail on a clock read
   (`Instant`, `SystemTime`) anywhere in the crate's library, which is everything under `src/`
   except `src/main.rs` and the modules only it declares.
@@ -1084,6 +1112,10 @@ this package, and MUST be corrected in the same change.
   | A child's changes not recorded in `from` | [Z11-66]'s config case |
   | The round read without its scale | [Z11-54]'s round case |
   | The formula fitted on the samples it is scored on, in the measure or in the trainer | [Z11-54]'s out-of-sample and generation cases |
+  | The fold of `finish` summing the lanes in sequence instead of in halves | [Z11-10]'s reference case |
+  | The second row of `lanes2` accumulated against the first row's weights | [Z11-10]'s reference case |
+  | The unpaired last row of `linear` left uncomputed | [Z11-10]'s reference case, at odd width |
+  | The check that `.cargo/config.toml`'s section holds exactly the AVX2 line, or holds no other section, weakened | [Z11-47]'s build-flag case |
 
 - **[Z11-49]** Every requirement in this document MUST be either cited by at least one test — Rust,
   TypeScript or Python — by identifier, or listed with a reason in *Traceability exemptions*,

@@ -176,3 +176,149 @@ fn the_forward_pass_is_a_masked_softmax_and_deterministic() {
     assert!(v.iter().any(|x| (x - v[0]).abs() > 1e-4));
     let _ = AzulState::seeded(0);
 }
+
+/// The forward pass of [Z11-6] computed the plain way, one scalar at a time,
+/// in [Z11-10]'s order: lane `l` sums `w[16j + l] · x[16j + l]` over the whole
+/// chunks in ascending `j`; the elements past them are summed from zero in
+/// ascending order; the lanes fold in halves, `acc[i] += acc[i + n]` for
+/// `n = 8, 4, 2, 1`; the tail is added last, then the bias. Weights are read
+/// straight from the checkpoint's bytes in [Z11-11]'s order.
+fn reference_forward(checkpoint: &[u8], x: &[f32]) -> (Vec<f32>, f32) {
+    let word = |at: usize| u32::from_le_bytes(checkpoint[at..at + 4].try_into().unwrap()) as usize;
+    let (input, width, blocks, policy, hidden) = (word(8), word(12), word(16), word(20), word(24));
+    let w: Vec<f32> = checkpoint[32..].as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)).collect();
+    let mut at = 0;
+    let mut take = |n: usize| {
+        let s = &w[at..at + n];
+        at += n;
+        s
+    };
+    fn dot(row: &[f32], x: &[f32]) -> f32 {
+        let chunks = x.len() / 16;
+        let mut acc = [0f32; 16];
+        for j in 0..chunks {
+            for l in 0..16 {
+                acc[l] += row[16 * j + l] * x[16 * j + l];
+            }
+        }
+        let mut tail = 0f32;
+        for k in 16 * chunks..x.len() {
+            tail += row[k] * x[k];
+        }
+        for n in [8, 4, 2, 1] {
+            for i in 0..n {
+                acc[i] += acc[i + n];
+            }
+        }
+        acc[0] + tail
+    }
+    fn linear(m: &[f32], b: &[f32], x: &[f32]) -> Vec<f32> {
+        (0..b.len()).map(|o| dot(&m[o * x.len()..(o + 1) * x.len()], x) + b[o]).collect()
+    }
+    let relu = |v: Vec<f32>| -> Vec<f32> { v.into_iter().map(|a| a.max(0.0)).collect() };
+    let (s, sb) = (take(width * input), take(width));
+    let mut h = relu(linear(s, sb, x));
+    for _ in 0..blocks {
+        let (b1, b1b, b2, b2b) = (take(width * width), take(width), take(width * width), take(width));
+        let t = relu(linear(b1, b1b, &h));
+        let u = linear(b2, b2b, &t);
+        h = h.iter().zip(&u).map(|(a, b)| (a + b).max(0.0)).collect();
+    }
+    let (p, pb) = (take(policy * width), take(policy));
+    let logits = linear(p, pb, &h);
+    let (v1, v1b, v2, v2b) = (take(hidden * width), take(hidden), take(hidden), take(1));
+    let v = relu(linear(v1, v1b, &h));
+    (logits, (dot(v2, &v) + v2b[0]).tanh())
+}
+
+/// A checkpoint of width `width` with small pseudo-random weights, and the
+/// parity file its reference forward pass implies.
+fn synthetic(width: u32, blocks: u32, seed: u64) -> (Vec<u8>, Vec<u8>) {
+    let (w, b) = (width as usize, blocks as usize);
+    let count = w * 182 + w + b * 2 * (w * w + w) + 180 * w + 180 + 64 * w + 64 + 64 + 1;
+    let mut checkpoint = b"AZ11".to_vec();
+    for v in [1, 182, width, blocks, 180, 64, 0] {
+        checkpoint.extend_from_slice(&v.to_le_bytes());
+    }
+    let mut state = seed;
+    for _ in 0..count {
+        state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        let u = (state >> 40) as f32 / (1u64 << 24) as f32;
+        checkpoint.extend_from_slice(&((u - 0.5) * 0.6).to_le_bytes());
+    }
+    let mut parity = b"AZPF".to_vec();
+    parity.extend_from_slice(&1u32.to_le_bytes());
+    parity.extend_from_slice(&corpus_sha256());
+    parity.extend_from_slice(&(corpus().len() as u32).to_le_bytes());
+    for e in corpus() {
+        let (logits, value) = reference_forward(&checkpoint, &e.observation);
+        for v in logits.iter().chain([&value]) {
+            parity.extend_from_slice(&v.to_le_bytes());
+        }
+    }
+    (checkpoint, parity)
+}
+
+/// [Z11-10]: the forward pass is the reference order, bit for bit — every logit
+/// and the value — on the parity corpus and on positions of a game, for the
+/// fixture, for each run's latest committed milestone (width 256, the corpus only), and
+/// for synthetic networks of odd width, whose last row goes without a partner
+/// and whose hidden inputs end in a tail past the last whole chunk.
+///
+/// Mutations, seen red ([Z11-48]), each in a copy with its anchor confirmed:
+/// in `network.rs`, `finish` summing the lanes in sequence
+/// (`for i in 1..LANES { acc[0] += acc[i] }`) instead of folding them in
+/// halves; `lanes2` accumulating the second row against the first row's
+/// weights (`a1[l] += p[l] * b[l]`); and `linear` leaving the unpaired last
+/// row of an odd width uncomputed (its `if let [y] = last` arm removed). The
+/// first fails the bit comparison — the fixture's logit 1 one unit in the last
+/// place off, which [Z11-13]'s parity check tolerates — and the other two fail
+/// the parity check this test's own loads run: the second on the fixture,
+/// the third on the synthetic width 17, which no committed network exercises.
+#[test]
+fn the_forward_pass_is_the_reference_order_bit_for_bit() {
+    let positions: Vec<[f32; 182]> = support::game_positions(5).iter().map(|s| s.encode()).collect();
+    let corpus_inputs: Vec<[f32; 182]> = corpus().iter().map(|e| e.observation).collect();
+    let check = |name: &str, checkpoint: &[u8], net: &Network, inputs: &[[f32; 182]]| {
+        let mut logits = [0f32; 180];
+        for (i, x) in inputs.iter().enumerate() {
+            let value = net.forward(x, &mut logits);
+            let (want, want_value) = reference_forward(checkpoint, x);
+            for (a, (ours, theirs)) in logits.iter().zip(&want).enumerate() {
+                assert_eq!(ours.to_bits(), theirs.to_bits(), "{name}, input {i}, logit {a}: {ours} against {theirs}");
+            }
+            assert_eq!(value.to_bits(), want_value.to_bits(), "{name}, input {i}, value: {value} against {want_value}");
+        }
+    };
+    let all: Vec<[f32; 182]> = corpus_inputs.iter().chain(&positions).copied().collect();
+
+    let (c, p) = fixture_bytes();
+    check("the fixture", &c, &Network::load(&c, &p).unwrap(), &all);
+
+    for (width, blocks) in [(17, 1), (33, 2)] {
+        let (c, p) = synthetic(width, blocks, u64::from(width));
+        let net = Network::load(&c, &p).unwrap_or_else(|e| panic!("width {width}: {e}"));
+        assert_eq!(net.architecture(), (width, blocks));
+        check(&format!("width {width}"), &c, &net, &all);
+    }
+
+    // Each run's latest milestone: the width-256 kernel on weights as training
+    // leaves them, at a cost the suite's budget ([Z11-50]) can carry.
+    let mut milestones = Vec::new();
+    for run in std::fs::read_dir(crate_dir().join("milestones")).into_iter().flatten().flatten() {
+        let latest = std::fs::read_dir(run.path())
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|g| Some((g.file_name().to_str()?.parse::<u32>().ok()?, g.path().join("checkpoint.bin"))))
+            .filter(|(_, c)| c.exists())
+            .max();
+        milestones.extend(latest.map(|(_, c)| c));
+    }
+    assert!(!milestones.is_empty(), "no committed milestone to check at width 256");
+    for c in milestones {
+        let bytes = read(&c);
+        let net = Network::load(&bytes, &read(&c.with_extension("parity"))).unwrap();
+        check(&c.display().to_string(), &bytes, &net, &corpus_inputs);
+    }
+}
