@@ -818,8 +818,10 @@ percentile rather than the median, which is stricter and implies the intent's fi
   number of passes. The first run's lane stepped by 100 from a probe that guessed 8500, measured ten
   passes over three hours, and stopped at 9300 on a p99.9 of 2606 ms at 9400 whose p99 was 1262 ms:
   one busy moment, not the search's cost growing. Theil–Sen ignores such a pass when fitting, and a
-  second pass keeps it from deciding the verdict. A miss on p95 is not remeasured, because p95 over
-  2000 positions is too far from the tail for one moment to move. The count is still not claimed to
+  second pass keeps it from deciding the verdict. A miss on p95 is not remeasured, though the second
+  attempt showed one can be spoiled too: 11400 measured p95 1516 ms beside 1319 ms at 11300 while
+  the machine was in use, so the lane settled at 11300 where the edge lies somewhere below 11800, the
+  lowest clean miss. That errs by at most a few percent of simulations, toward the budget. The count is still not claimed to
   be the largest: a count further up could pass where the next one missed.*
 
 - **[Z11-53]** `alphazero throughput` MUST measure, release build, network evaluations per second

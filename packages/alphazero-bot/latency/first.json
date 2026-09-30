@@ -1,0 +1,101 @@
+{
+  "run": "first",
+  "date": "2026-09-30T01:27:41.060Z",
+  "settings": {
+    "width": 256,
+    "blocks": 4,
+    "playSimulations": 11300,
+    "cpuct": 1.25,
+    "fpu": 0.25
+  },
+  "checkpoint": "checkpoint 0",
+  "checkpointSha256": "c6b2f52caa02b7123bb9b4806ebd846390ef2e6b506e4d034232810ca8238274",
+  "machine": {
+    "platform": "darwin",
+    "arch": "x64",
+    "cpu": "Intel(R) Core(TM) i7-1068NG7 CPU @ 2.30GHz",
+    "cores": 8,
+    "memoryGb": 34,
+    "node": "v24.20.0"
+  },
+  "measured": 1978,
+  "skipped": 38,
+  "p50": 1109.896954,
+  "p95": 1318.6713359999999,
+  "p99": 1408.399631,
+  "p999": 1587.52322,
+  "max": 1587.739323,
+  "halfBudgetMet": true,
+  "passed": true,
+  "above": {
+    "simulations": 11400,
+    "measured": 1978,
+    "p50": 1168.76867,
+    "p95": 1516.4358730000001,
+    "p99": 1631.209191,
+    "p999": 2076.055598,
+    "max": 3975.377218,
+    "halfBudgetMet": false
+  },
+  "probe": {
+    "simulations": 50,
+    "p95": 7.316643
+  },
+  "prediction": {
+    "from": "regression",
+    "points": 10,
+    "p95": {
+      "slope": 0.14,
+      "intercept": -202.00000000000023
+    },
+    "p999": {
+      "slope": 0.24,
+      "intercept": -904
+    },
+    "crossing": 12157.142857142857,
+    "start": 12100
+  },
+  "start": 12100,
+  "passes": [
+    {
+      "simulations": 12100,
+      "p95": 1568.4492140000002,
+      "p999": 1733.835684
+    },
+    {
+      "simulations": 12000,
+      "p95": 1538.608231,
+      "p999": 1674.1971279999998
+    },
+    {
+      "simulations": 11800,
+      "p95": 1516.496482,
+      "p999": 1624.836578
+    },
+    {
+      "simulations": 11400,
+      "p95": 1516.4358730000001,
+      "p999": 2076.055598
+    },
+    {
+      "simulations": 10600,
+      "p95": 1241.9803439999998,
+      "p999": 1486.423583
+    },
+    {
+      "simulations": 11000,
+      "p95": 1286.17823,
+      "p999": 1487.2301089999999
+    },
+    {
+      "simulations": 11200,
+      "p95": 1311.7319929999999,
+      "p999": 1566.3500980000001
+    },
+    {
+      "simulations": 11300,
+      "p95": 1318.6713359999999,
+      "p999": 1587.52322
+    }
+  ]
+}
