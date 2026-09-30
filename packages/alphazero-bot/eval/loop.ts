@@ -28,7 +28,7 @@ import {
   type MilestoneEntry,
   type MilestoneResults,
 } from './decision.js';
-import { readJson, writeAtomic, writeJson } from './files.js';
+import { readJson, sha256File, writeAtomic, writeJson } from './files.js';
 import { findPlaySimulations, machine, meetsHalfBudget, measure, passesBudget, PROBE_SIMULATIONS, type Point } from './latency.js';
 import { withLock } from './lock.js';
 import { appendLog, readLog } from './log.js';
@@ -55,21 +55,79 @@ function readConfig(name: string): RunConfig {
   return readJson<RunConfig>(p.config);
 }
 
-/** [Z11-58]: the run's directory, its config with a random seed, and checkpoint 0. */
-export function initRun(name: string): void {
+/** `<run>:<generation>`, the parent a run starts from ([Z11-66]). */
+export function parseFrom(text: string): { run: string; generation: number } {
+  const m = /^([^:]+):(\d+)$/.exec(text);
+  if (m === null) throw new Error(`--from takes <run>:<generation>, not ${text}`);
+  return { run: m[1], generation: Number(m[2]) };
+}
+
+/**
+ * [Z11-58]: the run's directory, its config with a random seed, and checkpoint 0.
+ * With `from` ([Z11-66]), the config is the parent's with a fresh seed, and
+ * checkpoint 0 is the parent's checkpoint at that generation; `augment` is
+ * the one setting that may differ from the parent's ([Z11-65]).
+ */
+export function initRun(name: string, from?: { run: string; generation: number }, augment?: 'none' | 'displays'): void {
   checkRunName(name);
   const p = runPaths(name);
   if (existsSync(p.dir)) throw new Error(`${p.dir} already exists`);
-  const config = startingConfig();
+  if (from === undefined) {
+    const config: RunConfig = { ...startingConfig(), ...(augment === undefined ? {} : { augment }) };
+    mkdirSync(p.dir, { recursive: true });
+    writeJson(p.config, config);
+    trainer(['init', '--run-dir', p.dir]);
+    process.stdout.write(
+      `run ${name}: checkpoint 0 written. Next, on an idle machine:\n` +
+        `  pnpm -F alphazero-bot latency --run ${name}\n` +
+        `  pnpm -F alphazero-bot throughput --run ${name}\n` +
+        `then: pnpm -F alphazero-bot train --run ${name}\n`,
+    );
+    return;
+  }
+  checkRunName(from.run);
+  const parent = runPaths(from.run);
+  const pc = readConfig(from.run);
+  if (pc.playSimulations === null) throw new Error(`run ${from.run} has no playSimulations: it never passed the latency lane`);
+  if (!existsSync(parent.manifest(from.generation))) {
+    throw new Error(`run ${from.run} has no complete generation ${from.generation}`);
+  }
+  const windowGenerations: number[] = [];
+  for (let k = Math.max(0, from.generation - pc.window + 1); k < from.generation; k++) {
+    if (!existsSync(parent.samples(k))) throw new Error(`run ${from.run} has no samples for generation ${k}`);
+    windowGenerations.push(k);
+  }
+  const { from: _grandparent, augment: parentAugment, ...inherited } = pc;
+  const config: RunConfig = {
+    ...inherited,
+    seed: startingConfig().seed,
+    augment: augment ?? parentAugment ?? 'none',
+    from: {
+      run: from.run,
+      generation: from.generation,
+      checkpointSha256: sha256File(parent.checkpoint(from.generation)),
+      windowGenerations,
+      latencyRun: pc.from?.latencyRun ?? from.run,
+    },
+  };
   mkdirSync(p.dir, { recursive: true });
   writeJson(p.config, config);
-  trainer(['init', '--run-dir', p.dir]);
+  trainer([
+    'init', '--run-dir', p.dir,
+    '--from-run-dir', parent.dir, '--from-generation', String(from.generation),
+  ]);
   process.stdout.write(
-    `run ${name}: checkpoint 0 written. Next, on an idle machine:\n` +
-      `  pnpm -F alphazero-bot latency --run ${name}\n` +
+    `run ${name}: checkpoint 0 is ${from.run}'s generation ${from.generation}, with ${windowGenerations.length} ` +
+      `generations of its samples in the window; playSimulations ${config.playSimulations} from ` +
+      `latency/${config.from?.latencyRun}.json. Next:\n` +
       `  pnpm -F alphazero-bot throughput --run ${name}\n` +
       `then: pnpm -F alphazero-bot train --run ${name}\n`,
   );
+}
+
+/** The run whose latency record holds for `name` ([Z11-57], [Z11-66]). */
+function latencyRun(name: string, config: RunConfig): string {
+  return config.from?.latencyRun ?? name;
 }
 
 function started(name: string): boolean {
@@ -87,6 +145,9 @@ export async function latencyLane(name: string): Promise<void> {
     const config = readConfig(name);
     if (started(name)) {
       throw new Error(`run ${name} has started generation 0: its latency record and playSimulations are fixed`);
+    }
+    if (config.from !== undefined) {
+      throw new Error(`run ${name} starts from ${config.from.run}: its playSimulations is ${config.from.latencyRun}'s`);
     }
     if (!existsSync(CORPUS)) throw new Error('no latency corpus: run `pnpm -F alphazero-bot latency-corpus` once');
     const bin = buildRelease();
@@ -286,7 +347,7 @@ export async function trainLoop(
     const p = runPaths(name);
     const config = readConfig(name);
     // [Z11-58], [Z11-39], [Z11-53]: no generation runs before both lanes pass.
-    const latencyFile = join(LATENCY, `${name}.json`);
+    const latencyFile = join(LATENCY, `${latencyRun(name, config)}.json`);
     if (config.playSimulations === null || !existsSync(latencyFile)) {
       throw new Error(`run the latency lane first: pnpm -F alphazero-bot latency --run ${name}`);
     }

@@ -14,7 +14,8 @@
     "gate": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs gate",
     "latency": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs latency",
     "latency-corpus": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs latency-corpus",
-    "throughput": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs throughput"
+    "throughput": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs throughput",
+    "augment-fixtures": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs augment-fixtures"
   },
   "dependencies": {
     "engine": "workspace:*"

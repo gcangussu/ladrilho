@@ -217,7 +217,10 @@ result, winrate) keep their meaning.
 - **[Z11-7]** The value is from the perspective of the seat whose observation it was given: `+1` a
   certain win for that seat, `-1` a certain loss, `0` a draw.
 - **[Z11-8]** The network's input MUST be the observation of [0001 E1-53], unmodified except by
-  [Z11-9]. The package MUST read its fields only through the offsets `azul_engine` exports.
+  [Z11-9]. The package MUST read its fields only through the offsets `azul_engine` exports; the
+  trainer, which cannot import the engine, reads the few it needs from `train/layout.json`, written
+  from the engine's exports and held to them by [Z11-65]. Training under [Z11-65]'s permutation
+  presents the observation of a relabelled position, which is still an observation.
 
   *The first consumer of the observation seam CLAUDE.md describes, which is what [0001 E1-57]
   protects: from the first committed checkpoint on, a change to that layout invalidates a trained
@@ -506,17 +509,60 @@ The binary's commands, each loading one checkpoint and one run's settings:
 - **[Z11-58]** `train init --run <name>` MUST create the run's directory, write `config.json` with
   `playSimulations` unset and a random `seed`, and write checkpoint `0` — the network at
   initialisation — with its parity file, generation `0`'s optimiser state (fresh), and manifest.
+  `--augment none|displays` sets [Z11-65]'s setting; `--from` starts the run from another's
+  checkpoint instead ([Z11-66]).
   The latency lane ([Z11-57]) and the throughput lane ([Z11-53]) then run on checkpoint `0`, and the
   latency lane writes `playSimulations` into the config, lowering `milestoneSimulations` to it if
   it is smaller ([Z11-59]). While it is
   unset, `alphazero latency` MUST require `--simulations`, which [Z11-57]'s search supplies at
   every step, and `play --search play` MUST refuse to run. `train --run <name>` MUST refuse to
   start generation `0` until both have passed; from then on the config is fixed.
+- **[Z11-66]** `train init --run <name> --from <parent>:<g>` MUST start a run from generation `g`
+  of another run: its config is the parent's with a fresh `seed`, its own `augment`, and `from`
+  recording the parent, `g`, the sha256 of the parent's checkpoint `g`, the parent generations
+  whose samples start the window, and the run whose latency record holds. Checkpoint `0` MUST be
+  the parent's checkpoint `g` with its generation relabelled `0` and a parity file of its own, and
+  generation `0`'s optimiser state the parent's at `g`. While the run has fewer than `window`
+  generations of its own, step 3 of [Z11-28] MUST fill the window with the parent's latest
+  generations before `g`, linked into `runs/<name>/inherited/`, and the losses of [Z11-54] name
+  them. `playSimulations` and `milestoneSimulations` come with the parent's config: the latency
+  lane refuses the run, and the loop's check of [Z11-58] reads the latency record `from` names.
+  Its first milestone starts afresh ([Z11-33]) like any run's.
+
+  *A run is a fixed experiment ([Z11-25]), so a change to how training works is a new run; but a
+  new run need not relearn what the last one learned. Starting from its weights, its optimiser
+  and its window changes one thing at a time, and the parent's log stays the baseline. The
+  architecture is the parent's, so the latency its record measured still holds, and a gate
+  measures latency again on the checkpoint it tests ([Z11-35]). The weights are still ours, so
+  intent 0009's "from scratch" holds for the lineage; `from` is how the record says so.*
+
 - **[Z11-29]** Training MUST minimise, per batch, the policy cross-entropy against the root visits
   normalised to a distribution (move samples only), plus the squared error of the value against
   the result (all samples), a boundary sample's value term weighted by `boundaryWeight`. The policy
   MUST be the masked softmax of [Z11-6], so illegal actions carry no loss. Weight decay MUST be
   applied by the optimiser alone, once, and not also written into the loss.
+- **[Z11-65]** A run's config MAY set `augment` to `displays`; absent means `none`. With
+  `displays`, every sample drawn for a training step ([Z11-28] step 3) MUST be trained on under a
+  permutation of the five displays drawn uniformly at random for it, from a generator of its own so
+  the draws are the same as without augmentation: display `i` of the permuted sample holds display
+  `perm[i]`'s colour counts `[126, 151)` and flag `[151, 156)`, and every action from display `i`
+  takes the legal bit and the visits of the same colour and destination from display `perm[i]`.
+  The centre, the result and every other field are unchanged. [Z11-54]'s `before` losses MUST be
+  measured on the samples as written, unpermuted, so they stay comparable across runs. The layout
+  the trainer permutes by (`train/layout.json`), and a fixture of positions encoded by the engine
+  before and after permuting their displays in the state itself (`train/tests/fixtures/displays.json`),
+  MUST be written by `pnpm -F alphazero-bot augment-fixtures`, and the lanes' suite MUST fail when
+  either differs from what the engine gives now. The trainer's suite MUST check the permutation
+  against the fixture, observation and legal mask both, on cases that change which displays are
+  empty.
+
+  *The displays are interchangeable: relabelling them is the same position, the same result, and
+  the same search with its visits relabelled. So each sample stands for up to 120, at the cost of
+  a reshuffle per batch and no search. It was left out of run `first` so that a bug in it could
+  not be mistaken for a bug in training; `first`'s losses then showed the value head fitting its
+  own samples at 0.34 and fresh ones at 0.92, the memorising this counters. It adds no game
+  results, so it cannot answer the open question of too few value labels on its own.*
+
 - **[Z11-30]** Everything a run writes MUST live under `packages/alphazero-bot/runs/<name>/`, which
   is git-ignored, except the files of [Z11-34], [Z11-35] and [Z11-40], which are written where
   those requirements say, to be committed. Every file the loop or the crate writes MUST be written to a
@@ -1034,10 +1080,8 @@ this package, and MUST be corrected in the same change.
 - **Are 500 games a generation too few value labels?** Every sample of a game shares its one
   result, about 75 correlated samples to a label, and each is drawn about 14 times. The losses of
   [Z11-54] are what would show it; more games per generation or a shorter window are the remedies.
-- **Should self-play permute the displays?** The five displays are interchangeable, so each sample
-  is one of 120 equivalent observations. Augmenting with them multiplies the data for free; it is
-  left out of the first run so that a bug in the permutation cannot be confused with a bug in
-  training.
+- **Should self-play permute the displays?** Answered by [Z11-65], in training rather than
+  self-play: run `second` tests it, started from run `first` ([Z11-66]).
 - **Will committed checkpoints outgrow the repository?** At 2.5 MB each and a milestone every ten
   generations, twenty milestones is 50 MB. If that becomes a problem, keeping only the log and the
   best checkpoint is the fallback, which [Z11-44] would then cover.
