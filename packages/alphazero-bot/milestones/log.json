@@ -10347,7 +10347,15 @@
       "dirty": false,
       "ladderHash": "4e33b3ecc841e6df298290c59d3b45ea0d212734c717bd96b200c8306952b0e9"
     },
-    "decision": "stop",
-    "reason": "progress 1.89 (sharp 0.04); did not improve on 1.89 at generation 150, which had not improved either; sharp below 0.50, so no gate: stop."
+    "decision": "continue",
+    "reason": "progress 1.89 (sharp 0.04); improved on 1.89 at generation 150; sharp below 0.50, so no gate: continue.",
+    "correction": {
+      "recorded": {
+        "decision": "stop",
+        "reason": "progress 1.89 (sharp 0.04); did not improve on 1.89 at generation 150, which had not improved either; sharp below 0.50, so no gate: stop."
+      },
+      "why": "The loop compared floating-point sums: 1.8899999999999997 against 1.8900000000000001. Both are 1.89, which [Z11-33] counts as improving. Corrected in the commit that makes the rule compare progress at nine decimals.",
+      "date": "2026-09-30"
+    }
   }
 ]

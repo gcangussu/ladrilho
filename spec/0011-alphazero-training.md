@@ -575,7 +575,12 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
   the gate, and why the gate is triggered below the bar it tests ([Z11-33], [Z11-61]).*
 
 - **[Z11-33]** Progress is the sum of the ladder's winrates. Within one run, a milestone
-  **improves** when its progress is at least the progress of the milestone before it. A milestone
+  **improves** when its progress is at least the progress of the milestone before it. Every
+  comparison of progress, here and in [Z11-37], MUST be made on the sums rounded to nine decimals,
+  never on floating-point sums as they fall: `1 + 0.59 + 0.255 + 0.045` is `1.8899999999999997`
+  and `1 + 0.55 + 0.3 + 0.04` is `1.8900000000000001`, and run `first` stopped at generation 160
+  on that last bit until its entry was corrected. Winrates are multiples of 1 / (2 · games), so
+  nine decimals lose nothing. A milestone
   **starts afresh** — it improves by definition, and no earlier gate failure is carried into it —
   when it is the first of its run, the first after an override ([Z11-36]), or the first measured
   against a different `bot` than the milestone before it ([Z11-63]). The decision MUST be:
@@ -617,16 +622,17 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
 
   | `sharp` at the milestone count | P(`stop`) | P(`done`) | mean gates run |
   | --- | --- | --- | --- |
-  | climbs 0.05 a milestone, 7 milestones | 0.08 | 0.74 | 1.7 |
-  | climbs 0.03 a milestone, 11 milestones | 0.33 | 0.56 | 1.7 |
-  | climbs 0.02 a milestone, 16 milestones | 0.61 | 0.34 | 1.3 |
-  | flat at 0.45 (0.50 shipped), 5 / 10 milestones | 0.39 / 0.74 | 0.00 / 0.00 | 0.7 / 0.9 |
-  | flat at 0.55 (0.60 shipped), 5 / 10 milestones | 0.13 / 0.19 | 0.74 / 0.77 | 1.4 / 1.4 |
+  | climbs 0.05 a milestone, 7 milestones | 0.07 | 0.74 | 1.7 |
+  | climbs 0.03 a milestone, 11 milestones | 0.31 | 0.56 | 1.7 |
+  | climbs 0.02 a milestone, 16 milestones | 0.58 | 0.35 | 1.4 |
+  | flat at 0.45 (0.50 shipped), 5 / 10 milestones | 0.37 / 0.71 | 0.00 / 0.00 | 0.7 / 0.9 |
+  | flat at 0.55 (0.60 shipped), 5 / 10 milestones | 0.12 / 0.19 | 0.73 / 0.77 | 1.4 / 1.4 |
 
   *These are the committed simulation's figures, 20 000 runs a row, exactly as
   `pnpm -F alphazero-bot stop-simulation` prints them. They replaced a first simulation's, made
-  while revising this spec, and differ from it by at most 0.02 — evidence that the rule as
-  implemented is the rule as drafted. A flat 0.45 is `done` a few times in a thousand, not never:
+  while revising this spec, and differ from it by at most 0.03. They were last rerun when the
+  rule began comparing progress at nine decimals: before that, a tie that floating-point summation
+  put a last bit apart counted against the run, which raised P(`stop`) by up to 0.03. A flat 0.45 is `done` a few times in a thousand, not never:
   a true 0.50 at the shipped count clears 120 of 200 about 0.3% of the time.*
 
   *Read honestly, the intent's rule still stops a slow run more often than not: at 0.02 a

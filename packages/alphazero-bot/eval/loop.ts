@@ -15,6 +15,7 @@ import {
   GATE_TRIGGER,
   context,
   decide,
+  atLeast,
   due,
   entriesOf,
   freshStart,
@@ -199,7 +200,7 @@ export function reasonFor(
   if (fresh !== null) parts.push(`a fresh start: ${fresh}`);
   else if (previous !== null) {
     parts.push(
-      p >= previous.progress
+      atLeast(p, previous.progress)
         ? `improved on ${pct(previous.progress)} at generation ${previous.generation}`
         : `did not improve on ${pct(previous.progress)} at generation ${previous.generation}` +
             (previousImproved ? ', which had improved' : ', which had not improved either'),

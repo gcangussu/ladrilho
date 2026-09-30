@@ -68,9 +68,25 @@ export interface ManualGateEntry {
 
 export type LogEntry = MilestoneEntry | OverrideEntry | ManualGateEntry;
 
-/** The sum of the ladder's winrates, in `[0, 4]`. */
+/**
+ * Progress to nine decimals, the grain every comparison of it is made at.
+ * Winrates are multiples of 1 / (2 · games), far coarser than 10⁻⁹, but a
+ * floating-point sum of them is not exact: 1 + 0.59 + 0.255 + 0.045 is
+ * 1.8899999999999997 and 1 + 0.55 + 0.3 + 0.04 is 1.8900000000000001, and
+ * run `first` stopped at generation 160 on that difference.
+ */
+function grain(p: number): number {
+  return Math.round(p * 1e9);
+}
+
+/** Whether progress `a` is at least `b`, compared at [grain]. */
+export function atLeast(a: number, b: number): boolean {
+  return grain(a) >= grain(b);
+}
+
+/** The sum of the ladder's winrates, in `[0, 4]`, rounded to nine decimals. */
 export function progress(rungs: MilestoneResults['rungs']): number {
-  return LADDER.reduce((sum, r) => sum + rungs[r].winrate, 0);
+  return grain(LADDER.reduce((sum, r) => sum + rungs[r].winrate, 0)) / 1e9;
 }
 
 /** Why a milestone starts afresh, or `null` when it does not. */
@@ -111,7 +127,7 @@ function walk(entries: readonly LogEntry[]): Walked {
     if (e.kind !== 'milestone') continue;
     const fresh = freshReason(previous, overrideSince, e.ladderHash) !== null;
     if (fresh) lastFailure = null;
-    previousImproved = fresh || (previous !== null && e.progress >= previous.progress);
+    previousImproved = fresh || (previous !== null && atLeast(e.progress, previous.progress));
     if (e.gate.ran && e.gate.outcome !== null && !e.gate.outcome.passed) lastFailure = e;
     previous = e;
     overrideSince = false;
@@ -149,7 +165,7 @@ export function due(entries: readonly LogEntry[], results: MilestoneResults): bo
   if (results.rungs.sharp.winrate < GATE_TRIGGER) return false;
   const w = walk(entries);
   if (freshReason(w.previous, w.overrideSince, results.ladderHash) !== null) return true;
-  return w.lastFailure === null || w.lastFailure.progress < progress(results.rungs);
+  return w.lastFailure === null || !atLeast(w.lastFailure.progress, progress(results.rungs));
 }
 
 /**
@@ -166,7 +182,7 @@ export function decide(
   if (gate?.passed === true && due(entries, results)) return 'done';
   const w = walk(entries);
   const fresh = freshReason(w.previous, w.overrideSince, results.ladderHash) !== null;
-  const improves = fresh || (w.previous !== null && progress(results.rungs) >= w.previous.progress);
+  const improves = fresh || (w.previous !== null && atLeast(progress(results.rungs), w.previous.progress));
   if (!improves && !w.previousImproved) return 'stop';
   return 'continue';
 }
