@@ -523,9 +523,15 @@ The binary's commands, each loading one checkpoint and one run's settings:
   every step, and `play --search play` MUST refuse to run. `train --run <name>` MUST refuse to
   start generation `0` until both have passed; from then on the config is fixed.
 - **[Z11-66]** `train init --run <name> --from <parent>:<g>` MUST start a run from generation `g`
-  of another run: its config is the parent's with a fresh `seed`, its own `augment`, and `from`
-  recording the parent, `g`, the sha256 of the parent's checkpoint `g`, the parent generations
-  whose samples start the window, and the run whose latency record holds. Checkpoint `0` MUST be
+  of another run: its config is the parent's with a fresh `seed`, its own `augment`, any changes
+  asked for with `--set <setting>=<number>`, and `from` recording the parent, `g`, the sha256 of
+  the parent's checkpoint `g`, the parent generations whose samples start the window, the run whose
+  latency record holds, and each changed setting with its parent's value and its own. `--set` MUST
+  refuse every setting but those of how a run trains and self-plays — `gamesPerGeneration`,
+  `window`, `stepsPerGeneration`, `batch`, `learningRate`, `momentum`, `weightDecay`,
+  `boundaryWeight`, `selfPlaySimulations`, `threads` and `torchThreads` — and any value that is not
+  a positive number: the network, the searches the ladder and the gate measure, and the count the
+  latency record stands behind stay the parent's. Checkpoint `0` MUST be
   the parent's checkpoint `g` with its generation relabelled `0` and a parity file of its own, and
   generation `0`'s optimiser state the parent's at `g`. While the run has fewer than `window`
   generations of its own, step 3 of [Z11-28] MUST fill the window with the parent's latest
@@ -554,7 +560,9 @@ The binary's commands, each loading one checkpoint and one run's settings:
   takes the legal bit and the visits of the same colour and destination from display `perm[i]`.
   The centre, the result and every other field are unchanged. [Z11-54]'s `before` losses MUST be
   measured on the samples as written, unpermuted, so they stay comparable across runs. The layout
-  the trainer permutes by (`train/layout.json`), and a fixture of positions encoded by the engine
+  the trainer permutes by (`train/layout.json`, which also carries the score and round fields
+  [Z11-54] reads, each with the scale the engine divides it by, read back from the engine), and a
+  fixture of positions encoded by the engine
   before and after permuting their displays in the state itself (`train/tests/fixtures/displays.json`),
   MUST be written by `pnpm -F alphazero-bot augment-fixtures`, and the lanes' suite MUST fail when
   either differs from what the engine gives now. The trainer's suite MUST check the permutation
@@ -583,8 +591,21 @@ The binary's commands, each loading one checkpoint and one run's settings:
   times `window`.) Each milestone entry MUST carry the records of the generations since the
   previous milestone.
 
+  Beside the `before` losses, the trainer MUST record `byRound`: the value head's squared error
+  against the result, unweighted over all of generation `g`'s own samples, in total and per round,
+  and the same for the **formula**, a least-squares fit of the result on `1, d, d·r, r` (`d` the
+  score difference as the observation holds it, `r` the round) fitted on the rest of the window
+  and never on the samples it is scored on. With nothing else in the window the formula is absent.
+  The score and round fields are read through `train/layout.json` ([Z11-8], [Z11-65]).
+
   *The loss on samples the network has not trained on yet is the cheapest overfitting detector
-  there is, and it is the first thing to look at when milestones stall.*
+  there is — but averaged, it hid how bad run `first`'s head was. On generation 59 of run `second`
+  it scored 0.89 against 0.98 for predicting 0, which reads as learning; by round it was worse than
+  predicting 0 in round 1 (1.19) and behind the formula (0.81 overall) in every round but the last,
+  confidently wrong about games still open. A head that cannot beat a line through the score
+  difference is misleading the search, and this is where to see it.*
+
+  *It is the first thing to look at when milestones stall.*
 
 ## Milestones and the stop rule
 
@@ -1025,8 +1046,10 @@ this package, and MUST be corrected in the same change.
 - **[Z11-46]** The trainer's suite (`test:train`) MUST assert that a checkpoint it exports is read
   back by `alphazero` with parity, that a sample file written by the crate's test is read with
   every field intact, that [Z11-29]'s loss is unaffected by the logits of illegal actions, that
-  weight decay is applied once, that [Z11-65]'s permutation is the engine's, and that a run started
-  from another ([Z11-66]) begins from its parent's weights, optimiser and window.
+  weight decay is applied once, that [Z11-65]'s permutation is the engine's, that a run started
+  from another ([Z11-66]) begins from its parent's weights, optimiser and window, and that
+  [Z11-54]'s value by round reads rounds as the engine encodes them and fits its formula out of
+  sample.
 - **[Z11-47]** A source check MUST cover [Z11-1], [Z11-2] — its list of crates included — and
   [Z11-3], each clause run against a source it exists to reject, and MUST fail on a clock read
   (`Instant`, `SystemTime`) anywhere in the crate's library, which is everything under `src/`
@@ -1057,6 +1080,10 @@ this package, and MUST be corrected in the same change.
   | The display flags left in place | [Z11-65]'s fixture case |
   | The permutation skipped with `augment: displays` | [Z11-66]'s window case |
   | The parent's samples left out of the window, or a fresh optimiser at checkpoint `0` | [Z11-66]'s window case |
+  | `width` among the settings `--set` may change | [Z11-66]'s `--set` case |
+  | A child's changes not recorded in `from` | [Z11-66]'s config case |
+  | The round read without its scale | [Z11-54]'s round case |
+  | The formula fitted on the samples it is scored on, in the measure or in the trainer | [Z11-54]'s out-of-sample and generation cases |
 
 - **[Z11-49]** Every requirement in this document MUST be either cited by at least one test — Rust,
   TypeScript or Python — by identifier, or listed with a reason in *Traceability exemptions*,
