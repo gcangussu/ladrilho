@@ -148,8 +148,11 @@ result, winrate) keep their meaning.
   different binary on each. The flag changes instructions, not results: the forward pass's order is
   in the source ([Z11-10]) and Rust never fuses a multiply and an add unless asked, so the
   baseline build and this one gave byte-identical self-play sample files for the same checkpoint,
-  config and seed, at one thread and at two. With [Z11-10]'s kernel it halved self-play's CPU time
-  on the machine of record. `unsafe` being forbidden, runtime feature detection is not available;
+  config and seed, at one thread and at two, and at eight with run `third`'s own config (48 games,
+  the same sha256). With [Z11-10]'s kernel it halved self-play's CPU time on the machine of record;
+  measured idle at eight threads on `third`'s checkpoint 15, the throughput lane's figures went from
+  18 455 and 19 337 games an hour to 42 265 and 40 579, a 3000-game generation's self-play from
+  about 9.5 minutes to about 4.4. `unsafe` being forbidden, runtime feature detection is not available;
   the feature is a build setting or nothing. A `RUSTFLAGS` set in the environment replaces the
   file's flags, and a machine without AVX2 cannot run what it builds.*
 
