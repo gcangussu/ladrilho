@@ -134,15 +134,48 @@ pub struct Network {
 /// every run, and the compiler can vectorise it without reassociating ([Z11-10]).
 const LANES: usize = 16;
 
-fn dot(w: &[f32], x: &[f32]) -> f32 {
+// The order of every dot product ([Z11-10]): lane `l` sums `w[16j + l] · x[16j + l]`
+// over the whole chunks `j`, in ascending `j`; the elements past the last whole
+// chunk are summed on their own, in ascending order, from zero; the lanes are
+// folded in halves (`acc[i] += acc[i + n]` for n = 8, 4, 2, 1); and the tail is
+// added last. `dot` and `linear` compute exactly that, and nothing else.
+//
+// The accumulation loops live in functions of their own, never inlined. Inlined
+// beside the fold, LLVM vectorised the sixteen lanes as eight pairs, two floats
+// to an instruction, with or without AVX2; on their own they take whole
+// registers. Same arithmetic, same bits: only the instructions differ.
+
+/// The lanes of one row.
+#[inline(never)]
+fn lanes(w: &[[f32; LANES]], x: &[[f32; LANES]]) -> [f32; LANES] {
     let mut acc = [0f32; LANES];
-    let (wc, wt) = w.as_chunks::<LANES>();
-    let (xc, xt) = x.as_chunks::<LANES>();
-    for (a, b) in wc.iter().zip(xc) {
+    for (a, b) in w.iter().zip(x) {
         for l in 0..LANES {
             acc[l] += a[l] * b[l];
         }
     }
+    acc
+}
+
+/// The lanes of two rows against one input: each row's lanes exactly as
+/// `lanes` would sum them, with twice the independent accumulators.
+#[inline(never)]
+fn lanes2(w0: &[[f32; LANES]], w1: &[[f32; LANES]], x: &[[f32; LANES]]) -> [[f32; LANES]; 2] {
+    let mut a0 = [0f32; LANES];
+    let mut a1 = [0f32; LANES];
+    for ((p, q), b) in w0.iter().zip(w1).zip(x) {
+        for l in 0..LANES {
+            a0[l] += p[l] * b[l];
+        }
+        for l in 0..LANES {
+            a1[l] += q[l] * b[l];
+        }
+    }
+    [a0, a1]
+}
+
+/// The tail, then the fold, then the sum.
+fn finish(mut acc: [f32; LANES], wt: &[f32], xt: &[f32]) -> f32 {
     let mut tail = 0f32;
     for (a, b) in wt.iter().zip(xt) {
         tail += a * b;
@@ -157,10 +190,29 @@ fn dot(w: &[f32], x: &[f32]) -> f32 {
     acc[0] + tail
 }
 
-/// `out = W · x + b`, `W` row-major `[out][in]`.
+fn dot(w: &[f32], x: &[f32]) -> f32 {
+    let (wc, wt) = w.as_chunks::<LANES>();
+    let (xc, xt) = x.as_chunks::<LANES>();
+    finish(lanes(wc, xc), wt, xt)
+}
+
+/// `out = W · x + b`, `W` row-major `[out][in]`, two rows at a time.
 fn linear(w: &[f32], b: &[f32], x: &[f32], out: &mut [f32]) {
     let n = x.len();
-    for (o, y) in out.iter_mut().enumerate() {
+    let (xc, xt) = x.as_chunks::<LANES>();
+    let (pairs, last) = out.as_chunks_mut::<2>();
+    let mut o = 0;
+    for y in pairs {
+        let r0 = &w[o * n..(o + 1) * n];
+        let r1 = &w[(o + 1) * n..(o + 2) * n];
+        let (c0, t0) = r0.as_chunks::<LANES>();
+        let (c1, t1) = r1.as_chunks::<LANES>();
+        let [a0, a1] = lanes2(c0, c1, xc);
+        y[0] = finish(a0, t0, xt) + b[o];
+        y[1] = finish(a1, t1, xt) + b[o + 1];
+        o += 2;
+    }
+    if let [y] = last {
         *y = dot(&w[o * n..(o + 1) * n], x) + b[o];
     }
 }

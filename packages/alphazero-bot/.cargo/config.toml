@@ -1,0 +1,9 @@
+# [Z11-2]: the crate is built with AVX2 on x86_64, which the machine of record
+# has. The forward pass's arithmetic is fixed in the source ([Z11-10]) and
+# Rust never fuses a multiply and an add on its own, so this changes the
+# instructions and not one bit of the results. `+avx2` alone, not
+# `target-cpu=native` or `x86-64-v3`: the one feature the measured gain needs,
+# the same on every x86_64 machine that builds it. The source check of [Z11-47]
+# holds this file to it. A `RUSTFLAGS` in the environment replaces it.
+[target.'cfg(target_arch = "x86_64")']
+rustflags = ["-C", "target-feature=+avx2"]

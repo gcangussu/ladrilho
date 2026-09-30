@@ -1,7 +1,8 @@
 /**
  * The source check ([Z11-47]): the package's shape ([Z11-1], [Z11-2],
  * [Z11-4]), nothing taken from the expert ([Z11-3]), no clock in the crate's
- * library ([Z11-18]), and the test profile ([Z11-64]).
+ * library ([Z11-18]), the test profile ([Z11-64]), and the build flag
+ * ([Z11-2]).
  *
  * Each clause is a function run against sources it exists to reject, so what
  * the check covers is legible rather than asserted. Words the clauses search
@@ -138,6 +139,25 @@ function profileFaults(toml: string): string[] {
   return out;
 }
 
+/** The one flag [Z11-2] builds the crate with. */
+const X86_64 = `[target.'cfg(target_arch = "x86_64")']`;
+const AVX2 = 'rustflags = ["-C", "target-feature=+avx2"]';
+
+/**
+ * [Z11-2]: `.cargo/config.toml` builds with AVX2 on x86_64 and nothing else —
+ * the one section, holding the one line, and no flags anywhere outside it.
+ */
+function buildFlagFaults(config: string | null): string[] {
+  if (config === null) return ['no .cargo/config.toml'];
+  const s = section(config, X86_64);
+  if (s === null) return [`no ${X86_64} in .cargo/config.toml`];
+  const out: string[] = [];
+  if (s.length !== 1 || s[0] !== AVX2) out.push(`${X86_64} is not exactly ${AVX2}`);
+  const headers = config.split('\n').map((l) => l.trim()).filter((l) => l.startsWith('['));
+  if (headers.length !== 1) out.push(`.cargo/config.toml has sections besides ${X86_64}: ${headers.join(', ')}`);
+  return out;
+}
+
 /** [Z11-2]: every cargo invocation in the scripts is locked. */
 function lockedFaults(scripts: Record<string, string>): string[] {
   const out: string[] = [];
@@ -220,12 +240,14 @@ const SCRIPTS: Record<string, RegExp> = {
 describe('the source check [Z11-47]', () => {
   const pkg = JSON.parse(read('package.json'));
   const toml = read('Cargo.toml');
+  const cargoConfig = existsSync(join(PACKAGE, '.cargo/config.toml')) ? read('.cargo/config.toml') : null;
 
   it('finds the package as it is [Z11-1], [Z11-2], [Z11-3], [Z11-64]', () => {
     expect(importFaults(SOURCES)).toEqual([]);
     expect(manifestFaults(pkg)).toEqual([]);
     expect(cargoFaults(toml)).toEqual([]);
     expect(profileFaults(toml)).toEqual([]);
+    expect(buildFlagFaults(cargoConfig)).toEqual([]);
     expect(lockedFaults(pkg.scripts)).toEqual([]);
     expect(expertFaults(SOURCES)).toEqual([]);
     expect(clockFaults(SOURCES)).toEqual([]);
@@ -283,6 +305,29 @@ describe('the source check [Z11-47]', () => {
     expect(profileFaults(toml.replace('[profile.test]', '[profile.bench]'))).not.toEqual([]);
     expect(lockedFaults({ x: 'cargo test && vitest run' })).not.toEqual([]);
     expect(lockedFaults({ x: 'vitest run && cargo build --release' })).not.toEqual([]);
+  });
+
+  // Mutations, seen red ([Z11-48]), each in a copy with its anchor confirmed:
+  // the line's check weakened to `s.length > 1`, so the missing-line,
+  // `+avx2,+fma`, `native` and `x86-64-v3` fixtures pass it; and the sections'
+  // check weakened to `headers.length < 1`, so the added `[build]` fixture
+  // passes it. Each fails this case; the live package passes either way.
+  it('rejects the build flags [Z11-2] forbids', () => {
+    const config = cargoConfig ?? '';
+    expect(config).toContain(AVX2);
+    const variants: (string | null)[] = [
+      null,
+      '',
+      config.replace(AVX2, ''),
+      config.replace(AVX2, AVX2.replace('+avx2', '+avx2,+fma')),
+      config.replace(AVX2, AVX2.replace('target-feature=+avx2', 'target-cpu=native')),
+      config.replace(AVX2, AVX2.replace('target-feature=+avx2', 'target-cpu=x86-64-v3')),
+      config.replace(X86_64, '[build]'),
+      config.replace('target_arch = "x86_64"', 'target_arch = "aarch64"'),
+      `${config}\n[build]\nrustflags = ["-C", "target-cpu=native"]\n`,
+      config.replace(AVX2, `${AVX2}\nrustdocflags = ["-C", "target-cpu=native"]`),
+    ];
+    for (const v of variants) expect(buildFlagFaults(v), String(v)).not.toEqual([]);
   });
 
   it('rejects what [Z11-3] forbids, in any language', () => {

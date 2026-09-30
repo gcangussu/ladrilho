@@ -174,7 +174,11 @@ result to its own numbers. If any of those fail, stop and report.
 
 - **`network.rs` versus ONNX Runtime.** Benchmarked at W=256, B=4: `network.rs` takes 134 µs a
   position, ONNX Runtime 88 µs one at a time and 14–20 µs batched. The user decided to keep
-  `network.rs` for now. Self-play isn't the bottleneck (2.2 of a 30-minute budget).
-  Batching evaluations would be the real speedup with either runtime, and it is a spec change.
+  `network.rs` for now. That was before run `third`: at 3000 games a generation, self-play is
+  the bottleneck — measured, about 12 of about 12.5 minutes a generation, with the forward pass
+  99% of self-play's time. The kernel of [Z11-10] and the AVX2 flag of [Z11-2] then halved
+  self-play's single-thread CPU time with byte-identical samples; the 134 µs above predates them.
+  Batching evaluations across the games a thread plays is the next speedup (about 1.45× more on
+  the forward pass at 8 positions, measured single-threaded), and it is a spec change.
 - **The branch** `alphazero-training` isn't merged into `main`. Ask the user whether to train on
   it or merge first.
