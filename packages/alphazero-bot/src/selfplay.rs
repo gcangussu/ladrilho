@@ -1,13 +1,14 @@
 //! Self-play ([Z11-20], [Z11-26]): games of the current network against
 //! itself, each on its own seeded state, written as samples ([Z11-27]).
 
+use std::collections::HashMap;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use azul_engine::{ACTION_SPACE, AzulState, Outcome, Player, Seeded};
+use azul_engine::{ACTION_SPACE, Action, AzulState, ENCODED_SIZE, Outcome, Player, Seeded};
 
 use crate::config::Settings;
-use crate::network::Evaluator;
+use crate::network::{Evaluation, Evaluator};
 use crate::rng::{Rng, game_seed, noise_seed};
 use crate::samples::{Kind, LEGAL_BYTES, Sample, legal_mask};
 use crate::search::search;
@@ -60,8 +61,72 @@ fn pick(visits: &[u32; ACTION_SPACE], ply: usize, settings: &Settings, rng: &mut
     last
 }
 
+/// [Z11-69]: one game's memo of evaluator calls. A call whose observation and
+/// legal set equal an earlier one's gets that call's evaluation back without
+/// reaching the evaluator. The forward pass is a pure function of its input
+/// ([Z11-10]), so this changes no visit and no sample: the search still asks
+/// once per node ([Z11-42]), and the memo answers the asks it has seen.
+///
+/// Measured on run `fourth`'s checkpoints, 59% of a game's calls repeat an
+/// earlier one: about a quarter of them transpositions inside one search, the
+/// rest the tree of the move just played, searched again from its child.
+pub struct Memo<'a, E: Evaluator> {
+    net: &'a E,
+    // One game is one thread, so the lock is never contended; it is here only
+    // because an `Evaluator` is `Sync`.
+    seen: Mutex<HashMap<Box<[u32]>, Evaluation>>,
+}
+
+impl<'a, E: Evaluator> Memo<'a, E> {
+    pub fn new(net: &'a E) -> Self {
+        Memo { net, seen: Mutex::new(HashMap::new()) }
+    }
+
+    /// Forgets every call. Play empties the memo at every boundary ply, so it
+    /// holds one round at a time: an input from before the deal is all but
+    /// never asked again after it, since the observation carries the round
+    /// index. That is for memory only; what the memo answers is exact whenever
+    /// it is emptied.
+    pub fn clear(&self) {
+        if let Ok(mut seen) = self.seen.lock() {
+            seen.clear();
+        }
+    }
+
+    /// The calls it holds.
+    pub fn len(&self) -> usize {
+        self.seen.lock().map(|s| s.len()).unwrap_or(0)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+/// The input exactly: every observation bit, then the legal set.
+fn key(observation: &[f32; ENCODED_SIZE], legal: &[Action]) -> Box<[u32]> {
+    observation.iter().map(|f| f.to_bits()).chain(legal.iter().map(|&a| u32::from(a))).collect()
+}
+
+impl<E: Evaluator> Evaluator for Memo<'_, E> {
+    fn evaluate(&self, observation: &[f32; ENCODED_SIZE], legal: &[Action], out: &mut Evaluation) {
+        let k = key(observation, legal);
+        let Ok(mut seen) = self.seen.lock() else {
+            // A poisoned memo is skipped, never trusted.
+            return self.net.evaluate(observation, legal, out);
+        };
+        if let Some(e) = seen.get(&k) {
+            out.clone_from(e);
+            return;
+        }
+        self.net.evaluate(observation, legal, out);
+        seen.insert(k, out.clone());
+    }
+}
+
 /// One self-play game: its samples, results filled in from the final outcome.
 pub fn play_game<E: Evaluator>(net: &E, settings: &Settings, seed: u64, generation: u64, index: u64) -> Vec<Sample> {
+    let net = &Memo::new(net);
     let mut state = AzulState::new_game(Seeded::new(game_seed(seed, generation, index)));
     let mut rng = Rng::new(noise_seed(seed, generation, index));
     let mut samples: Vec<(Sample, Player)> = Vec::new();
@@ -85,7 +150,11 @@ pub fn play_game<E: Evaluator>(net: &E, settings: &Settings, seed: u64, generati
             break;
         }
         ply += 1;
-        if !state.is_terminal() && is_boundary(&before, &state) {
+        let boundary = is_boundary(&before, &state);
+        if boundary {
+            net.clear();
+        }
+        if !state.is_terminal() && boundary {
             samples.push((
                 Sample {
                     kind: Kind::Boundary,

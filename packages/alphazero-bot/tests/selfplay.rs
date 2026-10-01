@@ -101,3 +101,61 @@ fn self_play_deals_every_game_its_own_opening() {
         }
     }
 }
+
+/// [Z11-69]: a self-played game's move samples are visit for visit what plain
+/// searches of the same positions give, with the same noise drawn in the same
+/// order, and the memo kept a share of those searches' calls from the network.
+/// The temperature is off, so the move played is the most visited and the
+/// reference needs no sampler of its own.
+///
+/// Mutations, seen red ([Z11-48]): keying the memo on the first 100
+/// observation floats alone hands back another position's evaluation and
+/// changes the visits; a memo that never answers makes as many calls as the
+/// reference.
+#[test]
+fn memoised_self_play_changes_no_visit() {
+    use azul_alphazero::config::{RunConfig, SearchKind, settings};
+    use azul_alphazero::rng::{Rng, game_seed, noise_seed};
+    use azul_alphazero::search::search;
+    use azul_alphazero::selfplay::play_game;
+    use azul_engine::{AzulState, Seeded};
+    use support::{Counting, fixture};
+
+    let cfg = RunConfig::parse(config_json(&[("selfPlaySimulations", "200"), ("tempPlies", "0")]).as_bytes()).unwrap();
+    let s = settings(&cfg, SearchKind::SelfPlay).unwrap();
+    let (generation, index) = (3, 5);
+
+    let memoised = Counting::new(fixture());
+    let samples = play_game(&memoised, &s, cfg.seed, generation, index);
+    let moves: Vec<Sample> = samples.into_iter().filter(|x| x.kind == Kind::Move).collect();
+
+    let plain = Counting::new(fixture());
+    let mut state = AzulState::new_game(Seeded::new(game_seed(cfg.seed, generation, index)));
+    let mut rng = Rng::new(noise_seed(cfg.seed, generation, index));
+    let mut ply = 0;
+    while !state.is_terminal() {
+        let noise = s.noise.as_ref().map(|n| (n, &mut rng));
+        let (r, _) = search(&plain, &state, &s.search, noise).unwrap();
+        let visits: Vec<u16> = r.visits.iter().map(|&n| n as u16).collect();
+        assert_eq!(moves[ply].observation, state.encode(), "ply {ply}: a different position");
+        assert_eq!(moves[ply].visits.to_vec(), visits, "ply {ply}: the memo changed the visits");
+        let mut best = 0;
+        for a in 0..180 {
+            if r.visits[a] > r.visits[best] {
+                best = a;
+            }
+        }
+        state.apply(best as u8).unwrap();
+        ply += 1;
+    }
+    assert_eq!(moves.len(), ply);
+    // The fixture's random weights spread the visits, so less of a tree
+    // survives the move: about 80% of the calls remain here, where run
+    // `fourth`'s checkpoint keeps 41%.
+    assert!(
+        u64::from(memoised.calls()) * 10 < u64::from(plain.calls()) * 9,
+        "the memo saved too little: {} calls against {}",
+        memoised.calls(),
+        plain.calls()
+    );
+}
