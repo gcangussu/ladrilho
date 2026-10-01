@@ -44,6 +44,11 @@ export interface RunConfig {
    */
   auxMarginWeight?: number;
   auxWallsWeight?: number;
+  /**
+   * [Z11-68]: `off` never runs the gate in the loop, so the run never ends
+   * done and goes on until the stop rule stops it. Absent is `end`.
+   */
+  gate?: 'end' | 'off';
   /** [Z11-66]: the run and generation this run's checkpoint 0 was taken from. */
   from?: RunOrigin;
 }

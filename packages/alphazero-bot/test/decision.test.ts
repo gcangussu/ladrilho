@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import {
   decide,
   due,
+  gateSetting,
   isDone,
   isStopped,
   ruleEntries,
@@ -193,6 +194,32 @@ describe('when the gate is due [Z11-33], [Z11-37]', () => {
     expect(step(log, 'a', results(0.55)).due).toBe(false);
     log.push(override('a'));
     expect(due(ruleEntries(log, 'a'), results(0.55))).toBe(true);
+  });
+});
+
+describe('a run with its gate off [Z11-68]', () => {
+  /**
+   * Mutation, seen red: `due` ignoring the setting, which runs the gate
+   * above 0.50 and lets a passing one end the run.
+   */
+  it('never runs the gate, so never ends done, and the stop rule still stops it', () => {
+    expect(due([], results(0.9), 'end')).toBe(true);
+    expect(due([], results(0.9), 'off')).toBe(false);
+    const log: LogEntry[] = [];
+    const offStep = (r: ReturnType<typeof results>) => {
+      const entries = ruleEntries(log, 'a');
+      const isDue = due(entries, r, 'off');
+      const decision = decide(entries, r, isDue ? gate(true) : null);
+      log.push(milestone('a', r, decision, { due: isDue, outcome: null }));
+      return decision;
+    };
+    expect(offStep(results(0.9))).toBe('continue');
+    expect(offStep(results(0.95))).toBe('continue');
+    expect(offStep(results(0.93))).toBe('continue');
+    expect(offStep(results(0.92))).toBe('stop');
+    expect(gateSetting({ gate: 'off' })).toBe('off');
+    expect(gateSetting({})).toBe('end');
+    expect(gateSetting(undefined)).toBe('end');
   });
 });
 

@@ -24,12 +24,28 @@ const HEADER: usize = 4 + 4 + 5 * 4 + 4;
 /// set reads the displays [Z11-15] keeps the search from.
 pub trait Evaluator: Sync {
     fn evaluate(&self, observation: &[f32; ENCODED_SIZE], legal: &[Action], out: &mut Evaluation);
+
+    /// [Z11-70]: several leaves at once, `out[i]` for `requests[i]`, each
+    /// exactly what `evaluate` gives it alone. One at a time unless the
+    /// evaluator knows better.
+    fn evaluate_batch(&self, requests: &[Request<'_>], out: &mut [Evaluation]) {
+        for (&(observation, legal), o) in requests.iter().zip(out) {
+            self.evaluate(observation, legal, o);
+        }
+    }
 }
+
+/// One leaf a search waits on: its input and its legal set.
+pub type Request<'a> = (&'a [f32; ENCODED_SIZE], &'a [Action]);
 
 /// A borrowed evaluator evaluates, so a wrapper can hold one by reference.
 impl<E: Evaluator + ?Sized> Evaluator for &E {
     fn evaluate(&self, observation: &[f32; ENCODED_SIZE], legal: &[Action], out: &mut Evaluation) {
         (**self).evaluate(observation, legal, out);
+    }
+
+    fn evaluate_batch(&self, requests: &[Request<'_>], out: &mut [Evaluation]) {
+        (**self).evaluate_batch(requests, out);
     }
 }
 
@@ -196,6 +212,37 @@ fn dot(w: &[f32], x: &[f32]) -> f32 {
     finish(lanes(wc, xc), wt, xt)
 }
 
+/// Every action, ascending: the policy head's rows when all are wanted.
+const ALL_ACTIONS: [Action; POLICY] = {
+    let mut all = [0; POLICY];
+    let mut a = 0;
+    while a < POLICY {
+        all[a] = a as Action;
+        a += 1;
+    }
+    all
+};
+
+/// `linear` on the listed rows only, two at a time, the others of `out` left
+/// as they were. A row's bits do not depend on its partner ([Z11-71]).
+fn linear_rows(w: &[f32], b: &[f32], x: &[f32], out: &mut [f32], rows: &[Action]) {
+    let n = x.len();
+    let (xc, xt) = x.as_chunks::<LANES>();
+    let (pairs, last) = rows.as_chunks::<2>();
+    for &[r0, r1] in pairs {
+        let (o0, o1) = (usize::from(r0), usize::from(r1));
+        let (c0, t0) = w[o0 * n..(o0 + 1) * n].as_chunks::<LANES>();
+        let (c1, t1) = w[o1 * n..(o1 + 1) * n].as_chunks::<LANES>();
+        let [a0, a1] = lanes2(c0, c1, xc);
+        out[o0] = finish(a0, t0, xt) + b[o0];
+        out[o1] = finish(a1, t1, xt) + b[o1];
+    }
+    if let [r] = last {
+        let o = usize::from(*r);
+        out[o] = dot(&w[o * n..(o + 1) * n], x) + b[o];
+    }
+}
+
 /// `out = W · x + b`, `W` row-major `[out][in]`, two rows at a time.
 fn linear(w: &[f32], b: &[f32], x: &[f32], out: &mut [f32]) {
     let n = x.len();
@@ -214,6 +261,60 @@ fn linear(w: &[f32], b: &[f32], x: &[f32], out: &mut [f32]) {
     }
     if let [y] = last {
         *y = dot(&w[o * n..(o + 1) * n], x) + b[o];
+    }
+}
+
+/// How many inputs `forward_batch` takes at once ([Z11-70]).
+pub const BATCH: usize = 4;
+
+/// One row against `BATCH` inputs: each input's lanes exactly as `lanes` would
+/// sum them. The row is read once for all of them, which is the point: at
+/// width 256 the weights outgrow a core's L2, and a forward pass one input at
+/// a time waits on memory, not on the adder.
+#[inline(never)]
+fn lanes_x4(w: &[[f32; LANES]], x: [&[[f32; LANES]]; BATCH]) -> [[f32; LANES]; BATCH] {
+    let n = w.len().min(x[0].len()).min(x[1].len()).min(x[2].len()).min(x[3].len());
+    let (w, x0, x1, x2, x3) = (&w[..n], &x[0][..n], &x[1][..n], &x[2][..n], &x[3][..n]);
+    let mut a0 = [0f32; LANES];
+    let mut a1 = [0f32; LANES];
+    let mut a2 = [0f32; LANES];
+    let mut a3 = [0f32; LANES];
+    for j in 0..n {
+        let p = &w[j];
+        for l in 0..LANES {
+            a0[l] += p[l] * x0[j][l];
+        }
+        for l in 0..LANES {
+            a1[l] += p[l] * x1[j][l];
+        }
+        for l in 0..LANES {
+            a2[l] += p[l] * x2[j][l];
+        }
+        for l in 0..LANES {
+            a3[l] += p[l] * x3[j][l];
+        }
+    }
+    [a0, a1, a2, a3]
+}
+
+/// `linear` for `BATCH` inputs at once, one row at a time: every output is the
+/// bits `linear` gives its input alone.
+fn linear_x4(w: &[f32], b: &[f32], x: [&[f32]; BATCH], out: [&mut [f32]; BATCH]) {
+    let m = out[0].len();
+    linear_x4_rows(w, b, x, out, 0..m);
+}
+
+/// `linear_x4` on the listed rows only, the others of `out` left as they were.
+fn linear_x4_rows(w: &[f32], b: &[f32], x: [&[f32]; BATCH], out: [&mut [f32]; BATCH], rows: impl IntoIterator<Item = usize>) {
+    let n = x[0].len();
+    let split = x.map(|v| v.as_chunks::<LANES>());
+    let chunks = split.map(|(c, _)| c);
+    for o in rows {
+        let (c, t) = w[o * n..(o + 1) * n].as_chunks::<LANES>();
+        let acc = lanes_x4(c, chunks);
+        for k in 0..BATCH {
+            out[k][o] = finish(acc[k], t, split[k].1) + b[o];
+        }
     }
 }
 
@@ -303,6 +404,12 @@ impl Network {
     /// Every logit, illegal ones included, and the value. Allocates nothing:
     /// the activations live on the stack ([Z11-10]).
     pub fn forward(&self, x: &[f32; ENCODED_SIZE], logits: &mut [f32; POLICY]) -> f32 {
+        self.forward_rows(x, &ALL_ACTIONS, logits)
+    }
+
+    /// [Z11-71]: `forward` with only the listed actions' logits computed, the
+    /// rest of `logits` left as they were. Each is the bits `forward` gives it.
+    fn forward_rows(&self, x: &[f32; ENCODED_SIZE], rows: &[Action], logits: &mut [f32; POLICY]) -> f32 {
         let l = &self.layout;
         let w = &self.weights;
         let n = l.width;
@@ -321,12 +428,66 @@ impl Network {
                 h[i] = (h[i] + u[i]).max(0.0);
             }
         }
-        linear(&w[l.pol_w..l.pol_b], &w[l.pol_b..l.pol_b + POLICY], h, logits);
+        linear_rows(&w[l.pol_w..l.pol_b], &w[l.pol_b..l.pol_b + POLICY], h, logits, rows);
         let mut v = [0f32; VALUE_HIDDEN];
         linear(&w[l.v1_w..l.v1_b], &w[l.v1_b..l.v1_b + VALUE_HIDDEN], h, &mut v);
         relu(&mut v);
         let out = dot(&w[l.v2_w..l.v2_w + VALUE_HIDDEN], &v) + w[l.v2_b];
         out.tanh()
+    }
+
+    /// [Z11-70]: `forward` on `BATCH` inputs at once, each output the bits
+    /// `forward` gives that input alone. Allocates nothing either ([Z11-10]).
+    pub fn forward_batch(&self, x: [&[f32; ENCODED_SIZE]; BATCH], logits: &mut [[f32; POLICY]; BATCH]) -> [f32; BATCH] {
+        self.forward_batch_rows(x, &[true; POLICY], logits)
+    }
+
+    /// [Z11-71]: `forward_batch` with only the logits `wanted` marks computed,
+    /// for every input, the rest of `logits` left as they were.
+    fn forward_batch_rows(
+        &self,
+        x: [&[f32; ENCODED_SIZE]; BATCH],
+        wanted: &[bool; POLICY],
+        logits: &mut [[f32; POLICY]; BATCH],
+    ) -> [f32; BATCH] {
+        let l = &self.layout;
+        let w = &self.weights;
+        let n = l.width;
+        const M: usize = MAX_WIDTH as usize;
+        let mut h = [[0f32; M]; BATCH];
+        let mut t = [[0f32; M]; BATCH];
+        let mut u = [[0f32; M]; BATCH];
+
+        linear_x4(&w[l.stem_w..l.stem_b], &w[l.stem_b..l.stem_b + n], x.map(|v| &v[..]), h.each_mut().map(|r| &mut r[..n]));
+        for r in &mut h {
+            relu(&mut r[..n]);
+        }
+        for &[b1w, b1b, b2w, b2b] in &l.block {
+            linear_x4(&w[b1w..b1b], &w[b1b..b1b + n], h.each_ref().map(|r| &r[..n]), t.each_mut().map(|r| &mut r[..n]));
+            for r in &mut t {
+                relu(&mut r[..n]);
+            }
+            linear_x4(&w[b2w..b2b], &w[b2b..b2b + n], t.each_ref().map(|r| &r[..n]), u.each_mut().map(|r| &mut r[..n]));
+            for k in 0..BATCH {
+                for i in 0..n {
+                    h[k][i] = (h[k][i] + u[k][i]).max(0.0);
+                }
+            }
+        }
+        let h = h.each_ref().map(|r| &r[..n]);
+        linear_x4_rows(
+            &w[l.pol_w..l.pol_b],
+            &w[l.pol_b..l.pol_b + POLICY],
+            h,
+            logits.each_mut().map(|r| &mut r[..]),
+            (0..POLICY).filter(|&a| wanted[a]),
+        );
+        let mut v = [[0f32; VALUE_HIDDEN]; BATCH];
+        linear_x4(&w[l.v1_w..l.v1_b], &w[l.v1_b..l.v1_b + VALUE_HIDDEN], h, v.each_mut().map(|r| &mut r[..]));
+        for r in &mut v {
+            relu(r);
+        }
+        v.map(|r| (dot(&w[l.v2_w..l.v2_w + VALUE_HIDDEN], &r) + w[l.v2_b]).tanh())
     }
 
     fn check_parity(&self, expected: &[parity::Expected]) -> Result<(), LoadError> {
@@ -372,9 +533,42 @@ pub fn masked_softmax(logits: &[f32; POLICY], legal: &[Action], policy: &mut [f3
 }
 
 impl Evaluator for Network {
+    /// The legal actions' logits only: the softmax reads no other ([Z11-71]).
     fn evaluate(&self, observation: &[f32; ENCODED_SIZE], legal: &[Action], out: &mut Evaluation) {
         let mut logits = [0f32; POLICY];
-        out.value = self.forward(observation, &mut logits);
+        out.value = self.forward_rows(observation, legal, &mut logits);
         masked_softmax(&logits, legal, &mut out.policy);
+    }
+
+    /// `BATCH` at a time, each group computing the logits of the actions legal
+    /// in any of its requests ([Z11-71]). A short last group of two or more is padded with
+    /// its own last request, whose extra answers are dropped: a batch of four
+    /// costs less than three passes alone. A last request on its own goes
+    /// through `evaluate`.
+    fn evaluate_batch(&self, requests: &[Request<'_>], out: &mut [Evaluation]) {
+        let n = requests.len().min(out.len());
+        let mut logits = [[0f32; POLICY]; BATCH];
+        let mut at = 0;
+        while at < n {
+            let group = (n - at).min(BATCH);
+            if group == 1 {
+                let (observation, legal) = requests[at];
+                self.evaluate(observation, legal, &mut out[at]);
+                break;
+            }
+            let pick = |k: usize| requests[at + k.min(group - 1)];
+            let mut wanted = [false; POLICY];
+            for &(_, legal) in &requests[at..at + group] {
+                for &a in legal {
+                    wanted[usize::from(a)] = true;
+                }
+            }
+            let values = self.forward_batch_rows(std::array::from_fn(|k| pick(k).0), &wanted, &mut logits);
+            for k in 0..group {
+                out[at + k].value = values[k];
+                masked_softmax(&logits[k], requests[at + k].1, &mut out[at + k].policy);
+            }
+            at += group;
+        }
     }
 }

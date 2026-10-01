@@ -187,3 +187,62 @@ fn a_checkpoint_without_parity_is_not_loaded() {
     assert_eq!(o.status.code(), Some(2));
     assert!(stderr(&o).contains("wide"));
 }
+
+fn serve(e: &Env, search: &str, stdin: &[u8]) -> std::process::Output {
+    run(&["serve", &e.checkpoint, "--config", &e.config, "--search", search], stdin)
+}
+
+/// [Z11-72]: `serve`, handed every position of one game and the start of
+/// another in a single stream, answers each with exactly the action,
+/// simulations and value `play` gives that position alone ([Z11-24]), in
+/// order — though its memo has run through both games and a dozen rounds.
+///
+/// Mutation, seen red ([Z11-48]), in a copy with its anchor confirmed: in
+/// `memo.rs`, the key built from the first 100 observation floats alone
+/// (`buf.iter_mut().zip(&observation[..100])`), which hands back another
+/// position's evaluation.
+#[test]
+fn serve_answers_each_position_as_play_does() {
+    let e = env(&[("milestoneSimulations", "24")]);
+    let mut positions = support::game_positions(21);
+    positions.extend(support::game_positions(22).into_iter().take(12));
+    let input: Vec<u8> = positions.iter().flat_map(|s| frame(&block_of(s))).collect();
+    let o = serve(&e, "milestone", &input);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let served = words(&o.stdout);
+    assert_eq!(served.len(), 5 * positions.len(), "one answer per position");
+    for (i, s) in positions.iter().enumerate() {
+        let alone = words(&play(&e, "milestone", &frame(&block_of(s))).stdout);
+        assert_eq!(served[5 * i..5 * i + 4], alone[..4], "position {i}: serve and play disagree");
+    }
+}
+
+/// [Z11-72]: `serve` ends cleanly when its input ends between positions, and
+/// refuses with an error exit, after answering every whole position before
+/// it, a stream cut inside a position, or a terminal position ([Z11-22],
+/// [Z11-62]).
+#[test]
+fn serve_ends_at_the_end_of_its_input_and_refuses_bad_input() {
+    let e = env(&[]);
+    let empty = serve(&e, "play", &[]);
+    assert!(empty.status.success(), "{}", stderr(&empty));
+    assert!(empty.stdout.is_empty());
+
+    let s = AzulState::seeded(5);
+    let one = frame(&block_of(&s));
+    let mut cut = [one.clone(), one.clone()].concat();
+    cut.extend_from_slice(&one[..one.len() - 3]);
+    let o = serve(&e, "play", &cut);
+    assert_eq!(o.status.code(), Some(2));
+    assert_eq!(o.stdout.len(), 2 * 20, "the two whole positions are answered");
+    assert!(stderr(&o).contains("cut short"), "{}", stderr(&o));
+
+    let mut end = AzulState::seeded(8);
+    while !end.is_terminal() {
+        let a = end.legal_actions().as_slice()[0];
+        end.apply(a).unwrap();
+    }
+    let o = serve(&e, "play", &frame(&block_of(&end)));
+    assert_eq!(o.status.code(), Some(2));
+    assert!(stderr(&o).contains("terminal"), "{}", stderr(&o));
+}

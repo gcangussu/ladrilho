@@ -73,6 +73,10 @@ describe('a run started from another [Z11-66]', () => {
     expect(c.augment).toBe('displays');
     expect(c.from).toEqual({ ...origin, changes: { gamesPerGeneration: { parent: 500, run: 3000 } } });
     expect(childConfig(parent, origin, 42, undefined, {}).from?.changes).toEqual({});
+    // [Z11-68]: the gate setting is the parent's unless given.
+    expect(childConfig({ ...parent, gate: 'off' }, origin, 42, undefined, {}).gate).toBe('off');
+    expect(childConfig(parent, origin, 42, undefined, {}, 'off').gate).toBe('off');
+    expect('gate' in childConfig(parent, origin, 42, undefined, {})).toBe(false);
     // [Z11-67]: the aux weights are changes like any other, from an absent 0.
     const aux = childConfig(parent, origin, 42, undefined, { auxMarginWeight: 0.5, auxWallsWeight: 0.5 });
     expect(aux.auxMarginWeight).toBe(0.5);

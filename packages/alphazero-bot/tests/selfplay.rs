@@ -186,3 +186,95 @@ fn the_aux_file_is_the_games_end_from_each_samples_seat() {
         }
     }
 }
+
+/// [Z11-69]: a self-played game's move samples are visit for visit what plain
+/// searches of the same positions give, with the same noise drawn in the same
+/// order, and the memo kept a share of those searches' calls from the network.
+/// The temperature is off, so the move played is the most visited and the
+/// reference needs no sampler of its own.
+///
+/// Mutations, seen red ([Z11-48]): keying the memo on the first 100
+/// observation floats alone hands back another position's evaluation and
+/// changes the visits; a memo that never answers makes as many calls as the
+/// reference.
+#[test]
+fn memoised_self_play_changes_no_visit() {
+    use azul_alphazero::config::{RunConfig, SearchKind, settings};
+    use azul_alphazero::rng::{Rng, game_seed, noise_seed};
+    use azul_alphazero::search::search;
+    use azul_alphazero::selfplay::play_game;
+    use azul_engine::{AzulState, Seeded};
+    use support::{Counting, fixture};
+
+    let cfg = RunConfig::parse(config_json(&[("selfPlaySimulations", "200"), ("tempPlies", "0")]).as_bytes()).unwrap();
+    let s = settings(&cfg, SearchKind::SelfPlay).unwrap();
+    let (generation, index) = (3, 5);
+
+    let memoised = Counting::new(fixture());
+    let samples = play_game(&memoised, &s, cfg.seed, generation, index);
+    let moves: Vec<Sample> = samples.into_iter().map(|(x, _)| x).filter(|x| x.kind == Kind::Move).collect();
+
+    let plain = Counting::new(fixture());
+    let mut state = AzulState::new_game(Seeded::new(game_seed(cfg.seed, generation, index)));
+    let mut rng = Rng::new(noise_seed(cfg.seed, generation, index));
+    let mut ply = 0;
+    while !state.is_terminal() {
+        let noise = s.noise.as_ref().map(|n| (n, &mut rng));
+        let (r, _) = search(&plain, &state, &s.search, noise).unwrap();
+        let visits: Vec<u16> = r.visits.iter().map(|&n| n as u16).collect();
+        assert_eq!(moves[ply].observation, state.encode(), "ply {ply}: a different position");
+        assert_eq!(moves[ply].visits.to_vec(), visits, "ply {ply}: the memo changed the visits");
+        let mut best = 0;
+        for a in 0..180 {
+            if r.visits[a] > r.visits[best] {
+                best = a;
+            }
+        }
+        state.apply(best as u8).unwrap();
+        ply += 1;
+    }
+    assert_eq!(moves.len(), ply);
+    // The fixture's random weights spread the visits, so less of a tree
+    // survives the move: about 80% of the calls remain here, where run
+    // `fourth`'s checkpoint keeps 41%.
+    assert!(
+        u64::from(memoised.calls()) * 10 < u64::from(plain.calls()) * 9,
+        "the memo saved too little: {} calls against {}",
+        memoised.calls(),
+        plain.calls()
+    );
+}
+
+/// [Z11-70]: `self_play`, four games to a thread and their leaves valued in
+/// batches, writes exactly the bytes of the same games played one at a time
+/// and unbatched, in game order. Eleven games on two threads, so batches run
+/// short as games end and at the generation's tail; the memo's answers and
+/// the network's mix within every batch.
+///
+/// Mutations, seen red ([Z11-48]), each in a copy with its anchor confirmed:
+/// in `play_games`, each game supplied the evaluation of the next game's
+/// request (`evals.iter().cycle().skip(1)`); and in `self_play`, each game's
+/// bytes stored in the next game's slot (`d[(i as usize + 1) % games]`).
+#[test]
+fn batched_self_play_is_each_game_alone() {
+    use azul_alphazero::config::{RunConfig, SearchKind, settings};
+    use azul_alphazero::selfplay::{play_game, self_play};
+    use support::fixture;
+
+    let cfg = RunConfig::parse(config_json(&[("selfPlaySimulations", "48"), ("threads", "2")]).as_bytes()).unwrap();
+    let s = settings(&cfg, SearchKind::SelfPlay).unwrap();
+    let net = fixture();
+    let games = 11;
+    let (batched, batched_aux) = self_play(&net, &s, cfg.seed, 4, games);
+    let (mut alone, mut alone_aux) = (Vec::new(), Vec::new());
+    for i in 0..games as u64 {
+        for (sample, aux) in play_game(&net, &s, cfg.seed, 4, i) {
+            sample.write(&mut alone);
+            aux.write(&mut alone_aux);
+        }
+    }
+    assert_eq!(batched.len(), alone.len(), "a different number of samples");
+    assert!(batched == alone, "batched self-play wrote different samples");
+    // [Z11-67]: and the aux file, record for record.
+    assert!(batched_aux == alone_aux, "batched self-play wrote different aux records");
+}

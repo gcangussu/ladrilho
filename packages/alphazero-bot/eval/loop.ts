@@ -18,6 +18,7 @@ import {
   atLeast,
   due,
   entriesOf,
+  gateSetting,
   freshStart,
   isDone,
   isStopped,
@@ -25,6 +26,7 @@ import {
   ruleEntries,
   type Decision,
   type GateOutcome,
+  type GateSetting,
   type MilestoneEntry,
   type MilestoneResults,
 } from './decision.js';
@@ -106,8 +108,9 @@ export function childConfig(
   seed: number,
   augment: 'none' | 'displays' | undefined,
   set: Partial<Record<Changeable, number>> = {},
+  gate?: GateSetting,
 ): RunConfig {
-  const { from: _grandparent, augment: parentAugment, ...inherited } = pc;
+  const { from: _grandparent, augment: parentAugment, gate: parentGate, ...inherited } = pc;
   const changes: RunOrigin['changes'] = {};
   for (const [k, v] of Object.entries(set) as [Changeable, number][]) {
     // An absent aux weight is 0, off ([Z11-67]).
@@ -119,6 +122,8 @@ export function childConfig(
     ...set,
     seed,
     augment: augment ?? parentAugment ?? 'none',
+    // [Z11-68]: written only when set, so a config without it still reads as before.
+    ...((gate ?? parentGate) === undefined ? {} : { gate: gate ?? parentGate }),
     from: { ...origin, changes },
   };
 }
@@ -134,13 +139,18 @@ export function initRun(
   from?: { run: string; generation: number },
   augment?: 'none' | 'displays',
   set: Partial<Record<Changeable, number>> = {},
+  gate?: GateSetting,
 ): void {
   checkRunName(name);
   const p = runPaths(name);
   if (existsSync(p.dir)) throw new Error(`${p.dir} already exists`);
   if (from === undefined && Object.keys(set).length > 0) throw new Error('--set goes with --from');
   if (from === undefined) {
-    const config: RunConfig = { ...startingConfig(), ...(augment === undefined ? {} : { augment }) };
+    const config: RunConfig = {
+      ...startingConfig(),
+      ...(augment === undefined ? {} : { augment }),
+      ...(gate === undefined ? {} : { gate }),
+    };
     mkdirSync(p.dir, { recursive: true });
     writeJson(p.config, config);
     trainer(['init', '--run-dir', p.dir]);
@@ -176,6 +186,7 @@ export function initRun(
     startingConfig().seed,
     augment,
     set,
+    gate,
   );
   mkdirSync(p.dir, { recursive: true });
   writeJson(p.config, config);
@@ -321,6 +332,7 @@ export function reasonFor(
   lastFailure: number | null,
   decision: Decision,
   previousImproved: boolean,
+  gateSet: GateSetting,
 ): string {
   const p = progress(results.rungs);
   const sharp = results.rungs.sharp.winrate;
@@ -334,7 +346,8 @@ export function reasonFor(
             (previousImproved ? ', which had improved' : ', which had not improved either'),
     );
   }
-  if (sharp < GATE_TRIGGER) parts.push(`sharp below ${pct(GATE_TRIGGER)}, so no gate`);
+  if (gateSet === 'off') parts.push('the gate is off for this run');
+  else if (sharp < GATE_TRIGGER) parts.push(`sharp below ${pct(GATE_TRIGGER)}, so no gate`);
   else if (!gateDue) parts.push(`gate not due: progress has not passed ${pct(lastFailure ?? 0)}, where the last gate failed`);
   else if (gate !== null) {
     parts.push(
@@ -369,7 +382,8 @@ async function milestoneStep(
   const entries = ruleEntries(readLog(), name);
   const { previous, previousImproved, lastFailure } = context(entries);
   const fresh = freshStart(entries, results);
-  const gateDue = due(entries, results);
+  const gateSet = gateSetting(config);
+  const gateDue = due(entries, results, gateSet);
   let gate: GateOutcome | null = null;
   if (gateDue) {
     // The loop's own gate runs under the loop's lock, in this process ([Z11-61]).
@@ -397,7 +411,7 @@ async function milestoneStep(
     losses: lossesSince(name, previous?.generation ?? 0, generation),
     provenance: prov,
     decision,
-    reason: reasonFor(results, previous, fresh, gateDue, gate, lastFailure, decision, previousImproved),
+    reason: reasonFor(results, previous, fresh, gateDue, gate, lastFailure, decision, previousImproved, gateSet),
   };
   appendLog(entry);
   process.stdout.write(`milestone ${name}/${generation}: ${entry.reason}\n`);
