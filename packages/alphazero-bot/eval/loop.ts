@@ -80,6 +80,8 @@ export const CHANGEABLE = [
   'selfPlaySimulations',
   'threads',
   'torchThreads',
+  'auxMarginWeight',
+  'auxWallsWeight',
 ] as const;
 export type Changeable = (typeof CHANGEABLE)[number];
 
@@ -108,7 +110,9 @@ export function childConfig(
   const { from: _grandparent, augment: parentAugment, ...inherited } = pc;
   const changes: RunOrigin['changes'] = {};
   for (const [k, v] of Object.entries(set) as [Changeable, number][]) {
-    if (inherited[k] !== v) changes[k] = { parent: inherited[k], run: v };
+    // An absent aux weight is 0, off ([Z11-67]).
+    const was = inherited[k] ?? 0;
+    if (was !== v) changes[k] = { parent: was, run: v };
   }
   return {
     ...inherited,

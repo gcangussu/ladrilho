@@ -73,5 +73,12 @@ describe('a run started from another [Z11-66]', () => {
     expect(c.augment).toBe('displays');
     expect(c.from).toEqual({ ...origin, changes: { gamesPerGeneration: { parent: 500, run: 3000 } } });
     expect(childConfig(parent, origin, 42, undefined, {}).from?.changes).toEqual({});
+    // [Z11-67]: the aux weights are changes like any other, from an absent 0.
+    const aux = childConfig(parent, origin, 42, undefined, { auxMarginWeight: 0.5, auxWallsWeight: 0.5 });
+    expect(aux.auxMarginWeight).toBe(0.5);
+    expect(aux.from?.changes).toEqual({
+      auxMarginWeight: { parent: 0, run: 0.5 },
+      auxWallsWeight: { parent: 0, run: 0.5 },
+    });
   });
 });
