@@ -1,0 +1,53 @@
+{
+  "simulations": 200,
+  "gamesPerMember": 800,
+  "anchor": {
+    "run": "third",
+    "generation": 90
+  },
+  "members": [
+    {
+      "run": "third",
+      "generation": 90,
+      "checkpoint": "milestones/third/90/checkpoint.bin",
+      "rating": 0,
+      "se": 0
+    },
+    {
+      "run": "fourth",
+      "generation": 50,
+      "checkpoint": "milestones/fourth/50/checkpoint.bin",
+      "rating": 155.51816026379646,
+      "se": 9.10973872955958
+    },
+    {
+      "run": "fourth",
+      "generation": 70,
+      "checkpoint": "milestones/fourth/70/checkpoint.bin",
+      "rating": 181.1668940383234,
+      "se": 9.245253035785682
+    }
+  ],
+  "date": "2026-10-01T22:17:52.364Z",
+  "pairings": [
+    {
+      "a": "third/90",
+      "b": "fourth/50",
+      "games": 800,
+      "score": 224.5
+    },
+    {
+      "a": "third/90",
+      "b": "fourth/70",
+      "games": 800,
+      "score": 216
+    },
+    {
+      "a": "fourth/50",
+      "b": "fourth/70",
+      "games": 800,
+      "score": 363
+    }
+  ],
+  "seconds": 532
+}

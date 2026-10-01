@@ -791,12 +791,12 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
 
   On the pool of [Z11-73], the same rule compares ratings:
 
-  | rating per milestone (σ ≈ 11.6 Elo, 300 games a champion) | P(`stop`) within 5 / 10 milestones |
+  | rating per milestone (σ ≈ 7.1 Elo, 800 games a champion) | P(`stop`) within 5 / 10 milestones |
   | --- | --- |
   | flat | 0.41 / 0.76 |
-  | climbs 5 Elo | 0.20 / 0.45 |
-  | climbs 10 Elo | 0.06 / 0.17 |
-  | climbs 20 Elo | 0.00 / 0.01 |
+  | climbs 5 Elo | 0.10 / 0.25 |
+  | climbs 10 Elo | 0.01 / 0.03 |
+  | climbs 20 Elo | 0.00 / 0.00 |
   | climbs 40 Elo | 0.00 / 0.00 |
 
   *These are the committed simulation's figures, 20 000 runs a row, exactly as
@@ -866,7 +866,13 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
   the rating. The replay of [Z11-45] MUST recompute the verdict from the first rating, the
   settling from the last, and that only the weakest was ever replaced. A milestone's informal
   budget is ten minutes of the machine's whole CPU, which `gamesPerMember` is chosen to fit when
-  the pool is seeded.
+  the pool is seeded; `stop-simulation` reads it from the committed pool.
+
+  *Measured when the pool was seeded: a game between two champions at 200 simulations costs
+  0.23 s of the machine at eight workers, so 800 games a champion make a milestone of about nine
+  minutes, twelve with the extra games, and a rating good to about ±7 Elo. The seeding itself, a
+  round robin of 800 games a pairing, took 532 s and put `fourth`'s generations 50 and 70 at
+  +156 and +181 against `third`'s generation 90, the checkpoint that passed the gate.*
 
   *Two standard errors decide outright, so noise rarely swaps a champion; within them, a third
   more games settles it without a second margin, because by then the challenger is close enough
