@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from . import auxiliary
 from .augment import permute_samples, random_perms
 from .measure import FitData, predict_values, value_by_round
 from .formats import (legal_bits, read_checkpoint, read_samples, sha256, write_atomic,
@@ -65,6 +66,22 @@ def evaluate(net: Net, samples: np.ndarray, boundary_weight: float, chunk: int =
     return total_p / max(moves, 1), total_v / max(len(samples), 1)
 
 
+def evaluate_aux(net: Net, heads, samples: np.ndarray, aux_rows: np.ndarray, chunk: int = 4096) -> dict | None:
+    """[Z11-67]'s losses on a generation's own samples before training on
+    them, beside [Z11-54]'s: `None` when the samples have no aux file."""
+    if not bool(aux_rows["has"].any()):
+        return None
+    total_m = total_w = 0.0
+    with torch.no_grad():
+        for i in range(0, len(samples), chunk):
+            obs = torch.from_numpy(samples["obs"][i:i + chunk].copy())
+            m, w = auxiliary.losses(heads(net.features(obs)), *auxiliary.targets(aux_rows[i:i + chunk]))
+            n = len(obs)
+            total_m += float(m) * n
+            total_w += float(w) * n
+    return {"margin": total_m / len(samples), "walls": total_w / len(samples)}
+
+
 def paths(run: Path, g: int):
     return {
         "checkpoint": run / "checkpoints" / f"{g}.bin",
@@ -72,6 +89,7 @@ def paths(run: Path, g: int):
         "optimiser": run / "optimiser" / f"{g}.pt",
         "manifest": run / "generations" / f"{g}.json",
         "samples": run / "samples" / f"{g}.bin",
+        "aux": run / "aux" / f"{g}.pt",
     }
 
 
@@ -83,6 +101,9 @@ def write_manifest(run: Path, g: int) -> None:
         "checkpoint": {"path": str(p["checkpoint"].relative_to(run)), "sha256": sha256(p["checkpoint"])},
         "parity": {"path": str(p["parity"].relative_to(run)), "sha256": sha256(p["parity"])},
         "optimiser": {"path": str(p["optimiser"].relative_to(run)), "sha256": sha256(p["optimiser"])},
+        # [Z11-67]: the auxiliary heads and their optimiser, when the run has them.
+        **({"aux": {"path": str(p["aux"].relative_to(run)), "sha256": sha256(p["aux"])}}
+           if p["aux"].exists() else {}),
     })
 
 
@@ -126,6 +147,8 @@ def init_from(run: Path, parent: Path, generation: int) -> None:
     p = paths(run, 0)
     write_checkpoint(net, 0, p["checkpoint"])
     write_atomic(p["optimiser"], src["optimiser"].read_bytes())
+    if src["aux"].exists():
+        write_atomic(p["aux"], src["aux"].read_bytes())
     for k in origin["windowGenerations"]:
         dest = inherited_path(run, k)
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -188,19 +211,28 @@ def train_generation(run: Path, g: int) -> None:
             if f != p["samples"]:
                 fit.add(part)
         entry["before"]["byRound"] = value_by_round(predict_values(net, own), own, fit.weights())
+    use_aux = auxiliary.enabled(config)
+    wm, ww = auxiliary.weights(config)
+    if use_aux:
+        heads, aux_opt = auxiliary.load(p["aux"], net.width, config)
+        if "aux" not in entry["before"]:
+            own_aux = auxiliary.window_aux([p["samples"]], [len(own)])
+            entry["before"]["aux"] = evaluate_aux(net, heads, own, own_aux)
     record[key] = entry
     write_json(run / "losses.json", record)
 
     # Step 3: the last `window` generations, `stepsPerGeneration` steps.
+    counts = [len(part) for part in parts]
     window = np.concatenate(parts)
     del parts
+    aux_window = auxiliary.window_aux(files, counts) if use_aux else None
     augment = config.get("augment", "none")
     if augment not in ("none", "displays"):
         raise ValueError(f"config: augment {augment!r} is neither none nor displays")
     opt = optimiser(net, config)
     opt.load_state_dict(torch.load(p["optimiser"]))
     steps, batch = config["stepsPerGeneration"], config["batch"]
-    sum_p = sum_v = 0.0
+    sum_p = sum_v = sum_m = sum_w = 0.0
     net.train()
     for _ in range(steps):
         idx = rng.integers(0, len(window), size=batch)
@@ -208,26 +240,43 @@ def train_generation(run: Path, g: int) -> None:
         if augment == "displays":
             drawn = permute_samples(drawn, random_perms(perm_rng, batch))
         obs, legal, visits, result, kind = batch_tensors(drawn)
-        logits, value = net(obs)
+        h = net.features(obs)
+        logits, value = net.heads(h)
         pol, val = losses(logits, value, legal, visits, result, kind, bw)
         loss = pol + val
+        if use_aux:
+            # A display permutation leaves the walls and the margin as they
+            # are, so the aux rows need none ([Z11-65]).
+            am, aw = auxiliary.losses(heads(h), *auxiliary.targets(aux_window[idx]))
+            loss = loss + wm * am + ww * aw
+            aux_opt.zero_grad(set_to_none=True)
+            sum_m += float(am)
+            sum_w += float(aw)
         opt.zero_grad(set_to_none=True)
         loss.backward()
         opt.step()
+        if use_aux:
+            aux_opt.step()
         sum_p += float(pol)
         sum_v += float(val)
         if not math.isfinite(float(loss)):
             raise FloatingPointError(f"generation {g}: the loss is {float(loss)}")
     entry["training"] = {"policy": sum_p / steps, "value": sum_v / steps, "steps": steps, "batch": batch}
+    if use_aux:
+        entry["training"]["aux"] = {"margin": sum_m / steps, "walls": sum_w / steps,
+                                    "marginWeight": wm, "wallsWeight": ww,
+                                    "withTargets": float(aux_window["has"].mean())}
     entry["window"] = {"generations": [first, g], "samples": int(len(window))}
     if inherited:
         entry["window"]["inherited"] = {"run": config["from"]["run"], "generations": inherited}
     entry["drawRatio"] = steps * batch / len(window)
     record[key] = entry
 
-    # Step 4: optimiser, then checkpoint and parity, then the manifest.
+    # Step 4: optimiser (and the aux heads), then checkpoint and parity, then the manifest.
     nxt = paths(run, g + 1)
     save_optimiser(opt, nxt["optimiser"])
+    if use_aux:
+        auxiliary.save(nxt["aux"], heads, aux_opt)
     write_checkpoint(net, g + 1, nxt["checkpoint"])
     write_json(run / "losses.json", record)
     write_manifest(run, g + 1)

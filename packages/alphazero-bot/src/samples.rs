@@ -1,5 +1,6 @@
 //! The sample file ([Z11-27]): fixed-size little-endian records, the one thing
-//! self-play hands the trainer.
+//! self-play hands the trainer; and beside it the aux file ([Z11-67]), one
+//! record per sample in the same order, holding what the game ended as.
 
 use azul_engine::{ACTION_SPACE, Action, ENCODED_SIZE};
 
@@ -96,4 +97,56 @@ pub fn read_all(bytes: &[u8]) -> Result<Vec<Sample>, String> {
         return Err(format!("{} bytes is not a whole number of {RECORD_BYTES}-byte records", bytes.len()));
     }
     bytes.as_chunks::<RECORD_BYTES>().0.iter().map(|r| Sample::read(r)).collect()
+}
+
+/// `margin` (i16), then the two walls (u32 each).
+pub const AUX_BYTES: usize = 2 + 4 + 4;
+
+/// What the game ended as, seen from a sample's seat ([Z11-67]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Aux {
+    /// The seat's final score minus the other seat's.
+    pub margin: i16,
+    /// The final walls, the seat's first: cell `i` of a wall at bit `i`.
+    pub walls: [u32; 2],
+}
+
+/// A 25-cell wall as a mask: cell `i` at bit `i`.
+pub fn wall_mask(wall: &[u8; 25]) -> u32 {
+    wall.iter().enumerate().fold(0, |m, (i, &c)| if c != 0 { m | 1 << i } else { m })
+}
+
+impl Aux {
+    pub fn write(&self, out: &mut Vec<u8>) {
+        out.extend_from_slice(&self.margin.to_le_bytes());
+        out.extend_from_slice(&self.walls[0].to_le_bytes());
+        out.extend_from_slice(&self.walls[1].to_le_bytes());
+    }
+
+    /// One record. Refuses a wall with a bit past cell 24.
+    pub fn read(record: &[u8]) -> Result<Aux, String> {
+        if record.len() != AUX_BYTES {
+            return Err(format!("an aux record of {} bytes, not {AUX_BYTES}", record.len()));
+        }
+        let margin = i16::from_le_bytes([record[0], record[1]]);
+        let w = |at: usize| u32::from_le_bytes([record[at], record[at + 1], record[at + 2], record[at + 3]]);
+        let walls = [w(2), w(6)];
+        if walls.iter().any(|&m| m >> 25 != 0) {
+            return Err(format!("a wall mask past 25 cells: {walls:?}"));
+        }
+        Ok(Aux { margin, walls })
+    }
+}
+
+/// Every record of an aux file.
+pub fn read_all_aux(bytes: &[u8]) -> Result<Vec<Aux>, String> {
+    if !bytes.len().is_multiple_of(AUX_BYTES) {
+        return Err(format!("{} bytes is not a whole number of {AUX_BYTES}-byte aux records", bytes.len()));
+    }
+    bytes.as_chunks::<AUX_BYTES>().0.iter().map(|r| Aux::read(r)).collect()
+}
+
+/// The aux file beside a sample file: `16.bin` → `16.aux.bin`.
+pub fn aux_path(samples: &std::path::Path) -> std::path::PathBuf {
+    samples.with_extension("aux.bin")
 }

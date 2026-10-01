@@ -181,7 +181,7 @@ pnpm -F alphazero-bot test       # the crate (search, network, self-play, format
 pnpm -F alphazero-bot test:train # the trainer's pytest suite; needs uv. Not in the root suite
 pnpm -F alphazero-bot train init --run <name>  # [Z11-58]: checkpoint 0 and the config
 pnpm -F alphazero-bot train init --run <name> --from <run>:<g> [--augment displays] \
-    [--set gamesPerGeneration=3000]            # [Z11-66], [Z11-65]: start from another run's
+    [--set gamesPerGeneration=3000]            # [Z11-66], [Z11-65], [Z11-67]: start from another run's
                                                # checkpoint, window and latency record
 pnpm -F alphazero-bot latency --run <name>     # [Z11-57]: sets playSimulations; idle machine, hours
 pnpm -F alphazero-bot throughput --run <name>  # [Z11-53]: minutes per generation

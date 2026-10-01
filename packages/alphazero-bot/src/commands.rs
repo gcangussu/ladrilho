@@ -8,6 +8,7 @@ use std::time::Instant;
 use azul_alphazero::config::{RunConfig, SearchKind, Settings, settings};
 use azul_alphazero::network::{Evaluation, Evaluator, Network};
 use azul_alphazero::parity;
+use azul_alphazero::samples::aux_path;
 use azul_alphazero::search::choose;
 use azul_alphazero::selfplay::self_play;
 use azul_alphazero::wire::{frame, read_canonical, read_messages};
@@ -157,7 +158,11 @@ fn play(checkpoint: &Path, config: &Path, search: Search) -> Result<(), String> 
 fn selfplay(checkpoint: &Path, config: &Path, generation: u64, games: u64, out: &Path) -> Result<(), String> {
     let loaded = load(checkpoint, config)?;
     let s = settings(&loaded.config, SearchKind::SelfPlay)?;
-    let bytes = self_play(&loaded.net, &s, loaded.config.seed, generation, games as usize);
+    let (bytes, aux) = self_play(&loaded.net, &s, loaded.config.seed, generation, games as usize);
+    // The aux file first: a complete sample file then always has its aux file
+    // beside it, and the loop takes the sample file as self-play's commit
+    // point ([Z11-28], [Z11-67]).
+    write_atomic(&aux_path(out), &aux)?;
     write_atomic(out, &bytes)
 }
 
@@ -246,7 +251,7 @@ fn throughput(checkpoint: &Path, config: &Path) -> Result<(), String> {
     let games = u64::from(s.threads) * 2;
     let started = Instant::now();
     // Seeded apart from any generation a run will play: the games are thrown away.
-    let bytes = self_play(&loaded.net, &s, loaded.config.seed ^ 0x7468_726f_7567_6870, u64::MAX, games as usize);
+    let (bytes, _) = self_play(&loaded.net, &s, loaded.config.seed ^ 0x7468_726f_7567_6870, u64::MAX, games as usize);
     let seconds = started.elapsed().as_secs_f64();
     let per_hour = games as f64 / seconds * 3600.0;
     let minutes = f64::from(loaded.config.games_per_generation) / per_hour * 60.0;

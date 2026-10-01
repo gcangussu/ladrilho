@@ -38,6 +38,12 @@ export interface RunConfig {
    * config predates it.
    */
   augment?: 'none' | 'displays';
+  /**
+   * [Z11-67]: the weights of the final margin's and the final walls' losses
+   * beside the policy's and the value's. Absent is 0, which is off.
+   */
+  auxMarginWeight?: number;
+  auxWallsWeight?: number;
   /** [Z11-66]: the run and generation this run's checkpoint 0 was taken from. */
   from?: RunOrigin;
 }
