@@ -538,6 +538,16 @@ The binary's commands, each loading one checkpoint and one run's settings:
   times at every thread count on the machine of record. Measured on run `fourth`'s generation
   20 checkpoint with the memo in place, 400 games of self-play at 8 threads took 14.0 s against
   19.7 s, with byte-identical sample files.*
+- **[Z11-71]** An evaluation MUST compute the policy head's logits only for the actions some
+  request in its forward pass has legal: `evaluate` its own legal set, a batched group of
+  [Z11-70] the union of its requests' legal sets, a boundary request none. Each logit is a row of
+  its own in [Z11-10]'s order and the softmax of [Z11-6] reads only the legal ones, so every
+  evaluation MUST be bit for bit the softmax over the legal set of all 180 logits from `forward`.
+
+  *About 18 of the 180 actions are legal in a self-play position, and the head is about 7% of the
+  forward pass. Measured on run `fourth`'s generation 20 checkpoint: single searches over the
+  latency corpus 9% faster, self-play about 3%, its four requests' union being wider than one
+  legal set; the sample files byte-identical.*
 - **[Z11-27]** A sample file MUST be a sequence of fixed-size little-endian records:
 
   | Field | Type | Content |
@@ -1079,6 +1089,9 @@ this package, and MUST be corrected in the same change.
   - [Z11-70] by checking the batched forward pass against [Z11-10]'s reference order bit for bit,
     `evaluate_batch` against `evaluate` at every batch size from 0 to 9, and `self_play`'s bytes
     against the same games played one at a time;
+  - [Z11-71] by checking `evaluate` and `evaluate_batch` against all 180 logits of `forward`
+    under the masked softmax, at an odd width and over legal sets of odd and even sizes, with
+    boundary requests in the batches;
   - [Z11-60] by running `play` with each `--search` on a config whose `playSimulations` and
     `milestoneSimulations` differ, checking the simulation count each reports, and that
     `--simulations` is refused by every command but `latency`;
@@ -1174,6 +1187,9 @@ this package, and MUST be corrected in the same change.
   | Every softmax of a batched group taken over the group's first legal set | [Z11-70]'s batch-size case |
   | A batched game handed the next game's evaluation | [Z11-70]'s self-play case |
   | A game's samples stored in the next game's slot | [Z11-70]'s self-play case |
+  | The second of a pair of listed rows given the first row's bias | [Z11-71]'s case, by its fixture's parity check |
+  | The unpaired last listed row left uncomputed | [Z11-71]'s case |
+  | A batched group's wanted rows taken from its first request alone | [Z11-71]'s case |
   | The check that `.cargo/config.toml`'s section holds exactly the AVX2 line, or holds no other section, weakened | [Z11-47]'s build-flag case |
 
 - **[Z11-49]** Every requirement in this document MUST be either cited by at least one test — Rust,

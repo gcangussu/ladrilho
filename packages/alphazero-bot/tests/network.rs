@@ -4,7 +4,7 @@
 
 mod support;
 
-use azul_alphazero::network::{BATCH, Evaluation, Evaluator, LoadError, Network, Request};
+use azul_alphazero::network::{BATCH, Evaluation, Evaluator, LoadError, Network, Request, masked_softmax};
 use azul_alphazero::parity::{corpus, corpus_sha256, read_parity};
 use azul_engine::AzulState;
 use support::{crate_dir, fixture, fixture_paths, read};
@@ -368,6 +368,63 @@ fn a_batch_is_each_request_alone() {
                 let mut alone = Evaluation::default();
                 net.evaluate(o, l, &mut alone);
                 assert_eq!(batched[k], alone, "batch of {size} from {start}, request {k}");
+            }
+        }
+    }
+}
+
+/// [Z11-71]: `evaluate` computes only the legal actions' logits, and
+/// `evaluate_batch` only those legal in some request of each group of four;
+/// either way every evaluation is, bit for bit, the softmax over the legal set
+/// of all 180 logits from `forward`. On the fixture and on a synthetic odd
+/// width, over every position of a game — legal sets of odd and even sizes,
+/// so the last row goes alone as often as not — and with boundary requests,
+/// which want no logits at all, mixed into the batches.
+///
+/// Mutations, seen red ([Z11-48]), each in a copy with its anchor confirmed:
+/// in `linear_rows`, the second row of a pair given the first row's bias
+/// (`out[o1] = finish(a1, t1, xt) + b[o0]`); the unpaired last row left
+/// uncomputed (its `if let [r] = last` arm removed); and in `evaluate_batch`,
+/// the wanted rows taken from a group's first request alone
+/// (`&requests[at..at + 1]`). The first fails the parity check the test's
+/// own fixture load runs, since `forward` computes its rows the same way; the
+/// other two fail the comparisons.
+#[test]
+fn only_the_legal_logits_are_computed_and_nothing_changes() {
+    let (c, p) = synthetic(17, 1, 17);
+    let nets = [("the fixture", fixture()), ("width 17", Network::load(&c, &p).unwrap())];
+    let states = support::game_positions(13);
+    let inputs: Vec<([f32; 182], Vec<u8>)> = states
+        .iter()
+        .enumerate()
+        .map(|(i, s)| (s.encode(), if i % 5 == 4 { Vec::new() } else { s.legal_actions().as_slice().to_vec() }))
+        .collect();
+    assert!(inputs.iter().any(|(_, l)| l.len() % 2 == 1) && inputs.iter().any(|(_, l)| !l.is_empty() && l.len() % 2 == 0));
+    for (name, net) in &nets {
+        let expected: Vec<Evaluation> = inputs
+            .iter()
+            .map(|(o, l)| {
+                let mut logits = [0f32; 180];
+                let value = net.forward(o, &mut logits);
+                let mut e = Evaluation { policy: [0.0; 180], value };
+                masked_softmax(&logits, l, &mut e.policy);
+                e
+            })
+            .collect();
+        for (i, (o, l)) in inputs.iter().enumerate() {
+            let mut e = Evaluation::default();
+            net.evaluate(o, l, &mut e);
+            assert_eq!(e, expected[i], "{name}, position {i}, alone");
+        }
+        for size in [3, 4, 7] {
+            for start in (0..inputs.len()).step_by(size) {
+                let idx: Vec<usize> = (start..start + size).map(|k| k % inputs.len()).collect();
+                let group: Vec<Request<'_>> = idx.iter().map(|&k| (&inputs[k].0, &inputs[k].1[..])).collect();
+                let mut out = vec![Evaluation::default(); size];
+                net.evaluate_batch(&group, &mut out);
+                for (j, &k) in idx.iter().enumerate() {
+                    assert_eq!(out[j], expected[k], "{name}, position {k}, in a batch of {size}");
+                }
             }
         }
     }
