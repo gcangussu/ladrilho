@@ -11,10 +11,12 @@
  *   pnpm -F alphazero-bot stop-simulation
  */
 
+import { ELO_SCALE } from './elo.js';
 import {
   GATE_THRESHOLD,
   decide,
   due,
+  measureOf,
   progress,
   type GateOutcome,
   type LogEntry,
@@ -133,6 +135,67 @@ export function table(runs: number): string {
     const o = row.scenarios.map((s) => simulate(s, runs));
     const col = (f: (x: Outcome) => string): string => o.map(f).join(' / ');
     lines.push(`| ${row.label} | ${col((x) => p(x.stop))} | ${col((x) => p(x.done))} | ${col((x) => x.meanGates.toFixed(1))} |`);
+  }
+  return lines.join('\n');
+}
+
+/**
+ * [Z11-73]'s rows: the same rule on a pool rating. A milestone's rating is
+ * its true rating plus normal noise of the standard error a challenger gets
+ * from `gamesPerMember` games against each of three champions of about its
+ * strength — `2 · ELO_SCALE / √(3 · gamesPerMember)` — and the true rating
+ * climbs a fixed number of points a milestone.
+ */
+export function simulatePool(
+  climbPerMilestone: number,
+  milestones: number,
+  gamesPerMember: number,
+  runs: number,
+  seed = 20261001,
+): { stop: number; se: number } {
+  const random = generator(seed);
+  const se = (2 * ELO_SCALE) / Math.sqrt(3 * gamesPerMember);
+  const normal = (): number => Math.sqrt(-2 * Math.log(1 - random())) * Math.cos(2 * Math.PI * random());
+  let stops = 0;
+  for (let r = 0; r < runs; r++) {
+    const entries: LogEntry[] = [];
+    for (let m = 0; m < milestones; m++) {
+      const results: MilestoneResults = { rating: climbPerMilestone * m + se * normal(), ladderHash: 'model' };
+      const decision = decide(entries, results, null);
+      entries.push({
+        kind: 'milestone',
+        run: 'model',
+        date: '',
+        generation: m,
+        results: {},
+        ladderHash: 'model',
+        progress: measureOf(results),
+        previousProgress: null,
+        freshStart: { fresh: false, why: null },
+        gate: { due: false, ran: false, outcome: null },
+        decision,
+        reason: '',
+      });
+      if (decision === 'stop') {
+        stops++;
+        break;
+      }
+    }
+  }
+  return { stop: stops / runs, se };
+}
+
+/** The pool's rows, in the spec's own form: P(`stop`) within 5 and within 10 milestones. */
+export function poolTable(runs: number, gamesPerMember: number): string {
+  const se = simulatePool(0, 1, gamesPerMember, 1).se;
+  const lines = [
+    `| rating per milestone (σ ≈ ${se.toFixed(1)} Elo, ${gamesPerMember} games a champion) | P(\`stop\`) within 5 / 10 milestones |`,
+    '| --- | --- |',
+  ];
+  for (const step of [0, 5, 10, 20, 40]) {
+    const five = simulatePool(step, 5, gamesPerMember, runs).stop.toFixed(2);
+    const ten = simulatePool(step, 10, gamesPerMember, runs).stop.toFixed(2);
+    lines.push(`| ${step === 0 ? 'flat' : `climbs ${step} Elo`} | ${five} / ${ten} |`);
   }
   return lines.join('\n');
 }
