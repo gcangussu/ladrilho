@@ -15,7 +15,8 @@
     "latency": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs latency",
     "latency-corpus": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs latency-corpus",
     "throughput": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs throughput",
-    "augment-fixtures": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs augment-fixtures"
+    "augment-fixtures": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs augment-fixtures",
+    "pool": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs pool"
   },
   "dependencies": {
     "engine": "workspace:*"
