@@ -16,6 +16,17 @@ export const GATE_THRESHOLD = 0.6;
 
 export type Decision = 'done' | 'stop' | 'continue';
 
+/**
+ * A run's `gate` setting ([Z11-68]): `end` (absent) runs the gate when it is
+ * due and ends the run `done` when it passes; `off` never runs it.
+ */
+export type GateSetting = 'end' | 'off';
+
+/** The gate setting a config or a logged entry's copy of it holds. */
+export function gateSetting(config: { gate?: unknown } | undefined): GateSetting {
+  return config?.gate === 'off' ? 'off' : 'end';
+}
+
 /** What a milestone measured: each rung's winrate, and the ladder it played. */
 export interface MilestoneResults {
   rungs: Record<Rung, { winrate: number }>;
@@ -161,7 +172,9 @@ export function freshStart(entries: readonly LogEntry[], results: MilestoneResul
  * failed gate since the last fresh start ran at a milestone whose progress is
  * at least this one's. Only the most recent failure counts.
  */
-export function due(entries: readonly LogEntry[], results: MilestoneResults): boolean {
+export function due(entries: readonly LogEntry[], results: MilestoneResults, gate: GateSetting = 'end'): boolean {
+  // [Z11-68]: a run whose gate is off never runs it, so never ends done.
+  if (gate === 'off') return false;
   if (results.rungs.sharp.winrate < GATE_TRIGGER) return false;
   const w = walk(entries);
   if (freshReason(w.previous, w.overrideSince, results.ladderHash) !== null) return true;

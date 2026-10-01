@@ -291,7 +291,8 @@ result, winrate) keep their meaning.
   `w[16j + l] · x[16j + l]` over the whole chunks `j`, in ascending `j`; the elements past the last
   whole chunk are summed on their own, from zero, in ascending order; the lanes fold in halves,
   `acc[i] += acc[i + n]` for `n = 8, 4, 2, 1`; the tail is added to `acc[0]`, then the bias. A
-  layer MAY compute two rows at once, each row's lanes in exactly that order. The accumulation
+  layer MAY compute two rows at once, or one row against four inputs at once ([Z11-70]), each
+  row's lanes for each input in exactly that order. The accumulation
   loops MUST live in functions of their own, marked `#[inline(never)]`, apart from the fold.
 
   *Inlined beside the fold, LLVM vectorised the sixteen lanes as eight pairs — two floats to an
@@ -466,6 +467,7 @@ The binary's commands, each loading one checkpoint and one run's settings:
 | Command | Does |
 | --- | --- |
 | `alphazero play <checkpoint> --config <file> --search play\|milestone` | reads one position from stdin, writes one answer to stdout ([Z11-23]) |
+| `alphazero serve <checkpoint> --config <file> --search play\|milestone` | reads positions from stdin until it ends, answering each as `play` would ([Z11-72]) |
 | `alphazero selfplay <checkpoint> --config <file> --generation G --games N --out <file>` | [Z11-26] |
 | `alphazero latency <checkpoint> <corpus> --config <file> [--simulations N]` | [Z11-40], [Z11-57] |
 | `alphazero throughput <checkpoint> --config <file>` | [Z11-53] |
@@ -489,12 +491,28 @@ The binary's commands, each loading one checkpoint and one run's settings:
   The timing is read by the command around `choose`, not by the library ([Z11-18]).
 - **[Z11-24]** Given the same checkpoint, the same config, the same `--search` and the same
   position, `play` MUST return the same action and value on the same build, on every run.
+- **[Z11-72]** `serve` MUST read positions one after another from stdin, each framed as `play`
+  reads one ([Z11-23]), and answer each in `play`'s four words, flushed, before reading the next.
+  It MUST exit successfully when stdin ends between positions, and with an error after answering
+  every whole position before it when stdin ends inside one or a position is refused or terminal
+  ([Z11-22], [Z11-62]). It loads and parity checks its checkpoint once, and keeps [Z11-69]'s memo
+  across the positions it is handed, emptied whenever a position's round differs from the one
+  before. Its answers' action, simulations and value MUST be exactly those `play` gives each
+  position alone: the search still starts from an empty tree on every move ([Z11-19]), and the
+  memo changes no evaluation. The milestones' and the gate's chooser runs one `serve` per player
+  per game ([Z11-31]), and gives a process up, with an error, if a move goes unanswered for ten
+  minutes.
+
+  *Measured on the machine of record, a `play` spent about 15 ms of a 37 ms milestone move
+  starting, loading its checkpoint and checking parity; and a game's searches repeat each other's
+  evaluations as self-play's do. Forty positions at 800 simulations took 1.9 s as forty `play`s and
+  0.6 s through one `serve`, with identical answers.*
 
 ## Self-play and training
 
 - **[Z11-25]** A run's settings MUST live in one file, `runs/<name>/config.json`, fixed once
-  generation `0` starts ([Z11-58]), and copied into every milestone record. `augment` ([Z11-65])
-  and `from` ([Z11-66]) are settings like any other, fixed with the rest. The shipped settings
+  generation `0` starts ([Z11-58]), and copied into every milestone record. `augment` ([Z11-65]),
+  `from` ([Z11-66]) and `gate` ([Z11-68]) are settings like any other, fixed with the rest. The shipped settings
   are its `width`, `blocks` and `playSimulations`. *Starting values* lists the first run's.
 - **[Z11-26]** `selfplay` MUST play its games with `threads` threads over one shared `Network`,
   each game on `AzulState<Seeded>` seeded from the triple (the config's `seed`, the generation
@@ -508,6 +526,46 @@ The binary's commands, each loading one checkpoint and one run's settings:
   *The generation is in the seed because without it game `i` of every generation deals the same
   bag order: the run would train on the same 500 openings, twenty generations deep in the window,
   for its whole life, and nothing would say so.*
+- **[Z11-69]** Self-play MUST memoise its evaluator calls within each game: a call whose
+  observation and legal set are bit for bit those of an earlier call in the same game MUST be
+  answered with that call's evaluation and MUST NOT reach the network. The memo MAY be emptied at
+  any time, and play empties it at every boundary ply so that it holds one round. Because the
+  forward pass is a pure function of its input ([Z11-10]), every visit and every sample MUST be
+  exactly what the same game gives unmemoised. The memo sits below the search: the search still
+  asks once per node and keeps no transposition table ([Z11-42]). `serve`, and so the milestones
+  and the gate, memoise too ([Z11-72]); `play` and the latency lane do not, so the shipped budget
+  of [Z11-57] is measured on the unmemoised search.
+
+  *Measured on run `fourth`'s generation 20 checkpoint, 59% of a game's calls repeat an earlier
+  one — about a quarter of them transposed move orders inside one search, the rest the subtree of
+  the move just played, searched again from its child — and the memo made twelve games 2.4 times
+  faster with identical visits. Reusing that subtree ([Z11-19]) would save less and change the
+  visits.*
+- **[Z11-70]** Each self-play thread MUST play four games at once, advancing each to its next
+  network call — the memo of [Z11-69] answering what it can on the way — and valuing those calls
+  together in one batched forward pass. The batched pass MUST give every input the bits the
+  single pass gives it alone ([Z11-10]), so a game's samples MUST NOT depend on which games
+  shared its batches, nor on the thread count: `self_play` MUST write exactly the bytes of the
+  same games played one at a time. The search pauses wherever it needs the network and resumes
+  with the evaluation; `search`, which play and the lanes use, is that same search valued one
+  call at a time.
+
+  *At width 256 the weights, about 2.5 MB, outgrow a core's 512 KB L2, and one input at a time
+  the forward pass waits on memory, not on the adder: two rows at a time against four gained
+  nothing, while one row against four inputs, read once for all of them, gained 1.5 to 1.8
+  times at every thread count on the machine of record. Measured on run `fourth`'s generation
+  20 checkpoint with the memo in place, 400 games of self-play at 8 threads took 14.0 s against
+  19.7 s, with byte-identical sample files.*
+- **[Z11-71]** An evaluation MUST compute the policy head's logits only for the actions some
+  request in its forward pass has legal: `evaluate` its own legal set, a batched group of
+  [Z11-70] the union of its requests' legal sets, a boundary request none. Each logit is a row of
+  its own in [Z11-10]'s order and the softmax of [Z11-6] reads only the legal ones, so every
+  evaluation MUST be bit for bit the softmax over the legal set of all 180 logits from `forward`.
+
+  *About 18 of the 180 actions are legal in a self-play position, and the head is about 7% of the
+  forward pass. Measured on run `fourth`'s generation 20 checkpoint: single searches over the
+  latency corpus 9% faster, self-play about 3%, its four requests' union being wider than one
+  legal set; the sample files byte-identical.*
 - **[Z11-27]** A sample file MUST be a sequence of fixed-size little-endian records:
 
   | Field | Type | Content |
@@ -693,10 +751,11 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
   `milestoneSimulations` simulations a move, against each rung of the ladder over the first 100
   seeds of [0005 M5-16]'s wide list, one single-seed `match` per seed with seats alternated, as
   [0008 A8-30] plays its gate. `sharp` and `steady` play at their shipped budgets with the
-  fail-safe out of reach ([0005 M5-8]). The player is a chooser that runs
-  `alphazero play --search milestone` once per move on `toCanonical(fromJSON(position, 0))`,
-  reporting `nodes = simulations`, `depth = 0`, `complete = false`, `curtailed = false`. Games MAY
-  run in parallel processes; each game's result does not depend on it.
+  fail-safe out of reach ([0005 M5-8]). The player is a chooser that hands
+  `toCanonical(fromJSON(position, 0))` to one `alphazero serve --search milestone` per player per
+  game, each move answered as `alphazero play` would answer it ([Z11-72]), reporting
+  `nodes = simulations`, `depth = 0`, `complete = false`, `curtailed = false`. Games MAY run in
+  parallel processes; each game's result does not depend on it.
 - **[Z11-32]** Every rung MUST be played at every milestone.
 
   *A rung played only when the one below it clears a bar makes progress jump by `sharp`'s whole
@@ -854,6 +913,20 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
   which both seats are the player at up to 1.5 s a move, plus a latency pass of about 50 minutes —
   on the order of three to four hours. It runs only when a milestone has already reached 0.50, and
   again only once progress has passed the last failure ([Z11-33]).*
+- **[Z11-68]** A run's config MAY set `gate` to `off`; absent means `end`, the behaviour above.
+  With `off`, the gate is never due: [Z11-37]'s `due` MUST return false whatever `sharp`'s
+  winrate, so the loop never runs the gate and [Z11-33]'s `done` never happens, while its `stop`
+  applies as before. A milestone's reason says the gate is off, and the replay of [Z11-45] MUST
+  read the setting from each entry's own copy of the config. `train init` takes it as
+  `--gate end|off`; a run started from another inherits its parent's unless given ([Z11-66]). A
+  gate run by hand ([Z11-61]) is unaffected, and a passing one still ends the run.
+
+  *Run `third` met intent 0009 and ended `done`. A run that starts from it to find out how strong
+  the player can become would reach 0.50 against `sharp` at its first milestone, pass the gate and
+  end at once. With the gate off it trains until the stop rule says it has plateaued; the gate
+  itself, which costs most of an hour, can be run by hand on any logged milestone when a figure is
+  wanted.*
+
 - **[Z11-36]** After a `stop`, the loop MUST refuse to continue the run unless given
   `--override "<reason>"`, which it MUST record in the log as an entry of its own before the next
   generation runs. The milestone after it starts afresh ([Z11-33]).
@@ -888,8 +961,9 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
 
 - **[Z11-37]** The milestone lane's decision logic MUST be two pure functions, exported from the
   lanes and tested there, so the rule the log applies is the rule the suite checks:
-  - `due(entries, results)`: whether the gate is due, from the run's earlier log entries and this
-    milestone's results. It includes every condition for running the gate: it is false whenever
+  - `due(entries, results, gate)`: whether the gate is due, from the run's earlier log entries,
+    this milestone's results and the run's gate setting ([Z11-68]). It includes every condition
+    for running the gate: it is false whenever the setting is `off`, and whenever
     the milestone's `sharp` winrate is below 0.50, so row 1 of [Z11-33]'s table reads "the gate is
     due and then passes", and the recorded "gate was due" means the same thing at every
     milestone;
@@ -1069,6 +1143,18 @@ this package, and MUST be corrected in the same change.
     file, and a parity file naming another corpus's hash rejected with the corpus error;
   - [Z11-26] by running `selfplay` for two generations of 16 games with the same config and
     checking that all 32 opening deals are pairwise distinct;
+  - [Z11-69] by checking a self-played game's move samples against plain searches of the same
+    positions with the same noise, visit for visit, and that the network was called fewer times;
+  - [Z11-70] by checking the batched forward pass against [Z11-10]'s reference order bit for bit,
+    `evaluate_batch` against `evaluate` at every batch size from 0 to 9, and `self_play`'s bytes
+    against the same games played one at a time;
+  - [Z11-72] by checking `serve`'s answers over a whole game and the start of another against
+    `play`'s for each position, its ends and refusals, `choose_memoised` against `choose` with
+    fewer network calls, and the chooser's moves against one-shot `play`s, with a trained player
+    in each seat, and its failure to start or to answer thrown rather than waited on;
+  - [Z11-71] by checking `evaluate` and `evaluate_batch` against all 180 logits of `forward`
+    under the masked softmax, at an odd width and over legal sets of odd and even sizes, with
+    boundary requests in the batches;
   - [Z11-60] by running `play` with each `--search` on a config whose `playSimulations` and
     `milestoneSimulations` differ, checking the simulation count each reports, and that
     `--simulations` is refused by every command but `latency`;
@@ -1147,6 +1233,8 @@ this package, and MUST be corrected in the same change.
   | The stop rule comparing against the best milestone instead of the previous one | [Z11-45] |
   | An override not resetting the comparison | [Z11-45] |
   | The gate due at every milestone above 0.50, ignoring the last failure | [Z11-45] |
+  | `due` ignoring a run's `gate: off` | [Z11-68]'s case |
+  | A child run dropping its parent's `gate` setting | [Z11-68]'s config case |
   | Progress compared as raw floating-point sums, in `decide`, in the walk, or in `due` | [Z11-33]'s run `first` cases |
   | The inverse permutation, of the displays or of the actions | [Z11-65]'s fixture case |
   | The display flags left in place | [Z11-65]'s fixture case |
@@ -1164,6 +1252,16 @@ this package, and MUST be corrected in the same change.
   | The fold of `finish` summing the lanes in sequence instead of in halves | [Z11-10]'s reference case |
   | The second row of `lanes2` accumulated against the first row's weights | [Z11-10]'s reference case |
   | The unpaired last row of `linear` left uncomputed | [Z11-10]'s reference case, at odd width |
+  | The second input of `lanes_x4` accumulated against the first's activations | [Z11-10]'s reference case, batched; [Z11-70]'s batch-size case |
+  | Every softmax of a batched group taken over the group's first legal set | [Z11-70]'s batch-size case |
+  | A batched game handed the next game's evaluation | [Z11-70]'s self-play case |
+  | A game's samples stored in the next game's slot | [Z11-70]'s self-play case |
+  | The second of a pair of listed rows given the first row's bias | [Z11-71]'s case, by its fixture's parity check |
+  | The unpaired last listed row left uncomputed | [Z11-71]'s case |
+  | A batched group's wanted rows taken from its first request alone | [Z11-71]'s case |
+  | The memo's key built from the first 100 observation floats alone | [Z11-72]'s `serve` and `choose_memoised` cases |
+  | `choose_memoised` never remembering the network's answer | [Z11-72]'s `choose_memoised` case |
+  | The chooser's worker not reporting its process's exit, or its failure to start | [Z11-72]'s chooser failure case |
   | The check that `.cargo/config.toml`'s section holds exactly the AVX2 line, or holds no other section, weakened | [Z11-47]'s build-flag case |
 
 - **[Z11-49]** Every requirement in this document MUST be either cited by at least one test — Rust,

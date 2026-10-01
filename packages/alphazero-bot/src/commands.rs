@@ -8,10 +8,11 @@ use std::time::Instant;
 use azul_alphazero::config::{RunConfig, SearchKind, Settings, settings};
 use azul_alphazero::network::{Evaluation, Evaluator, Network};
 use azul_alphazero::parity;
+use azul_alphazero::memo::{Memo, choose_memoised};
 use azul_alphazero::samples::aux_path;
-use azul_alphazero::search::choose;
-use azul_alphazero::selfplay::self_play;
-use azul_alphazero::wire::{frame, read_canonical, read_messages};
+use azul_alphazero::search::{SearchResult, choose};
+use azul_alphazero::selfplay::{GAMES_PER_THREAD, self_play};
+use azul_alphazero::wire::{frame, read_canonical, read_message, read_messages};
 use azul_engine::{AzulState, Seeded};
 use clap::{Parser, Subcommand, ValueEnum};
 use serde::Serialize;
@@ -36,6 +37,15 @@ enum Search {
 enum Command {
     /// One position on stdin, one answer on stdout ([Z11-23]).
     Play {
+        checkpoint: PathBuf,
+        #[arg(long)]
+        config: PathBuf,
+        #[arg(long, value_enum)]
+        search: Search,
+    },
+    /// Positions on stdin one after another, each answered on stdout as `play`
+    /// answers it, until stdin ends ([Z11-72]).
+    Serve {
         checkpoint: PathBuf,
         #[arg(long)]
         config: PathBuf,
@@ -116,6 +126,7 @@ fn load(checkpoint: &Path, config: &Path) -> Result<Loaded, String> {
 pub fn run(cli: Cli) -> Result<(), String> {
     match cli.command {
         Command::Play { checkpoint, config, search } => play(&checkpoint, &config, search),
+        Command::Serve { checkpoint, config, search } => serve(&checkpoint, &config, search),
         Command::Selfplay { checkpoint, config, generation, games, out } => {
             selfplay(&checkpoint, &config, generation, games, &out)
         }
@@ -126,32 +137,72 @@ pub fn run(cli: Cli) -> Result<(), String> {
     }
 }
 
-/// [Z11-23]: one position in, four words out, nothing kept.
-fn play(checkpoint: &Path, config: &Path, search: Search) -> Result<(), String> {
-    let kind = match search {
+fn search_kind(search: Search) -> SearchKind {
+    match search {
         Search::Play => SearchKind::Play,
         Search::Milestone => SearchKind::Milestone,
-    };
+    }
+}
+
+/// A canonical block as the state `play` searches ([Z11-23]).
+fn position(block: &[u32]) -> Result<AzulState<Seeded>, String> {
+    let canonical = read_canonical(block)?;
+    AzulState::from_canonical(&canonical, Seeded::new(0)).map_err(|e| format!("the position was refused: {e:?}"))
+}
+
+const TERMINAL: &str = "the position is terminal: there is no move to choose ([Z11-62])";
+
+/// The four words of [Z11-23]: the action, the simulations run, the root
+/// value's bits and the search's own milliseconds.
+fn answer(out: &mut impl Write, result: &SearchResult, started: Instant) -> Result<(), String> {
+    let ms = started.elapsed().as_secs_f64() * 1000.0;
+    let simulations: u32 = result.visits.iter().sum();
+    let words = [u32::from(result.action), simulations, result.value.to_bits(), ms.round() as u32];
+    out.write_all(&frame(&words)).and_then(|()| out.flush()).map_err(|e| format!("writing stdout: {e}"))
+}
+
+/// [Z11-23]: one position in, four words out, nothing kept.
+fn play(checkpoint: &Path, config: &Path, search: Search) -> Result<(), String> {
     let loaded = load(checkpoint, config)?;
-    let s = settings(&loaded.config, kind)?;
+    let s = settings(&loaded.config, search_kind(search))?;
     let mut input = Vec::new();
     std::io::stdin().read_to_end(&mut input).map_err(|e| format!("reading stdin: {e}"))?;
     let messages = read_messages(&input)?;
     let [block] = messages.as_slice() else {
         return Err(format!("expected one message on stdin, got {}", messages.len()));
     };
-    let canonical = read_canonical(block)?;
-    let state = AzulState::from_canonical(&canonical, Seeded::new(0))
-        .map_err(|e| format!("the position was refused: {e:?}"))?;
+    let state = position(block)?;
     let started = Instant::now();
     let Some(result) = choose(&loaded.net, &state, &s.search) else {
-        return Err("the position is terminal: there is no move to choose ([Z11-62])".into());
+        return Err(TERMINAL.into());
     };
-    let ms = started.elapsed().as_secs_f64() * 1000.0;
-    let simulations: u32 = result.visits.iter().sum();
-    let words = [u32::from(result.action), simulations, result.value.to_bits(), ms.round() as u32];
+    answer(&mut std::io::stdout().lock(), &result, started)
+}
+
+/// [Z11-72]: `play` for a whole game in one process. The checkpoint is loaded
+/// and parity checked once; each position is answered before the next is
+/// read, from a memo of the evaluations made so far ([Z11-69]), emptied
+/// whenever a position's round differs from the one before it.
+fn serve(checkpoint: &Path, config: &Path, search: Search) -> Result<(), String> {
+    let loaded = load(checkpoint, config)?;
+    let s = settings(&loaded.config, search_kind(search))?;
+    let mut input = std::io::stdin().lock();
     let mut out = std::io::stdout().lock();
-    out.write_all(&frame(&words)).and_then(|()| out.flush()).map_err(|e| format!("writing stdout: {e}"))
+    let mut memo = Memo::new();
+    let mut round = None;
+    while let Some(block) = read_message(&mut input)? {
+        let state = position(&block)?;
+        if round != Some(state.round_index()) {
+            memo.clear();
+            round = Some(state.round_index());
+        }
+        let started = Instant::now();
+        let Some(result) = choose_memoised(&loaded.net, &state, &s.search, &mut memo) else {
+            return Err(TERMINAL.into());
+        };
+        answer(&mut out, &result, started)?;
+    }
+    Ok(())
 }
 
 /// [Z11-26].
@@ -248,7 +299,8 @@ fn throughput(checkpoint: &Path, config: &Path) -> Result<(), String> {
     }
     let per_second = evaluations as f64 / started.elapsed().as_secs_f64();
 
-    let games = u64::from(s.threads) * 2;
+    // Enough games that every thread fills its batch twice over ([Z11-70]).
+    let games = u64::from(s.threads) * GAMES_PER_THREAD as u64 * 2;
     let started = Instant::now();
     // Seeded apart from any generation a run will play: the games are thrown away.
     let (bytes, _) = self_play(&loaded.net, &s, loaded.config.seed ^ 0x7468_726f_7567_6870, u64::MAX, games as usize);
