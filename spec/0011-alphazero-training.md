@@ -291,7 +291,8 @@ result, winrate) keep their meaning.
   `w[16j + l] · x[16j + l]` over the whole chunks `j`, in ascending `j`; the elements past the last
   whole chunk are summed on their own, from zero, in ascending order; the lanes fold in halves,
   `acc[i] += acc[i + n]` for `n = 8, 4, 2, 1`; the tail is added to `acc[0]`, then the bias. A
-  layer MAY compute two rows at once, each row's lanes in exactly that order. The accumulation
+  layer MAY compute two rows at once, or one row against four inputs at once ([Z11-70]), each
+  row's lanes for each input in exactly that order. The accumulation
   loops MUST live in functions of their own, marked `#[inline(never)]`, apart from the fold.
 
   *Inlined beside the fold, LLVM vectorised the sixteen lanes as eight pairs — two floats to an
@@ -522,6 +523,21 @@ The binary's commands, each loading one checkpoint and one run's settings:
   the move just played, searched again from its child — and the memo made twelve games 2.4 times
   faster with identical visits. Reusing that subtree ([Z11-19]) would save less and change the
   visits.*
+- **[Z11-70]** Each self-play thread MUST play four games at once, advancing each to its next
+  network call — the memo of [Z11-69] answering what it can on the way — and valuing those calls
+  together in one batched forward pass. The batched pass MUST give every input the bits the
+  single pass gives it alone ([Z11-10]), so a game's samples MUST NOT depend on which games
+  shared its batches, nor on the thread count: `self_play` MUST write exactly the bytes of the
+  same games played one at a time. The search pauses wherever it needs the network and resumes
+  with the evaluation; `search`, which play and the lanes use, is that same search valued one
+  call at a time.
+
+  *At width 256 the weights, about 2.5 MB, outgrow a core's 512 KB L2, and one input at a time
+  the forward pass waits on memory, not on the adder: two rows at a time against four gained
+  nothing, while one row against four inputs, read once for all of them, gained 1.5 to 1.8
+  times at every thread count on the machine of record. Measured on run `fourth`'s generation
+  20 checkpoint with the memo in place, 400 games of self-play at 8 threads took 14.0 s against
+  19.7 s, with byte-identical sample files.*
 - **[Z11-27]** A sample file MUST be a sequence of fixed-size little-endian records:
 
   | Field | Type | Content |
@@ -1060,6 +1076,9 @@ this package, and MUST be corrected in the same change.
     checking that all 32 opening deals are pairwise distinct;
   - [Z11-69] by checking a self-played game's move samples against plain searches of the same
     positions with the same noise, visit for visit, and that the network was called fewer times;
+  - [Z11-70] by checking the batched forward pass against [Z11-10]'s reference order bit for bit,
+    `evaluate_batch` against `evaluate` at every batch size from 0 to 9, and `self_play`'s bytes
+    against the same games played one at a time;
   - [Z11-60] by running `play` with each `--search` on a config whose `playSimulations` and
     `milestoneSimulations` differ, checking the simulation count each reports, and that
     `--simulations` is refused by every command but `latency`;
@@ -1151,6 +1170,10 @@ this package, and MUST be corrected in the same change.
   | The fold of `finish` summing the lanes in sequence instead of in halves | [Z11-10]'s reference case |
   | The second row of `lanes2` accumulated against the first row's weights | [Z11-10]'s reference case |
   | The unpaired last row of `linear` left uncomputed | [Z11-10]'s reference case, at odd width |
+  | The second input of `lanes_x4` accumulated against the first's activations | [Z11-10]'s reference case, batched; [Z11-70]'s batch-size case |
+  | Every softmax of a batched group taken over the group's first legal set | [Z11-70]'s batch-size case |
+  | A batched game handed the next game's evaluation | [Z11-70]'s self-play case |
+  | A game's samples stored in the next game's slot | [Z11-70]'s self-play case |
   | The check that `.cargo/config.toml`'s section holds exactly the AVX2 line, or holds no other section, weakened | [Z11-47]'s build-flag case |
 
 - **[Z11-49]** Every requirement in this document MUST be either cited by at least one test — Rust,

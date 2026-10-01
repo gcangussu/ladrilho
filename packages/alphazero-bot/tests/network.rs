@@ -4,7 +4,7 @@
 
 mod support;
 
-use azul_alphazero::network::{Evaluation, Evaluator, LoadError, Network};
+use azul_alphazero::network::{BATCH, Evaluation, Evaluator, LoadError, Network, Request};
 use azul_alphazero::parity::{corpus, corpus_sha256, read_parity};
 use azul_engine::AzulState;
 use support::{crate_dir, fixture, fixture_paths, read};
@@ -265,6 +265,9 @@ fn synthetic(width: u32, blocks: u32, seed: u64) -> (Vec<u8>, Vec<u8>) {
 /// for synthetic networks of odd width, whose last row goes without a partner
 /// and whose hidden inputs end in a tail past the last whole chunk.
 ///
+/// [Z11-70]: `forward_batch` is the same reference order, bit for bit, on
+/// every input of each group of four.
+///
 /// Mutations, seen red ([Z11-48]), each in a copy with its anchor confirmed:
 /// in `network.rs`, `finish` summing the lanes in sequence
 /// (`for i in 1..LANES { acc[0] += acc[i] }`) instead of folding them in
@@ -288,6 +291,19 @@ fn the_forward_pass_is_the_reference_order_bit_for_bit() {
                 assert_eq!(ours.to_bits(), theirs.to_bits(), "{name}, input {i}, logit {a}: {ours} against {theirs}");
             }
             assert_eq!(value.to_bits(), want_value.to_bits(), "{name}, input {i}, value: {value} against {want_value}");
+        }
+        // [Z11-70]: four at a time, each input the same bits again.
+        let mut batch = [[0f32; 180]; BATCH];
+        for start in (0..inputs.len()).step_by(BATCH) {
+            let at = |k: usize| (start + k) % inputs.len();
+            let values = net.forward_batch(std::array::from_fn(|k| &inputs[at(k)]), &mut batch);
+            for k in 0..BATCH {
+                let (want, want_value) = reference_forward(checkpoint, &inputs[at(k)]);
+                for (a, (ours, theirs)) in batch[k].iter().zip(&want).enumerate() {
+                    assert_eq!(ours.to_bits(), theirs.to_bits(), "{name}, batched input {}, logit {a}: {ours} against {theirs}", at(k));
+                }
+                assert_eq!(values[k].to_bits(), want_value.to_bits(), "{name}, batched input {}, value", at(k));
+            }
         }
     };
     let all: Vec<[f32; 182]> = corpus_inputs.iter().chain(&positions).copied().collect();
@@ -320,5 +336,39 @@ fn the_forward_pass_is_the_reference_order_bit_for_bit() {
         let bytes = read(&c);
         let net = Network::load(&bytes, &read(&c.with_extension("parity"))).unwrap();
         check(&c.display().to_string(), &bytes, &net, &corpus_inputs);
+    }
+}
+
+/// [Z11-70]: `evaluate_batch` answers every request exactly as `evaluate`
+/// answers it alone, for every batch size from 0 to 9 — whole groups of four,
+/// a short last group padded, and a last request on its own — with expanding
+/// and boundary requests (no legal set) mixed.
+///
+/// Mutations, seen red ([Z11-48]), each in a copy with its anchor confirmed:
+/// in `lanes_x4`, the second input accumulated against the first's
+/// activations (`a1[l] += p[l] * x0[j][l]`), which the bit comparison above
+/// also catches; and in `evaluate_batch`, every softmax of a group taken over
+/// the group's first legal set (`requests[at].1`).
+#[test]
+fn a_batch_is_each_request_alone() {
+    let net = fixture();
+    let states = support::game_positions(11);
+    let inputs: Vec<([f32; 182], Vec<u8>)> = states
+        .iter()
+        .enumerate()
+        .map(|(i, s)| (s.encode(), if i % 3 == 2 { Vec::new() } else { s.legal_actions().as_slice().to_vec() }))
+        .collect();
+    for size in 0..=9 {
+        for start in [0, 5, 17] {
+            let group: Vec<Request<'_>> =
+                (0..size).map(|k| &inputs[(start + k) % inputs.len()]).map(|(o, l)| (o, &l[..])).collect();
+            let mut batched = vec![Evaluation::default(); size];
+            net.evaluate_batch(&group, &mut batched);
+            for (k, &(o, l)) in group.iter().enumerate() {
+                let mut alone = Evaluation::default();
+                net.evaluate(o, l, &mut alone);
+                assert_eq!(batched[k], alone, "batch of {size} from {start}, request {k}");
+            }
+        }
     }
 }
