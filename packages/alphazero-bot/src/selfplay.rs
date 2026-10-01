@@ -2,6 +2,7 @@
 //! itself, each on its own seeded state, written as samples ([Z11-27]).
 
 use std::collections::HashMap;
+use std::hash::{BuildHasherDefault, Hasher};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -72,12 +73,58 @@ fn pick(visits: &[u32; ACTION_SPACE], ply: usize, settings: &Settings, rng: &mut
 /// rest the tree of the move just played, searched again from its child.
 #[derive(Default)]
 struct Memo {
-    seen: HashMap<Box<[u32]>, Evaluation>,
+    seen: HashMap<Box<[u32]>, Evaluation, BuildHasherDefault<KeyHasher>>,
 }
 
-/// The input exactly: every observation bit, then the legal set.
-fn key(observation: &[f32; ENCODED_SIZE], legal: &[Action]) -> Box<[u32]> {
-    observation.iter().map(|f| f.to_bits()).chain(legal.iter().map(|&a| u32::from(a))).collect()
+/// The longest key: every observation bit, then at most every action.
+const KEY_WORDS: usize = ENCODED_SIZE + ACTION_SPACE;
+
+/// The input exactly: every observation bit, then the legal set, written into
+/// `buf`. Built on the stack, so a lookup that hits allocates nothing; only a
+/// miss copies its key out to be remembered.
+fn key<'a>(observation: &[f32; ENCODED_SIZE], legal: &[Action], buf: &'a mut [u32; KEY_WORDS]) -> &'a [u32] {
+    for (k, f) in buf.iter_mut().zip(observation) {
+        *k = f.to_bits();
+    }
+    for (k, &a) in buf[ENCODED_SIZE..].iter_mut().zip(legal) {
+        *k = u32::from(a);
+    }
+    &buf[..ENCODED_SIZE + legal.len().min(ACTION_SPACE)]
+}
+
+/// The memo's hasher: a multiply-and-rotate over eight bytes at a time, in the
+/// manner of rustc's own FxHash. The keys are the crate's own inputs, never an
+/// adversary's, so SipHash's protection buys nothing here, and costs a
+/// fifth of a microsecond a lookup. Fixed, so it seeds nothing from the clock
+/// or the system; a collision costs only the full key comparison the map
+/// makes anyway.
+#[derive(Default)]
+struct KeyHasher(u64);
+
+impl KeyHasher {
+    fn add(&mut self, word: u64) {
+        self.0 = (self.0.rotate_left(5) ^ word).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
+    }
+}
+
+impl Hasher for KeyHasher {
+    fn write(&mut self, bytes: &[u8]) {
+        let (words, rest) = bytes.as_chunks::<8>();
+        for w in words {
+            self.add(u64::from_le_bytes(*w));
+        }
+        for &b in rest {
+            self.add(u64::from(b));
+        }
+    }
+
+    fn write_usize(&mut self, n: usize) {
+        self.add(n as u64);
+    }
+
+    fn finish(&self) -> u64 {
+        self.0
+    }
 }
 
 /// How many games each self-play thread plays at once, their leaves valued
@@ -132,11 +179,12 @@ impl Game {
                 continue;
             };
             if let Some((observation, legal)) = search.wants() {
-                let k = key(observation, legal);
-                match self.memo.seen.get(&k) {
+                let mut buf = [0u32; KEY_WORDS];
+                let k = key(observation, legal, &mut buf);
+                match self.memo.seen.get(k) {
                     Some(e) => search.supply(e),
                     None => {
-                        self.waiting = Some(k);
+                        self.waiting = Some(k.into());
                         return true;
                     }
                 }
