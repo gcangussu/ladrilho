@@ -212,6 +212,37 @@ fn dot(w: &[f32], x: &[f32]) -> f32 {
     finish(lanes(wc, xc), wt, xt)
 }
 
+/// Every action, ascending: the policy head's rows when all are wanted.
+const ALL_ACTIONS: [Action; POLICY] = {
+    let mut all = [0; POLICY];
+    let mut a = 0;
+    while a < POLICY {
+        all[a] = a as Action;
+        a += 1;
+    }
+    all
+};
+
+/// `linear` on the listed rows only, two at a time, the others of `out` left
+/// as they were. A row's bits do not depend on its partner ([Z11-71]).
+fn linear_rows(w: &[f32], b: &[f32], x: &[f32], out: &mut [f32], rows: &[Action]) {
+    let n = x.len();
+    let (xc, xt) = x.as_chunks::<LANES>();
+    let (pairs, last) = rows.as_chunks::<2>();
+    for &[r0, r1] in pairs {
+        let (o0, o1) = (usize::from(r0), usize::from(r1));
+        let (c0, t0) = w[o0 * n..(o0 + 1) * n].as_chunks::<LANES>();
+        let (c1, t1) = w[o1 * n..(o1 + 1) * n].as_chunks::<LANES>();
+        let [a0, a1] = lanes2(c0, c1, xc);
+        out[o0] = finish(a0, t0, xt) + b[o0];
+        out[o1] = finish(a1, t1, xt) + b[o1];
+    }
+    if let [r] = last {
+        let o = usize::from(*r);
+        out[o] = dot(&w[o * n..(o + 1) * n], x) + b[o];
+    }
+}
+
 /// `out = W · x + b`, `W` row-major `[out][in]`, two rows at a time.
 fn linear(w: &[f32], b: &[f32], x: &[f32], out: &mut [f32]) {
     let n = x.len();
@@ -269,10 +300,16 @@ fn lanes_x4(w: &[[f32; LANES]], x: [&[[f32; LANES]]; BATCH]) -> [[f32; LANES]; B
 /// `linear` for `BATCH` inputs at once, one row at a time: every output is the
 /// bits `linear` gives its input alone.
 fn linear_x4(w: &[f32], b: &[f32], x: [&[f32]; BATCH], out: [&mut [f32]; BATCH]) {
+    let m = out[0].len();
+    linear_x4_rows(w, b, x, out, 0..m);
+}
+
+/// `linear_x4` on the listed rows only, the others of `out` left as they were.
+fn linear_x4_rows(w: &[f32], b: &[f32], x: [&[f32]; BATCH], out: [&mut [f32]; BATCH], rows: impl IntoIterator<Item = usize>) {
     let n = x[0].len();
     let split = x.map(|v| v.as_chunks::<LANES>());
     let chunks = split.map(|(c, _)| c);
-    for o in 0..out[0].len() {
+    for o in rows {
         let (c, t) = w[o * n..(o + 1) * n].as_chunks::<LANES>();
         let acc = lanes_x4(c, chunks);
         for k in 0..BATCH {
@@ -367,6 +404,12 @@ impl Network {
     /// Every logit, illegal ones included, and the value. Allocates nothing:
     /// the activations live on the stack ([Z11-10]).
     pub fn forward(&self, x: &[f32; ENCODED_SIZE], logits: &mut [f32; POLICY]) -> f32 {
+        self.forward_rows(x, &ALL_ACTIONS, logits)
+    }
+
+    /// [Z11-71]: `forward` with only the listed actions' logits computed, the
+    /// rest of `logits` left as they were. Each is the bits `forward` gives it.
+    fn forward_rows(&self, x: &[f32; ENCODED_SIZE], rows: &[Action], logits: &mut [f32; POLICY]) -> f32 {
         let l = &self.layout;
         let w = &self.weights;
         let n = l.width;
@@ -385,7 +428,7 @@ impl Network {
                 h[i] = (h[i] + u[i]).max(0.0);
             }
         }
-        linear(&w[l.pol_w..l.pol_b], &w[l.pol_b..l.pol_b + POLICY], h, logits);
+        linear_rows(&w[l.pol_w..l.pol_b], &w[l.pol_b..l.pol_b + POLICY], h, logits, rows);
         let mut v = [0f32; VALUE_HIDDEN];
         linear(&w[l.v1_w..l.v1_b], &w[l.v1_b..l.v1_b + VALUE_HIDDEN], h, &mut v);
         relu(&mut v);
@@ -396,6 +439,17 @@ impl Network {
     /// [Z11-70]: `forward` on `BATCH` inputs at once, each output the bits
     /// `forward` gives that input alone. Allocates nothing either ([Z11-10]).
     pub fn forward_batch(&self, x: [&[f32; ENCODED_SIZE]; BATCH], logits: &mut [[f32; POLICY]; BATCH]) -> [f32; BATCH] {
+        self.forward_batch_rows(x, &[true; POLICY], logits)
+    }
+
+    /// [Z11-71]: `forward_batch` with only the logits `wanted` marks computed,
+    /// for every input, the rest of `logits` left as they were.
+    fn forward_batch_rows(
+        &self,
+        x: [&[f32; ENCODED_SIZE]; BATCH],
+        wanted: &[bool; POLICY],
+        logits: &mut [[f32; POLICY]; BATCH],
+    ) -> [f32; BATCH] {
         let l = &self.layout;
         let w = &self.weights;
         let n = l.width;
@@ -421,7 +475,13 @@ impl Network {
             }
         }
         let h = h.each_ref().map(|r| &r[..n]);
-        linear_x4(&w[l.pol_w..l.pol_b], &w[l.pol_b..l.pol_b + POLICY], h, logits.each_mut().map(|r| &mut r[..]));
+        linear_x4_rows(
+            &w[l.pol_w..l.pol_b],
+            &w[l.pol_b..l.pol_b + POLICY],
+            h,
+            logits.each_mut().map(|r| &mut r[..]),
+            (0..POLICY).filter(|&a| wanted[a]),
+        );
         let mut v = [[0f32; VALUE_HIDDEN]; BATCH];
         linear_x4(&w[l.v1_w..l.v1_b], &w[l.v1_b..l.v1_b + VALUE_HIDDEN], h, v.each_mut().map(|r| &mut r[..]));
         for r in &mut v {
@@ -473,13 +533,15 @@ pub fn masked_softmax(logits: &[f32; POLICY], legal: &[Action], policy: &mut [f3
 }
 
 impl Evaluator for Network {
+    /// The legal actions' logits only: the softmax reads no other ([Z11-71]).
     fn evaluate(&self, observation: &[f32; ENCODED_SIZE], legal: &[Action], out: &mut Evaluation) {
         let mut logits = [0f32; POLICY];
-        out.value = self.forward(observation, &mut logits);
+        out.value = self.forward_rows(observation, legal, &mut logits);
         masked_softmax(&logits, legal, &mut out.policy);
     }
 
-    /// `BATCH` at a time. A short last group of two or more is padded with
+    /// `BATCH` at a time, each group computing the logits of the actions legal
+    /// in any of its requests ([Z11-71]). A short last group of two or more is padded with
     /// its own last request, whose extra answers are dropped: a batch of four
     /// costs less than three passes alone. A last request on its own goes
     /// through `evaluate`.
@@ -495,7 +557,13 @@ impl Evaluator for Network {
                 break;
             }
             let pick = |k: usize| requests[at + k.min(group - 1)];
-            let values = self.forward_batch(std::array::from_fn(|k| pick(k).0), &mut logits);
+            let mut wanted = [false; POLICY];
+            for &(_, legal) in &requests[at..at + group] {
+                for &a in legal {
+                    wanted[usize::from(a)] = true;
+                }
+            }
+            let values = self.forward_batch_rows(std::array::from_fn(|k| pick(k).0), &wanted, &mut logits);
             for k in 0..group {
                 out[at + k].value = values[k];
                 masked_softmax(&logits[k], requests[at + k].1, &mut out[at + k].policy);
