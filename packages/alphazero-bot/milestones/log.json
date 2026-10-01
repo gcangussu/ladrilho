@@ -25586,5 +25586,957 @@
     },
     "decision": "continue",
     "reason": "progress 3.00 (sharp 0.40); improved on 2.92 at generation 60; sharp below 0.50, so no gate: continue."
+  },
+  {
+    "kind": "milestone",
+    "run": "third",
+    "date": "2026-10-01T04:30:26.122Z",
+    "generation": 80,
+    "sinceRunStartSeconds": 38737,
+    "milestoneSeconds": 479,
+    "games": 240000,
+    "samples": 13652824,
+    "config": {
+      "width": 256,
+      "blocks": 4,
+      "seed": 28306305796374,
+      "playSimulations": 11300,
+      "selfPlaySimulations": 200,
+      "milestoneSimulations": 800,
+      "cpuct": 1.25,
+      "fpu": 0.25,
+      "alpha": 0.3,
+      "epsilon": 0.25,
+      "tempPlies": 10,
+      "tau": 1,
+      "gamesPerGeneration": 3000,
+      "window": 20,
+      "stepsPerGeneration": 1000,
+      "batch": 512,
+      "boundaryWeight": 1,
+      "optimiser": "sgd",
+      "momentum": 0.9,
+      "learningRate": 0.02,
+      "weightDecay": 0.0001,
+      "milestoneEvery": 10,
+      "threads": 8,
+      "torchThreads": 4,
+      "maxGenerationMinutes": 30,
+      "augment": "displays",
+      "from": {
+        "run": "second",
+        "generation": 70,
+        "checkpointSha256": "b84d688db021c48c72f2fe85b9540a4da9110c60cdd6af11c0cc22ac2d2f1615",
+        "windowGenerations": [
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69
+        ],
+        "latencyRun": "first",
+        "changes": {
+          "gamesPerGeneration": {
+            "parent": 500,
+            "run": 3000
+          }
+        }
+      }
+    },
+    "simulations": {
+      "800": 10545
+    },
+    "results": {
+      "uniformRandom": {
+        "games": 100,
+        "wins": 100,
+        "losses": 0,
+        "draws": 0,
+        "winrate": 1,
+        "lowerBound": 0.9736572792168257,
+        "meanScore": [
+          31.16,
+          0.29
+        ],
+        "seats": [
+          50,
+          50
+        ],
+        "bySeat": [
+          1,
+          1
+        ],
+        "plies": 5186,
+        "work": [
+          {
+            "nodes": 2064000,
+            "ms": 211207.41582000017
+          },
+          {
+            "nodes": 0,
+            "ms": 6.313650999984702
+          }
+        ],
+        "curtailed": 0,
+        "lostSeeds": []
+      },
+      "greedy": {
+        "games": 100,
+        "wins": 95,
+        "losses": 5,
+        "draws": 0,
+        "winrate": 0.95,
+        "lowerBound": 0.9008389147209472,
+        "meanScore": [
+          57.52,
+          45.54
+        ],
+        "seats": [
+          50,
+          50
+        ],
+        "bySeat": [
+          0.98,
+          0.92
+        ],
+        "plies": 5196,
+        "work": [
+          {
+            "nodes": 2076800,
+            "ms": 198263.6696499999
+          },
+          {
+            "nodes": 65272,
+            "ms": 382.21894700008534
+          }
+        ],
+        "curtailed": 0,
+        "lostSeeds": [
+          20224288,
+          20433746,
+          23889803,
+          24622906,
+          25251280
+        ]
+      },
+      "steady": {
+        "games": 100,
+        "wins": 84,
+        "losses": 16,
+        "draws": 0,
+        "winrate": 0.84,
+        "lowerBound": 0.7708713799517316,
+        "meanScore": [
+          46.53,
+          40.52
+        ],
+        "seats": [
+          50,
+          50
+        ],
+        "bySeat": [
+          0.82,
+          0.86
+        ],
+        "plies": 5230,
+        "work": [
+          {
+            "nodes": 2108800,
+            "ms": 188995.329305
+          },
+          {
+            "nodes": 2814290,
+            "ms": 10943.10418999983
+          }
+        ],
+        "curtailed": 0,
+        "lostSeeds": [
+          19910101,
+          21481036,
+          21795223,
+          22004681,
+          22214139,
+          22318868,
+          23261429,
+          23785074,
+          25984383,
+          26089112,
+          26612757,
+          26822215,
+          27974234,
+          29021524,
+          29230982,
+          29754627
+        ]
+      },
+      "sharp": {
+        "games": 100,
+        "wins": 47,
+        "losses": 53,
+        "draws": 0,
+        "winrate": 0.47,
+        "lowerBound": 0.38978042856762823,
+        "meanScore": [
+          39.38,
+          44.95
+        ],
+        "seats": [
+          50,
+          50
+        ],
+        "bySeat": [
+          0.56,
+          0.38
+        ],
+        "plies": 5303,
+        "work": [
+          {
+            "nodes": 2186400,
+            "ms": 128295.65023499954
+          },
+          {
+            "nodes": 415132833,
+            "ms": 1132104.3217120003
+          }
+        ],
+        "curtailed": 0,
+        "lostSeeds": [
+          19910101,
+          20014830,
+          20119559,
+          20224288,
+          20433746,
+          20643204,
+          20957391,
+          21062120,
+          21166849,
+          21376307,
+          21481036,
+          21585765,
+          22004681,
+          22109410,
+          22214139,
+          22318868,
+          22528326,
+          22947242,
+          23156700,
+          23261429,
+          23470887,
+          23680345,
+          23785074,
+          23889803,
+          24203990,
+          24308719,
+          24413448,
+          24622906,
+          25041822,
+          25251280,
+          25460738,
+          25670196,
+          25879654,
+          25984383,
+          26089112,
+          26717486,
+          26822215,
+          27241131,
+          27345860,
+          27450589,
+          27555318,
+          27660047,
+          28183692,
+          28707337,
+          28812066,
+          28916795,
+          29021524,
+          29335711,
+          29440440,
+          29649898,
+          29859356,
+          30068814,
+          30173543
+        ]
+      }
+    },
+    "ladderHash": "4e33b3ecc841e6df298290c59d3b45ea0d212734c717bd96b200c8306952b0e9",
+    "progress": 3.26,
+    "previousProgress": 3,
+    "freshStart": {
+      "fresh": false,
+      "why": null
+    },
+    "gate": {
+      "due": false,
+      "ran": false,
+      "outcome": null
+    },
+    "losses": [
+      {
+        "generation": 70,
+        "before": {
+          "policy": 1.5497695193194492,
+          "value": 0.7234346296375626,
+          "samples": 170956,
+          "byRound": {
+            "network": 0.7234346331648362,
+            "formula": 0.8590967919539059,
+            "rounds": [
+              {
+                "round": 0,
+                "samples": 34198,
+                "network": 0.9197288417402236,
+                "formula": 0.9727941609368642
+              },
+              {
+                "round": 1,
+                "samples": 35075,
+                "network": 0.8384896525392482,
+                "formula": 0.9523719342969749
+              },
+              {
+                "round": 2,
+                "samples": 34067,
+                "network": 0.7758515838124147,
+                "formula": 0.9158551634111671
+              },
+              {
+                "round": 3,
+                "samples": 34457,
+                "network": 0.6259507235871643,
+                "formula": 0.7826751152514789
+              },
+              {
+                "round": 4,
+                "samples": 32883,
+                "network": 0.4467112991042043,
+                "formula": 0.6639826465126908
+              },
+              {
+                "round": 5,
+                "samples": 266,
+                "network": 0.38604891958371745,
+                "formula": 0.695968192238434
+              },
+              {
+                "round": 6,
+                "samples": 10,
+                "network": 2.136300524816646,
+                "formula": 0.7747651526008251
+              }
+            ]
+          }
+        },
+        "training": {
+          "policy": 1.569842614889145,
+          "value": 0.6955576384663582,
+          "steps": 1000,
+          "batch": 512
+        },
+        "window": {
+          "generations": [
+            51,
+            70
+          ],
+          "samples": 3423487
+        },
+        "drawRatio": 0.14955511734088664
+      },
+      {
+        "generation": 71,
+        "before": {
+          "policy": 1.5349114469239002,
+          "value": 0.7373343662055224,
+          "samples": 171177,
+          "byRound": {
+            "network": 0.7373343562106339,
+            "formula": 0.8610678310726059,
+            "rounds": [
+              {
+                "round": 0,
+                "samples": 34425,
+                "network": 0.928492916128224,
+                "formula": 0.9741214605801558
+              },
+              {
+                "round": 1,
+                "samples": 34958,
+                "network": 0.8648146472033783,
+                "formula": 0.9584808799875218
+              },
+              {
+                "round": 2,
+                "samples": 34063,
+                "network": 0.784587495943952,
+                "formula": 0.8924292599325536
+              },
+              {
+                "round": 3,
+                "samples": 34546,
+                "network": 0.6470227487413351,
+                "formula": 0.7936968047403581
+              },
+              {
+                "round": 4,
+                "samples": 32917,
+                "network": 0.44886026024676,
+                "formula": 0.6791009300870205
+              },
+              {
+                "round": 5,
+                "samples": 268,
+                "network": 0.621414475814477,
+                "formula": 0.6808553101581344
+              }
+            ]
+          }
+        },
+        "training": {
+          "policy": 1.5671486401557921,
+          "value": 0.6964302707314491,
+          "steps": 1000,
+          "batch": 512
+        },
+        "window": {
+          "generations": [
+            52,
+            71
+          ],
+          "samples": 3423882
+        },
+        "drawRatio": 0.14953786374647257
+      },
+      {
+        "generation": 72,
+        "before": {
+          "policy": 1.531372960326604,
+          "value": 0.7304588351409627,
+          "samples": 172271,
+          "byRound": {
+            "network": 0.7304588396644077,
+            "formula": 0.8656902114445411,
+            "rounds": [
+              {
+                "round": 0,
+                "samples": 34597,
+                "network": 0.9213507539643929,
+                "formula": 0.9739467737452316
+              },
+              {
+                "round": 1,
+                "samples": 35165,
+                "network": 0.8410682696655217,
+                "formula": 0.9489581808629841
+              },
+              {
+                "round": 2,
+                "samples": 34555,
+                "network": 0.7799222436743041,
+                "formula": 0.9032198601382835
+              },
+              {
+                "round": 3,
+                "samples": 34763,
+                "network": 0.6510950910438967,
+                "formula": 0.8094264333468979
+              },
+              {
+                "round": 4,
+                "samples": 33019,
+                "network": 0.4456250240483951,
+                "formula": 0.6840669729783335
+              },
+              {
+                "round": 5,
+                "samples": 172,
+                "network": 0.5023987264797487,
+                "formula": 0.7645738614171508
+              }
+            ]
+          }
+        },
+        "training": {
+          "policy": 1.561512362241745,
+          "value": 0.695458469569683,
+          "steps": 1000,
+          "batch": 512
+        },
+        "window": {
+          "generations": [
+            53,
+            72
+          ],
+          "samples": 3425877
+        },
+        "drawRatio": 0.14945078296739783
+      },
+      {
+        "generation": 73,
+        "before": {
+          "policy": 1.5045651849881485,
+          "value": 0.7535846946993762,
+          "samples": 172316,
+          "byRound": {
+            "network": 0.7535846907723022,
+            "formula": 0.8715001767504365,
+            "rounds": [
+              {
+                "round": 0,
+                "samples": 34220,
+                "network": 0.9283437148475261,
+                "formula": 0.9746407665284664
+              },
+              {
+                "round": 1,
+                "samples": 35231,
+                "network": 0.8531215350361275,
+                "formula": 0.9513381711597958
+              },
+              {
+                "round": 2,
+                "samples": 34406,
+                "network": 0.7936396473648581,
+                "formula": 0.9084063561893112
+              },
+              {
+                "round": 3,
+                "samples": 34832,
+                "network": 0.672440579300426,
+                "formula": 0.806736765913941
+              },
+              {
+                "round": 4,
+                "samples": 33371,
+                "network": 0.5136275868839544,
+                "formula": 0.7127385654564048
+              },
+              {
+                "round": 5,
+                "samples": 256,
+                "network": 0.6319167376862759,
+                "formula": 0.6442950350930223
+              }
+            ]
+          }
+        },
+        "training": {
+          "policy": 1.5592898941040039,
+          "value": 0.6976770355701446,
+          "steps": 1000,
+          "batch": 512
+        },
+        "window": {
+          "generations": [
+            54,
+            73
+          ],
+          "samples": 3427554
+        },
+        "drawRatio": 0.14937766115428086
+      },
+      {
+        "generation": 74,
+        "before": {
+          "policy": 1.5020689376788128,
+          "value": 0.7396244398782009,
+          "samples": 170877,
+          "byRound": {
+            "network": 0.7396244452803352,
+            "formula": 0.8700514935002065,
+            "rounds": [
+              {
+                "round": 0,
+                "samples": 34267,
+                "network": 0.9229957887478158,
+                "formula": 0.9706515130379246
+              },
+              {
+                "round": 1,
+                "samples": 34717,
+                "network": 0.8623913277817394,
+                "formula": 0.9528209703552899
+              },
+              {
+                "round": 2,
+                "samples": 33962,
+                "network": 0.7857413906411221,
+                "formula": 0.9052182901679766
+              },
+              {
+                "round": 3,
+                "samples": 34518,
+                "network": 0.6626301124454564,
+                "formula": 0.8192426923415946
+              },
+              {
+                "round": 4,
+                "samples": 33108,
+                "network": 0.4517978868778232,
+                "formula": 0.694030166618959
+              },
+              {
+                "round": 5,
+                "samples": 305,
+                "network": 0.9860004834450927,
+                "formula": 1.0878506504496008
+              }
+            ]
+          }
+        },
+        "training": {
+          "policy": 1.5556163362264632,
+          "value": 0.6959212449193001,
+          "steps": 1000,
+          "batch": 512
+        },
+        "window": {
+          "generations": [
+            55,
+            74
+          ],
+          "samples": 3427758
+        },
+        "drawRatio": 0.1493687710742707
+      },
+      {
+        "generation": 75,
+        "before": {
+          "policy": 1.4852735633404117,
+          "value": 0.7530970768957342,
+          "samples": 172438,
+          "byRound": {
+            "network": 0.7530970764898084,
+            "formula": 0.8697791398365118,
+            "rounds": [
+              {
+                "round": 0,
+                "samples": 34369,
+                "network": 0.937270051775228,
+                "formula": 0.9709175531218237
+              },
+              {
+                "round": 1,
+                "samples": 35122,
+                "network": 0.8655994963596859,
+                "formula": 0.9515836896385843
+              },
+              {
+                "round": 2,
+                "samples": 34510,
+                "network": 0.7943961057309958,
+                "formula": 0.9089888397064593
+              },
+              {
+                "round": 3,
+                "samples": 34823,
+                "network": 0.6691182568061383,
+                "formula": 0.8128324289532631
+              },
+              {
+                "round": 4,
+                "samples": 33423,
+                "network": 0.49192587195985565,
+                "formula": 0.6995281704503697
+              },
+              {
+                "round": 5,
+                "samples": 191,
+                "network": 0.476338592098479,
+                "formula": 0.7182670770994478
+              }
+            ]
+          }
+        },
+        "training": {
+          "policy": 1.547750528216362,
+          "value": 0.6978059642314911,
+          "steps": 1000,
+          "batch": 512
+        },
+        "window": {
+          "generations": [
+            56,
+            75
+          ],
+          "samples": 3429663
+        },
+        "drawRatio": 0.14928580446533668
+      },
+      {
+        "generation": 76,
+        "before": {
+          "policy": 1.512390905528186,
+          "value": 0.7253288694573586,
+          "samples": 171363,
+          "byRound": {
+            "network": 0.7253288741852447,
+            "formula": 0.8716185162183305,
+            "rounds": [
+              {
+                "round": 0,
+                "samples": 34476,
+                "network": 0.9156341250996888,
+                "formula": 0.9708796862485447
+              },
+              {
+                "round": 1,
+                "samples": 35050,
+                "network": 0.8518666867638515,
+                "formula": 0.9569996217750791
+              },
+              {
+                "round": 2,
+                "samples": 34318,
+                "network": 0.7667291184815549,
+                "formula": 0.9070316425493294
+              },
+              {
+                "round": 3,
+                "samples": 34481,
+                "network": 0.6419205226461514,
+                "formula": 0.808023175258213
+              },
+              {
+                "round": 4,
+                "samples": 32905,
+                "network": 0.43496354748611066,
+                "formula": 0.70625073960115
+              },
+              {
+                "round": 5,
+                "samples": 133,
+                "network": 0.827484507923504,
+                "formula": 0.9033036596859227
+              }
+            ]
+          }
+        },
+        "training": {
+          "policy": 1.5439434056282044,
+          "value": 0.7009678012132645,
+          "steps": 1000,
+          "batch": 512
+        },
+        "window": {
+          "generations": [
+            57,
+            76
+          ],
+          "samples": 3429870
+        },
+        "drawRatio": 0.14927679474732278
+      },
+      {
+        "generation": 77,
+        "before": {
+          "policy": 1.516930523213671,
+          "value": 0.732946155234032,
+          "samples": 170919,
+          "byRound": {
+            "network": 0.7329461481224384,
+            "formula": 0.8660318745995131,
+            "rounds": [
+              {
+                "round": 0,
+                "samples": 34211,
+                "network": 0.9262401201296652,
+                "formula": 0.9698664491456364
+              },
+              {
+                "round": 1,
+                "samples": 34804,
+                "network": 0.8578878829950057,
+                "formula": 0.9593397534693281
+              },
+              {
+                "round": 2,
+                "samples": 34055,
+                "network": 0.7758739656829059,
+                "formula": 0.9054828321147687
+              },
+              {
+                "round": 3,
+                "samples": 34584,
+                "network": 0.6363034036934224,
+                "formula": 0.7945367248161755
+              },
+              {
+                "round": 4,
+                "samples": 32966,
+                "network": 0.45857623764121846,
+                "formula": 0.6941718842125962
+              },
+              {
+                "round": 5,
+                "samples": 299,
+                "network": 0.6125852731765944,
+                "formula": 0.8488087944575494
+              }
+            ]
+          }
+        },
+        "training": {
+          "policy": 1.5415452024936676,
+          "value": 0.6984193035960198,
+          "steps": 1000,
+          "batch": 512
+        },
+        "window": {
+          "generations": [
+            58,
+            77
+          ],
+          "samples": 3428798
+        },
+        "drawRatio": 0.1493234655409855
+      },
+      {
+        "generation": 78,
+        "before": {
+          "policy": 1.5403551175805001,
+          "value": 0.7615119381842047,
+          "samples": 171451,
+          "byRound": {
+            "network": 0.7615119404065783,
+            "formula": 0.8754012778987843,
+            "rounds": [
+              {
+                "round": 0,
+                "samples": 34495,
+                "network": 0.9354735823626067,
+                "formula": 0.9744396147231114
+              },
+              {
+                "round": 1,
+                "samples": 34947,
+                "network": 0.88150939849492,
+                "formula": 0.956573428549665
+              },
+              {
+                "round": 2,
+                "samples": 34051,
+                "network": 0.8195270932288738,
+                "formula": 0.9156424856513715
+              },
+              {
+                "round": 3,
+                "samples": 34532,
+                "network": 0.6975173598357112,
+                "formula": 0.8291475716166199
+              },
+              {
+                "round": 4,
+                "samples": 33113,
+                "network": 0.4625397542858929,
+                "formula": 0.6950133260489171
+              },
+              {
+                "round": 5,
+                "samples": 313,
+                "network": 0.5694828012659405,
+                "formula": 0.706440550120795
+              }
+            ]
+          }
+        },
+        "training": {
+          "policy": 1.540648998618126,
+          "value": 0.7035152727365493,
+          "steps": 1000,
+          "batch": 512
+        },
+        "window": {
+          "generations": [
+            59,
+            78
+          ],
+          "samples": 3429066
+        },
+        "drawRatio": 0.14931179510688916
+      },
+      {
+        "generation": 79,
+        "before": {
+          "policy": 1.4735536246858363,
+          "value": 0.7337285127920747,
+          "samples": 171879,
+          "byRound": {
+            "network": 0.7337285085038828,
+            "formula": 0.8678114904848071,
+            "rounds": [
+              {
+                "round": 0,
+                "samples": 34319,
+                "network": 0.9170363629476691,
+                "formula": 0.9668089734223895
+              },
+              {
+                "round": 1,
+                "samples": 35115,
+                "network": 0.8438017338638835,
+                "formula": 0.949172935079984
+              },
+              {
+                "round": 2,
+                "samples": 34336,
+                "network": 0.7754472243375206,
+                "formula": 0.9042612318191144
+              },
+              {
+                "round": 3,
+                "samples": 34807,
+                "network": 0.6685036890040235,
+                "formula": 0.8072769282627483
+              },
+              {
+                "round": 4,
+                "samples": 33114,
+                "network": 0.45395974188516897,
+                "formula": 0.7072244191007413
+              },
+              {
+                "round": 5,
+                "samples": 188,
+                "network": 0.4460999877974013,
+                "formula": 0.43518769647324035
+              }
+            ]
+          }
+        },
+        "training": {
+          "policy": 1.536801025748253,
+          "value": 0.7051939026713371,
+          "steps": 1000,
+          "batch": 512
+        },
+        "window": {
+          "generations": [
+            60,
+            79
+          ],
+          "samples": 3431330
+        },
+        "drawRatio": 0.1492132788160859
+      }
+    ],
+    "provenance": {
+      "commit": "80e866e196d204093124e60f1b61ebf25e922bcc",
+      "dirty": false,
+      "ladderHash": "4e33b3ecc841e6df298290c59d3b45ea0d212734c717bd96b200c8306952b0e9"
+    },
+    "decision": "continue",
+    "reason": "progress 3.26 (sharp 0.47); improved on 3.00 at generation 70; sharp below 0.50, so no gate: continue."
   }
 ]
