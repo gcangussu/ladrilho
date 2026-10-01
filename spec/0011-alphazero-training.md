@@ -493,8 +493,8 @@ The binary's commands, each loading one checkpoint and one run's settings:
 ## Self-play and training
 
 - **[Z11-25]** A run's settings MUST live in one file, `runs/<name>/config.json`, fixed once
-  generation `0` starts ([Z11-58]), and copied into every milestone record. `augment` ([Z11-65])
-  and `from` ([Z11-66]) are settings like any other, fixed with the rest. The shipped settings
+  generation `0` starts ([Z11-58]), and copied into every milestone record. `augment` ([Z11-65]),
+  `from` ([Z11-66]) and `gate` ([Z11-68]) are settings like any other, fixed with the rest. The shipped settings
   are its `width`, `blocks` and `playSimulations`. *Starting values* lists the first run's.
 - **[Z11-26]** `selfplay` MUST play its games with `threads` threads over one shared `Network`,
   each game on `AzulState<Seeded>` seeded from the triple (the config's `seed`, the generation
@@ -815,6 +815,20 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
   which both seats are the player at up to 1.5 s a move, plus a latency pass of about 50 minutes —
   on the order of three to four hours. It runs only when a milestone has already reached 0.50, and
   again only once progress has passed the last failure ([Z11-33]).*
+- **[Z11-68]** A run's config MAY set `gate` to `off`; absent means `end`, the behaviour above.
+  With `off`, the gate is never due: [Z11-37]'s `due` MUST return false whatever `sharp`'s
+  winrate, so the loop never runs the gate and [Z11-33]'s `done` never happens, while its `stop`
+  applies as before. A milestone's reason says the gate is off, and the replay of [Z11-45] MUST
+  read the setting from each entry's own copy of the config. `train init` takes it as
+  `--gate end|off`; a run started from another inherits its parent's unless given ([Z11-66]). A
+  gate run by hand ([Z11-61]) is unaffected, and a passing one still ends the run.
+
+  *Run `third` met intent 0009 and ended `done`. A run that starts from it to find out how strong
+  the player can become would reach 0.50 against `sharp` at its first milestone, pass the gate and
+  end at once. With the gate off it trains until the stop rule says it has plateaued; the gate
+  itself, which costs most of an hour, can be run by hand on any logged milestone when a figure is
+  wanted.*
+
 - **[Z11-36]** After a `stop`, the loop MUST refuse to continue the run unless given
   `--override "<reason>"`, which it MUST record in the log as an entry of its own before the next
   generation runs. The milestone after it starts afresh ([Z11-33]).
@@ -849,8 +863,9 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
 
 - **[Z11-37]** The milestone lane's decision logic MUST be two pure functions, exported from the
   lanes and tested there, so the rule the log applies is the rule the suite checks:
-  - `due(entries, results)`: whether the gate is due, from the run's earlier log entries and this
-    milestone's results. It includes every condition for running the gate: it is false whenever
+  - `due(entries, results, gate)`: whether the gate is due, from the run's earlier log entries,
+    this milestone's results and the run's gate setting ([Z11-68]). It includes every condition
+    for running the gate: it is false whenever the setting is `off`, and whenever
     the milestone's `sharp` winrate is below 0.50, so row 1 of [Z11-33]'s table reads "the gate is
     due and then passes", and the recorded "gate was due" means the same thing at every
     milestone;
@@ -1106,6 +1121,8 @@ this package, and MUST be corrected in the same change.
   | The stop rule comparing against the best milestone instead of the previous one | [Z11-45] |
   | An override not resetting the comparison | [Z11-45] |
   | The gate due at every milestone above 0.50, ignoring the last failure | [Z11-45] |
+  | `due` ignoring a run's `gate: off` | [Z11-68]'s case |
+  | A child run dropping its parent's `gate` setting | [Z11-68]'s config case |
   | Progress compared as raw floating-point sums, in `decide`, in the walk, or in `due` | [Z11-33]'s run `first` cases |
   | The inverse permutation, of the displays or of the actions | [Z11-65]'s fixture case |
   | The display flags left in place | [Z11-65]'s fixture case |

@@ -62,7 +62,9 @@ async function main(): Promise<void> {
           const [k, n] = parseSet(v);
           set[k] = n;
         });
-        return initRun(option(rest, 'run') ?? '', from === undefined ? undefined : parseFrom(from), augment, set);
+        const gate = option(rest, 'gate');
+        if (gate !== undefined && gate !== 'end' && gate !== 'off') throw new Error('--gate takes end or off');
+        return initRun(option(rest, 'run') ?? '', from === undefined ? undefined : parseFrom(from), augment, set, gate);
       }
       {
         const until = option(rest, 'until');
@@ -100,7 +102,7 @@ async function main(): Promise<void> {
       return seriesWorker();
     default:
       throw new Error(
-        'usage: train init --run <name> [--from <run>:<generation>] [--augment none|displays] [--set <setting>=<n>]… | train --run <name> [--override "<reason>"] | latency --run <name> | ' +
+        'usage: train init --run <name> [--from <run>:<generation>] [--augment none|displays] [--set <setting>=<n>]… [--gate end|off] | train --run <name> [--override "<reason>"] | latency --run <name> | ' +
           'throughput --run <name> | milestone <checkpoint> | gate <checkpoint> | stop-simulation | latency-corpus | ' +
           'augment-fixtures',
       );

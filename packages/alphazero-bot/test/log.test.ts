@@ -7,7 +7,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { GATE_THRESHOLD, decide, due, ruleEntries, type LogEntry, type MilestoneEntry } from '../eval/decision.js';
+import { GATE_THRESHOLD, decide, due, gateSetting, ruleEntries, type LogEntry, type MilestoneEntry } from '../eval/decision.js';
 import { BUDGET, HALF_BUDGET } from '../eval/latency.js';
 import { readLog } from '../eval/log.js';
 import { GATES, LATENCY, LOG, PACKAGE } from '../eval/paths.js';
@@ -24,7 +24,9 @@ function replay(log: readonly LogEntry[], gateExists: (path: string) => { passed
     const before = ruleEntries(log.slice(0, i), e.run);
     if (e.kind === 'milestone') {
       const r = { rungs: e.results, ladderHash: e.ladderHash };
-      if (e.gate.due !== due(before, r)) throw new Error(`${where}: gate-was-due disagrees with due()`);
+      // [Z11-68]: the gate setting the entry's own copy of the config holds.
+      const setting = gateSetting((e as { config?: { gate?: unknown } }).config);
+      if (e.gate.due !== due(before, r, setting)) throw new Error(`${where}: gate-was-due disagrees with due()`);
       if (e.gate.ran && !e.gate.due) throw new Error(`${where}: a gate ran that was not due`);
       if (e.decision !== decide(before, r, e.gate.outcome)) throw new Error(`${where}: the decision disagrees with decide()`);
       if (typeof e.reason !== 'string' || e.reason.length < 20) throw new Error(`${where}: no reason`);
@@ -92,6 +94,12 @@ describe('the committed log [Z11-34]', () => {
     const manual: LogEntry = { kind: 'manual-gate', run: 'b', date: 'd', generation: 1, gate: 'gate/b/1.json', decision: 'done', reason: 'r' };
     expect(() => replay([manual], () => ({ passed: false }))).toThrow(/no passing gate/);
     replay([manual], () => ({ passed: true }));
+    // [Z11-68]: a run with its gate off records none due above 0.50, which the
+    // replay accepts by reading the entry's own config; the same entry
+    // without that setting is a gate the rule says was due.
+    const off = milestone('c', results(0.9), 'continue', { due: false, outcome: null });
+    replay([{ ...off, config: { gate: 'off' } }], () => null);
+    expect(() => replay([off], () => null)).toThrow(/gate-was-due/);
   });
 });
 
