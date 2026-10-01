@@ -8,6 +8,7 @@ import {
   decide,
   due,
   gateSetting,
+  measureOf,
   isDone,
   isStopped,
   ruleEntries,
@@ -220,6 +221,30 @@ describe('a run with its gate off [Z11-68]', () => {
     expect(gateSetting({ gate: 'off' })).toBe('off');
     expect(gateSetting({})).toBe('end');
     expect(gateSetting(undefined)).toBe('end');
+  });
+});
+
+describe('a pool milestone [Z11-73]', () => {
+  /**
+   * Mutation, seen red: the rule reading the ladder's sum when the results
+   * hold a rating.
+   */
+  it('compares ratings, never runs the gate, and stops after two falls', () => {
+    const r = (rating: number) => ({ rating, ladderHash: 'h' });
+    expect(measureOf(r(123.4))).toBe(123.4);
+    expect(due([], r(5000), 'end')).toBe(false);
+    const log: LogEntry[] = [];
+    const add = (rating: number) => {
+      const entries = ruleEntries(log, 'p');
+      const decision = decide(entries, r(rating), null);
+      log.push({ ...milestone('p', results(0), decision), results: {}, progress: measureOf(r(rating)) });
+      return decision;
+    };
+    expect(add(40)).toBe('continue');
+    expect(add(55)).toBe('continue');
+    expect(add(55)).toBe('continue');
+    expect(add(50)).toBe('continue');
+    expect(add(45)).toBe('stop');
   });
 });
 

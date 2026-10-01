@@ -7,7 +7,20 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { GATE_THRESHOLD, decide, due, gateSetting, ruleEntries, type LogEntry, type MilestoneEntry } from '../eval/decision.js';
+import {
+  GATE_THRESHOLD,
+  decide,
+  due,
+  gateSetting,
+  measureOf,
+  ruleEntries,
+  type LadderResults,
+  type LogEntry,
+  type MilestoneEntry,
+  type MilestoneResults,
+} from '../eval/decision.js';
+import { settle, verdict } from '../eval/elo.js';
+import { memberName, type PoolRecord } from '../eval/pool.js';
 import { BUDGET, HALF_BUDGET } from '../eval/latency.js';
 import { readLog } from '../eval/log.js';
 import { GATES, LATENCY, LOG, PACKAGE } from '../eval/paths.js';
@@ -23,7 +36,24 @@ function replay(log: readonly LogEntry[], gateExists: (path: string) => { passed
     if (done.has(e.run)) throw new Error(`${where}: follows a done`);
     const before = ruleEntries(log.slice(0, i), e.run);
     if (e.kind === 'milestone') {
-      const r = { rungs: e.results, ladderHash: e.ladderHash };
+      const pool = (e as { pool?: PoolRecord }).pool;
+      const r: MilestoneResults =
+        pool === undefined
+          ? { rungs: e.results as LadderResults['rungs'], ladderHash: e.ladderHash }
+          : { rating: pool.rating, ladderHash: e.ladderHash };
+      if (pool !== undefined) {
+        // [Z11-74]: the record's verdict, settling and replacement follow from its own numbers.
+        if (e.progress !== measureOf(r)) throw new Error(`${where}: progress is not the rating`);
+        const first = verdict(pool.first, pool.weakest.rating);
+        if (first !== pool.verdict) throw new Error(`${where}: the verdict disagrees with verdict()`);
+        if ((first === 'more') !== pool.extraPerMember > 0) throw new Error(`${where}: extra games disagree with the verdict`);
+        const settled = first === 'more' ? settle(pool, pool.weakest.rating) : first;
+        if (settled !== pool.settled) throw new Error(`${where}: the settling disagrees with settle()`);
+        const out = pool.replaced;
+        if ((out !== null) !== (settled === 'replace') || (out !== null && memberName(out) !== memberName(pool.weakest))) {
+          throw new Error(`${where}: the replacement is not the weakest champion's`);
+        }
+      }
       // [Z11-68]: the gate setting the entry's own copy of the config holds.
       const setting = gateSetting((e as { config?: { gate?: unknown } }).config);
       if (e.gate.due !== due(before, r, setting)) throw new Error(`${where}: gate-was-due disagrees with due()`);
@@ -100,6 +130,26 @@ describe('the committed log [Z11-34]', () => {
     const off = milestone('c', results(0.9), 'continue', { due: false, outcome: null });
     replay([{ ...off, config: { gate: 'off' } }], () => null);
     expect(() => replay([off], () => null)).toThrow(/gate-was-due/);
+
+    // [Z11-74]: a pool entry replays from its own numbers; each record that
+    // contradicts them is caught.
+    const record: PoolRecord = {
+      simulations: 200, gamesPerMember: 300, extraPerMember: 0,
+      members: [{ run: 'x', generation: 1, rating: 0 }, { run: 'y', generation: 1, rating: 40 }],
+      rating: 80, se: 12, first: { rating: 80, se: 12 },
+      weakest: { run: 'x', generation: 1, rating: 0 }, verdict: 'replace', settled: 'replace',
+      replaced: { run: 'x', generation: 1 },
+    };
+    const poolEntry = (p: PoolRecord, progress = p.rating): LogEntry =>
+      ({ ...milestone('d', results(0), 'continue'), results: {}, progress, gate: { due: false, ran: false, outcome: null }, pool: p }) as LogEntry;
+    replay([poolEntry(record)], () => null);
+    expect(() => replay([poolEntry({ ...record, verdict: 'more' })], () => null)).toThrow(/verdict disagrees/);
+    expect(() => replay([poolEntry({ ...record, replaced: { run: 'y', generation: 1 } })], () => null)).toThrow(/weakest/);
+    expect(() => replay([poolEntry(record, 81)], () => null)).toThrow(/not the rating/);
+    const close: PoolRecord = { ...record, first: { rating: 10, se: 12 }, verdict: 'more', extraPerMember: 100, rating: 5, settled: 'replace' };
+    replay([poolEntry(close)], () => null);
+    expect(() => replay([poolEntry({ ...close, extraPerMember: 0 })], () => null)).toThrow(/extra games/);
+    expect(() => replay([poolEntry({ ...close, rating: -5 })], () => null)).toThrow(/not the rating|settling/);
   });
 });
 

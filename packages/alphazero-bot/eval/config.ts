@@ -43,6 +43,11 @@ export interface RunConfig {
    * done and goes on until the stop rule stops it. Absent is `end`.
    */
   gate?: 'end' | 'off';
+  /**
+   * [Z11-73]: what a milestone measures against: `ladder` (absent), the
+   * tiers of [Z11-31]; or `pool`, the champions' pool.
+   */
+  yardstick?: 'ladder' | 'pool';
   /** [Z11-66]: the run and generation this run's checkpoint 0 was taken from. */
   from?: RunOrigin;
 }

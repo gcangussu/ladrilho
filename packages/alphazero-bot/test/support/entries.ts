@@ -1,9 +1,9 @@
 /** Hand-written log entries for the stop rule's tests. */
 
-import type { GateOutcome, LogEntry, MilestoneEntry, MilestoneResults, Decision } from '../../eval/decision.js';
+import type { GateOutcome, LogEntry, MilestoneEntry, LadderResults, Decision } from '../../eval/decision.js';
 
 /** Results whose ladder sums to `2 + steady + sharp`. */
-export function results(sharp: number, steady = 0.95, ladderHash = 'h'): MilestoneResults {
+export function results(sharp: number, steady = 0.95, ladderHash = 'h'): LadderResults {
   return {
     rungs: { uniformRandom: { winrate: 1 }, greedy: { winrate: 1 }, steady: { winrate: steady }, sharp: { winrate: sharp } },
     ladderHash,
@@ -19,7 +19,7 @@ let generation = 0;
 /** A milestone entry as the loop would write it, for the fields the rule reads. */
 export function milestone(
   run: string,
-  r: MilestoneResults,
+  r: LadderResults,
   decision: Decision,
   g: { due: boolean; outcome: GateOutcome | null } = { due: false, outcome: null },
 ): MilestoneEntry {
