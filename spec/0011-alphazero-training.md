@@ -467,6 +467,7 @@ The binary's commands, each loading one checkpoint and one run's settings:
 | Command | Does |
 | --- | --- |
 | `alphazero play <checkpoint> --config <file> --search play\|milestone` | reads one position from stdin, writes one answer to stdout ([Z11-23]) |
+| `alphazero serve <checkpoint> --config <file> --search play\|milestone` | reads positions from stdin until it ends, answering each as `play` would ([Z11-72]) |
 | `alphazero selfplay <checkpoint> --config <file> --generation G --games N --out <file>` | [Z11-26] |
 | `alphazero latency <checkpoint> <corpus> --config <file> [--simulations N]` | [Z11-40], [Z11-57] |
 | `alphazero throughput <checkpoint> --config <file>` | [Z11-53] |
@@ -490,6 +491,22 @@ The binary's commands, each loading one checkpoint and one run's settings:
   The timing is read by the command around `choose`, not by the library ([Z11-18]).
 - **[Z11-24]** Given the same checkpoint, the same config, the same `--search` and the same
   position, `play` MUST return the same action and value on the same build, on every run.
+- **[Z11-72]** `serve` MUST read positions one after another from stdin, each framed as `play`
+  reads one ([Z11-23]), and answer each in `play`'s four words, flushed, before reading the next.
+  It MUST exit successfully when stdin ends between positions, and with an error after answering
+  every whole position before it when stdin ends inside one or a position is refused or terminal
+  ([Z11-22], [Z11-62]). It loads and parity checks its checkpoint once, and keeps [Z11-69]'s memo
+  across the positions it is handed, emptied whenever a position's round differs from the one
+  before. Its answers' action, simulations and value MUST be exactly those `play` gives each
+  position alone: the search still starts from an empty tree on every move ([Z11-19]), and the
+  memo changes no evaluation. The milestones' and the gate's chooser runs one `serve` per player
+  per game ([Z11-31]), and gives a process up, with an error, if a move goes unanswered for ten
+  minutes.
+
+  *Measured on the machine of record, a `play` spent about 15 ms of a 37 ms milestone move
+  starting, loading its checkpoint and checking parity; and a game's searches repeat each other's
+  evaluations as self-play's do. Forty positions at 800 simulations took 1.9 s as forty `play`s and
+  0.6 s through one `serve`, with identical answers.*
 
 ## Self-play and training
 
@@ -515,8 +532,9 @@ The binary's commands, each loading one checkpoint and one run's settings:
   any time, and play empties it at every boundary ply so that it holds one round. Because the
   forward pass is a pure function of its input ([Z11-10]), every visit and every sample MUST be
   exactly what the same game gives unmemoised. The memo sits below the search: the search still
-  asks once per node and keeps no transposition table ([Z11-42]). Play, milestones, the gate and
-  the latency lane do not memoise.
+  asks once per node and keeps no transposition table ([Z11-42]). `serve`, and so the milestones
+  and the gate, memoise too ([Z11-72]); `play` and the latency lane do not, so the shipped budget
+  of [Z11-57] is measured on the unmemoised search.
 
   *Measured on run `fourth`'s generation 20 checkpoint, 59% of a game's calls repeat an earlier
   one — about a quarter of them transposed move orders inside one search, the rest the subtree of
@@ -694,10 +712,11 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
   `milestoneSimulations` simulations a move, against each rung of the ladder over the first 100
   seeds of [0005 M5-16]'s wide list, one single-seed `match` per seed with seats alternated, as
   [0008 A8-30] plays its gate. `sharp` and `steady` play at their shipped budgets with the
-  fail-safe out of reach ([0005 M5-8]). The player is a chooser that runs
-  `alphazero play --search milestone` once per move on `toCanonical(fromJSON(position, 0))`,
-  reporting `nodes = simulations`, `depth = 0`, `complete = false`, `curtailed = false`. Games MAY
-  run in parallel processes; each game's result does not depend on it.
+  fail-safe out of reach ([0005 M5-8]). The player is a chooser that hands
+  `toCanonical(fromJSON(position, 0))` to one `alphazero serve --search milestone` per player per
+  game, each move answered as `alphazero play` would answer it ([Z11-72]), reporting
+  `nodes = simulations`, `depth = 0`, `complete = false`, `curtailed = false`. Games MAY run in
+  parallel processes; each game's result does not depend on it.
 - **[Z11-32]** Every rung MUST be played at every milestone.
 
   *A rung played only when the one below it clears a bar makes progress jump by `sharp`'s whole
@@ -1089,6 +1108,10 @@ this package, and MUST be corrected in the same change.
   - [Z11-70] by checking the batched forward pass against [Z11-10]'s reference order bit for bit,
     `evaluate_batch` against `evaluate` at every batch size from 0 to 9, and `self_play`'s bytes
     against the same games played one at a time;
+  - [Z11-72] by checking `serve`'s answers over a whole game and the start of another against
+    `play`'s for each position, its ends and refusals, `choose_memoised` against `choose` with
+    fewer network calls, and the chooser's moves against one-shot `play`s, with a trained player
+    in each seat, and its failure to start or to answer thrown rather than waited on;
   - [Z11-71] by checking `evaluate` and `evaluate_batch` against all 180 logits of `forward`
     under the masked softmax, at an odd width and over legal sets of odd and even sizes, with
     boundary requests in the batches;
@@ -1190,6 +1213,9 @@ this package, and MUST be corrected in the same change.
   | The second of a pair of listed rows given the first row's bias | [Z11-71]'s case, by its fixture's parity check |
   | The unpaired last listed row left uncomputed | [Z11-71]'s case |
   | A batched group's wanted rows taken from its first request alone | [Z11-71]'s case |
+  | The memo's key built from the first 100 observation floats alone | [Z11-72]'s `serve` and `choose_memoised` cases |
+  | `choose_memoised` never remembering the network's answer | [Z11-72]'s `choose_memoised` case |
+  | The chooser's worker not reporting its process's exit, or its failure to start | [Z11-72]'s chooser failure case |
   | The check that `.cargo/config.toml`'s section holds exactly the AVX2 line, or holds no other section, weakened | [Z11-47]'s build-flag case |
 
 - **[Z11-49]** Every requirement in this document MUST be either cited by at least one test — Rust,

@@ -80,7 +80,13 @@ export function playOne(spec: SeriesSpec, index: number): GameRecord {
   const subjectFirst = index % 2 === 0;
   const subject = chooser(spec.subject, count);
   const opponent = chooser(spec.opponent);
-  const r = match({ a: subjectFirst ? subject : opponent, b: subjectFirst ? opponent : subject, seeds: [seed] });
+  let r: ReturnType<typeof match>;
+  try {
+    r = match({ a: subjectFirst ? subject : opponent, b: subjectFirst ? opponent : subject, seeds: [seed] });
+  } finally {
+    // The trained player's process ends with its game ([Z11-72]).
+    for (const c of [subject, opponent]) if ('close' in c) (c as { close(): void }).close();
+  }
   const [mine, theirs] = subjectFirst ? [0, 1] : [1, 0];
   return {
     index,

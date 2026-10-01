@@ -10,10 +10,11 @@
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { newGame, toCanonical, toJSON } from 'engine';
+import { apply, clone, fromJSON, newGame, toCanonical, toJSON } from 'engine';
 import { WIDE_SEEDS } from 'bot/arena';
 import { describe, expect, it } from 'vitest';
 import { alphazeroChooser, canonicalWords, frame, readAnswer } from '../eval/chooser.js';
+import { alphazero } from '../eval/crate.js';
 import { LADDER } from '../eval/decision.js';
 import { checkCounts, runMilestone } from '../eval/milestone.js';
 import { PACKAGE, binary, parseMilestonePath } from '../eval/paths.js';
@@ -55,6 +56,54 @@ describe('the adapter [Z11-31]', () => {
       expect(g.work[0].nodes).toBe(32 * g.simulations['32']);
       expect([0, 0.5, 1]).toContain(g.points);
     }
+  });
+
+  it('answers every move of a game as a one-shot play does [Z11-72]', () => {
+    let s = newGame(11);
+    const chooser = alphazeroChooser({ ...player, search: 'milestone' });
+    try {
+      for (let ply = 0; ply < 30; ply++) {
+        const position = toJSON(s);
+        const words = frame(canonicalWords(toCanonical(fromJSON(position, 0))));
+        const alone = readAnswer(alphazero(player.binary, ['play', checkpoint, '--config', player.config, '--search', 'milestone'], words));
+        const play = chooser(position);
+        expect(play.action, `ply ${ply}`).toBe(alone.action);
+        expect(play.nodes).toBe(alone.simulations);
+        s = clone(s);
+        apply(s, play.action);
+      }
+    } finally {
+      chooser.close();
+    }
+  });
+
+  it('plays a game with a trained player in each seat, a process each [Z11-72]', () => {
+    const az: Entrant = { kind: 'alphazero', player: { ...player, search: 'milestone' } };
+    const g = playOne({ subject: az, opponent: az, seeds: WIDE_SEEDS.slice(0, 1) }, 0);
+    expect(g.plies).toBeGreaterThan(20);
+    expect(Object.keys(g.simulations)).toEqual(['12']);
+    expect(g.work[1].nodes).toBeGreaterThan(0);
+  });
+
+  // Mutations, seen red ([Z11-48]), each in a copy with its anchor confirmed:
+  // in the worker of `eval/chooser.ts`, a process's exit not reported
+  // (`fail(...)` in its 'close' handler removed), which leaves the move
+  // waiting until its deadline; and a process that cannot start not reported
+  // (its 'error' handler emptied).
+  it('throws, and does not wait, when its process cannot answer [Z11-72]', () => {
+    const position = toJSON(newGame(5));
+    const missing = alphazeroChooser({
+      ...player,
+      checkpoint: join(tmpdir(), 'no-such-checkpoint.bin'),
+      search: 'play',
+      answerMilliseconds: 5000,
+    });
+    expect(() => missing(position)).toThrow(/alphazero serve exited 2: .*no-such-checkpoint/);
+    expect(() => missing(position)).toThrow(/exited 2/);
+    missing.close();
+    const absent = alphazeroChooser({ ...player, binary: join(tmpdir(), 'no-such-alphazero'), search: 'play', answerMilliseconds: 5000 });
+    expect(() => absent(position)).toThrow(/could not start/);
+    absent.close();
   });
 
   it('frames the canonical block the crate reads [Z11-23]', () => {
