@@ -4,6 +4,7 @@
  */
 
 import { cpus } from 'node:os';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DISPLAYS_FIXTURE, LAYOUT, displayFixture, displayLayout } from './augment.js';
 import { writeAtomic, writeJson } from './files.js';
@@ -22,6 +23,7 @@ import {
 } from './loop.js';
 import { CORPUS } from './paths.js';
 import { seriesWorker } from './series.js';
+import { POOL, readSeed } from './pool.js';
 import { poolTable, table } from './stop-rule-simulation.js';
 
 function option(args: string[], name: string): string | undefined {
@@ -99,7 +101,9 @@ async function main(): Promise<void> {
     }
     case 'stop-simulation':
       process.stdout.write(`${table(Number(option(rest, 'runs') ?? 20000))}\n\n`);
-      process.stdout.write(`${poolTable(Number(option(rest, 'runs') ?? 20000), Number(option(rest, 'pool-games') ?? 300))}\n`);
+      // The committed pool's own count, so the spec's table is what this prints ([Z11-56]).
+      const poolGames = option(rest, 'pool-games') ?? (existsSync(POOL) ? String(readSeed().gamesPerMember) : '300');
+      process.stdout.write(`${poolTable(Number(option(rest, 'runs') ?? 20000), Number(poolGames))}\n`);
       return;
     case 'latency-corpus': {
       const c = recordCorpus();

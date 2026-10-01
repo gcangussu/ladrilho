@@ -1,13 +1,14 @@
 /** The champions' pool ([Z11-73]) and a milestone against it ([Z11-74]). */
 
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { LogEntry, MilestoneEntry } from '../eval/decision.js';
-import { performance, settle, verdict } from '../eval/elo.js';
+import { fitPool, performance, settle, verdict } from '../eval/elo.js';
+import { readLog } from '../eval/log.js';
 import { PACKAGE, binary } from '../eval/paths.js';
-import { currentPool, playPoolMilestone, weakestOf, type Member, type PoolRecord, type PoolSeed } from '../eval/pool.js';
+import { POOL, currentPool, playPoolMilestone, readSeed, weakestOf, type Member, type PoolRecord, type PoolSeed } from '../eval/pool.js';
 
 const FIXTURE = 'test/fixtures/checkpoint.bin';
 
@@ -118,5 +119,25 @@ describe('a pool milestone [Z11-74]', () => {
     expect(m.record.extraPerMember).toBe(0);
     expect(m.record.replaced).toEqual({ run: 'b', generation: 1 });
     consistent(m.record, m.results, members);
+  });
+});
+
+describe('the committed pool [Z11-73]', () => {
+  it('anchors its first member at 0, refits from its own pairings, and applies the log cleanly', () => {
+    if (!existsSync(POOL)) return;
+    const s = readSeed();
+    expect(s.members[0]).toMatchObject({ ...s.anchor, rating: 0 });
+    for (const m of s.members) {
+      expect(existsSync(join(PACKAGE, m.checkpoint)), m.checkpoint).toBe(true);
+      expect(existsSync(join(PACKAGE, m.checkpoint.replace(/\.bin$/, '.parity'))), m.checkpoint).toBe(true);
+    }
+    const index = new Map(s.members.map((m, i) => [`${m.run}/${m.generation}`, i]));
+    const refit = fitPool(
+      s.members.length,
+      s.pairings.map((p) => ({ a: index.get(p.a) ?? -1, b: index.get(p.b) ?? -1, games: p.games, score: p.score })),
+      0,
+    );
+    refit.forEach((r, i) => expect(r.rating).toBeCloseTo(s.members[i].rating, 6));
+    expect(currentPool(s, readLog()).length).toBe(s.members.length);
   });
 });
