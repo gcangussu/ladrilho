@@ -1,14 +1,13 @@
 //! Self-play ([Z11-20], [Z11-26]): games of the current network against
 //! itself, each on its own seeded state, written as samples ([Z11-27]).
 
-use std::collections::HashMap;
-use std::hash::{BuildHasherDefault, Hasher};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use azul_engine::{ACTION_SPACE, Action, AzulState, ENCODED_SIZE, Outcome, Player, Seeded};
+use azul_engine::{ACTION_SPACE, AzulState, Outcome, Player, Seeded};
 
 use crate::config::Settings;
+use crate::memo::Memo;
 use crate::network::{BATCH, Evaluation, Evaluator, Request};
 use crate::rng::{Rng, game_seed, noise_seed};
 use crate::samples::{Kind, LEGAL_BYTES, Sample, legal_mask};
@@ -62,71 +61,6 @@ fn pick(visits: &[u32; ACTION_SPACE], ply: usize, settings: &Settings, rng: &mut
     last
 }
 
-/// [Z11-69]: one game's memo of evaluator calls. A call whose observation and
-/// legal set equal an earlier one's gets that call's evaluation back without
-/// reaching the evaluator. The forward pass is a pure function of its input
-/// ([Z11-10]), so this changes no visit and no sample: the search still asks
-/// once per node ([Z11-42]), and the memo answers the asks it has seen.
-///
-/// Measured on run `fourth`'s checkpoints, 59% of a game's calls repeat an
-/// earlier one: about a quarter of them transpositions inside one search, the
-/// rest the tree of the move just played, searched again from its child.
-#[derive(Default)]
-struct Memo {
-    seen: HashMap<Box<[u32]>, Evaluation, BuildHasherDefault<KeyHasher>>,
-}
-
-/// The longest key: every observation bit, then at most every action.
-const KEY_WORDS: usize = ENCODED_SIZE + ACTION_SPACE;
-
-/// The input exactly: every observation bit, then the legal set, written into
-/// `buf`. Built on the stack, so a lookup that hits allocates nothing; only a
-/// miss copies its key out to be remembered.
-fn key<'a>(observation: &[f32; ENCODED_SIZE], legal: &[Action], buf: &'a mut [u32; KEY_WORDS]) -> &'a [u32] {
-    for (k, f) in buf.iter_mut().zip(observation) {
-        *k = f.to_bits();
-    }
-    for (k, &a) in buf[ENCODED_SIZE..].iter_mut().zip(legal) {
-        *k = u32::from(a);
-    }
-    &buf[..ENCODED_SIZE + legal.len().min(ACTION_SPACE)]
-}
-
-/// The memo's hasher: a multiply-and-rotate over eight bytes at a time, in the
-/// manner of rustc's own FxHash. The keys are the crate's own inputs, never an
-/// adversary's, so SipHash's protection buys nothing here, and costs a
-/// fifth of a microsecond a lookup. Fixed, so it seeds nothing from the clock
-/// or the system; a collision costs only the full key comparison the map
-/// makes anyway.
-#[derive(Default)]
-struct KeyHasher(u64);
-
-impl KeyHasher {
-    fn add(&mut self, word: u64) {
-        self.0 = (self.0.rotate_left(5) ^ word).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
-    }
-}
-
-impl Hasher for KeyHasher {
-    fn write(&mut self, bytes: &[u8]) {
-        let (words, rest) = bytes.as_chunks::<8>();
-        for w in words {
-            self.add(u64::from_le_bytes(*w));
-        }
-        for &b in rest {
-            self.add(u64::from(b));
-        }
-    }
-
-    fn write_usize(&mut self, n: usize) {
-        self.add(n as u64);
-    }
-
-    fn finish(&self) -> u64 {
-        self.0
-    }
-}
-
 /// How many games each self-play thread plays at once, their leaves valued
 /// in one batch ([Z11-70]).
 pub const GAMES_PER_THREAD: usize = BATCH;
@@ -155,7 +89,7 @@ impl Game {
             samples: Vec::new(),
             ply: 0,
             search: None,
-            memo: Memo::default(),
+            memo: Memo::new(),
             waiting: None,
         }
     }
@@ -178,13 +112,11 @@ impl Game {
                 }
                 continue;
             };
-            if let Some((observation, legal)) = search.wants() {
-                let mut buf = [0u32; KEY_WORDS];
-                let k = key(observation, legal, &mut buf);
-                match self.memo.seen.get(k) {
-                    Some(e) => search.supply(e),
-                    None => {
-                        self.waiting = Some(k.into());
+            if let Some(request) = search.wants() {
+                match self.memo.lookup(request) {
+                    Ok(e) => search.supply(e),
+                    Err(k) => {
+                        self.waiting = Some(k);
                         return true;
                     }
                 }
@@ -207,7 +139,7 @@ impl Game {
     /// search.
     fn supply(&mut self, eval: &Evaluation) {
         if let (Some(k), Some(search)) = (self.waiting.take(), self.search.as_mut()) {
-            self.memo.seen.insert(k, eval.clone());
+            self.memo.insert(k, eval);
             search.supply(eval);
         }
     }
@@ -238,7 +170,7 @@ impl Game {
             // but never asked again after it, since the observation carries
             // the round index. That is for memory only; what the memo answers
             // is exact however often it is emptied.
-            self.memo.seen.clear();
+            self.memo.clear();
         }
         if !state.is_terminal() && boundary {
             self.samples.push((

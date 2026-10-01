@@ -30,6 +30,31 @@ pub fn read_messages(bytes: &[u8]) -> Result<Vec<Vec<u32>>, String> {
     Ok(out)
 }
 
+/// The next message of a stream, or `None` at its end. An end inside a message
+/// is refused, as `read_messages` refuses it ([Z11-72]).
+pub fn read_message(input: &mut impl std::io::Read) -> Result<Option<Vec<u32>>, String> {
+    let mut head = [0u8; 4];
+    let mut got = 0;
+    while got < 4 {
+        match input.read(&mut head[got..]) {
+            Ok(0) if got == 0 => return Ok(None),
+            Ok(0) => return Err("a message length cut short".into()),
+            Ok(n) => got += n,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(e) => return Err(format!("reading a message: {e}")),
+        }
+    }
+    let n = u32::from_le_bytes(head) as usize;
+    if n > MAX_MESSAGE_WORDS {
+        return Err(format!("a message of {n} words"));
+    }
+    let mut body = vec![0u8; 4 * n];
+    input
+        .read_exact(&mut body)
+        .map_err(|e| format!("a message of {n} words cut short: {e}"))?;
+    Ok(Some(body.as_chunks::<4>().0.iter().map(|w| u32::from_le_bytes(*w)).collect()))
+}
+
 /// One message as bytes.
 pub fn frame(words: &[u32]) -> Vec<u8> {
     let mut out = Vec::with_capacity(4 + 4 * words.len());

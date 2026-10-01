@@ -264,3 +264,27 @@ fn noise_is_drawn_apart_from_the_shuffle() {
         }
     }
 }
+
+/// [Z11-72]: `choose_memoised` over every position of a game, one memo
+/// throughout, gives each position exactly `choose`'s visits, action and
+/// value, and calls the network fewer times than `choose` does.
+///
+/// Mutations, seen red ([Z11-48]), each in a copy with its anchor confirmed:
+/// in `choose_memoised`, the network's answer never remembered (its
+/// `memo.insert` removed), which makes as many calls as `choose`; and in
+/// `memo.rs`, the key built from the first 100 observation floats alone.
+#[test]
+fn a_memoised_choice_is_the_choice() {
+    use azul_alphazero::memo::{Memo, choose_memoised};
+    let config = SearchConfig { simulations: 64, cpuct: 1.25, fpu: 0.25 };
+    let memoised = Counting::new(fixture());
+    let plain = Counting::new(fixture());
+    let mut memo = Memo::new();
+    for (i, s) in support::game_positions(31).iter().enumerate() {
+        let a = choose_memoised(&memoised, s, &config, &mut memo).unwrap();
+        let b = choose(&plain, s, &config).unwrap();
+        assert_eq!(a.visits, b.visits, "position {i}");
+        assert_eq!((a.action, a.value.to_bits()), (b.action, b.value.to_bits()), "position {i}");
+    }
+    assert!(memoised.calls() < plain.calls(), "{} calls against {}", memoised.calls(), plain.calls());
+}
