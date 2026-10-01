@@ -1,16 +1,18 @@
 //! Self-play ([Z11-20], [Z11-26]): games of the current network against
 //! itself, each on its own seeded state, written as samples ([Z11-27]).
 
+use std::collections::HashMap;
+use std::hash::{BuildHasherDefault, Hasher};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use azul_engine::{ACTION_SPACE, AzulState, Outcome, Player, Seeded};
+use azul_engine::{ACTION_SPACE, Action, AzulState, ENCODED_SIZE, Outcome, Player, Seeded};
 
 use crate::config::Settings;
-use crate::network::Evaluator;
+use crate::network::{BATCH, Evaluation, Evaluator, Request};
 use crate::rng::{Rng, game_seed, noise_seed};
 use crate::samples::{Kind, LEGAL_BYTES, Sample, legal_mask};
-use crate::search::search;
+use crate::search::Search;
 use crate::view::{is_boundary, pre_deal_view};
 
 /// A game that has run this long has run away. Azul games are about 75 plies.
@@ -60,76 +62,293 @@ fn pick(visits: &[u32; ACTION_SPACE], ply: usize, settings: &Settings, rng: &mut
     last
 }
 
-/// One self-play game: its samples, results filled in from the final outcome.
-pub fn play_game<E: Evaluator>(net: &E, settings: &Settings, seed: u64, generation: u64, index: u64) -> Vec<Sample> {
-    let mut state = AzulState::new_game(Seeded::new(game_seed(seed, generation, index)));
-    let mut rng = Rng::new(noise_seed(seed, generation, index));
-    let mut samples: Vec<(Sample, Player)> = Vec::new();
-    let mut ply = 0usize;
-    while !state.is_terminal() && ply < MAX_PLIES {
-        let noise = settings.noise.as_ref().map(|n| (n, &mut rng));
-        let Some((result, _)) = search(net, &state, &settings.search, noise) else { break };
+/// [Z11-69]: one game's memo of evaluator calls. A call whose observation and
+/// legal set equal an earlier one's gets that call's evaluation back without
+/// reaching the evaluator. The forward pass is a pure function of its input
+/// ([Z11-10]), so this changes no visit and no sample: the search still asks
+/// once per node ([Z11-42]), and the memo answers the asks it has seen.
+///
+/// Measured on run `fourth`'s checkpoints, 59% of a game's calls repeat an
+/// earlier one: about a quarter of them transpositions inside one search, the
+/// rest the tree of the move just played, searched again from its child.
+#[derive(Default)]
+struct Memo {
+    seen: HashMap<Box<[u32]>, Evaluation, BuildHasherDefault<KeyHasher>>,
+}
+
+/// The longest key: every observation bit, then at most every action.
+const KEY_WORDS: usize = ENCODED_SIZE + ACTION_SPACE;
+
+/// The input exactly: every observation bit, then the legal set, written into
+/// `buf`. Built on the stack, so a lookup that hits allocates nothing; only a
+/// miss copies its key out to be remembered.
+fn key<'a>(observation: &[f32; ENCODED_SIZE], legal: &[Action], buf: &'a mut [u32; KEY_WORDS]) -> &'a [u32] {
+    for (k, f) in buf.iter_mut().zip(observation) {
+        *k = f.to_bits();
+    }
+    for (k, &a) in buf[ENCODED_SIZE..].iter_mut().zip(legal) {
+        *k = u32::from(a);
+    }
+    &buf[..ENCODED_SIZE + legal.len().min(ACTION_SPACE)]
+}
+
+/// The memo's hasher: a multiply-and-rotate over eight bytes at a time, in the
+/// manner of rustc's own FxHash. The keys are the crate's own inputs, never an
+/// adversary's, so SipHash's protection buys nothing here, and costs a
+/// fifth of a microsecond a lookup. Fixed, so it seeds nothing from the clock
+/// or the system; a collision costs only the full key comparison the map
+/// makes anyway.
+#[derive(Default)]
+struct KeyHasher(u64);
+
+impl KeyHasher {
+    fn add(&mut self, word: u64) {
+        self.0 = (self.0.rotate_left(5) ^ word).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
+    }
+}
+
+impl Hasher for KeyHasher {
+    fn write(&mut self, bytes: &[u8]) {
+        let (words, rest) = bytes.as_chunks::<8>();
+        for w in words {
+            self.add(u64::from_le_bytes(*w));
+        }
+        for &b in rest {
+            self.add(u64::from(b));
+        }
+    }
+
+    fn write_usize(&mut self, n: usize) {
+        self.add(n as u64);
+    }
+
+    fn finish(&self) -> u64 {
+        self.0
+    }
+}
+
+/// How many games each self-play thread plays at once, their leaves valued
+/// in one batch ([Z11-70]).
+pub const GAMES_PER_THREAD: usize = BATCH;
+
+/// One game in progress: its state, its generator, the samples so far, the
+/// search of the current move, and its memo.
+struct Game {
+    index: u64,
+    state: AzulState<Seeded>,
+    rng: Rng,
+    samples: Vec<(Sample, Player)>,
+    ply: usize,
+    search: Option<Search<Seeded>>,
+    memo: Memo,
+    /// The memo key of the input the search is paused on, once the memo has
+    /// missed it: the game is waiting for the network.
+    waiting: Option<Box<[u32]>>,
+}
+
+impl Game {
+    fn new(seed: u64, generation: u64, index: u64) -> Game {
+        Game {
+            index,
+            state: AzulState::new_game(Seeded::new(game_seed(seed, generation, index))),
+            rng: Rng::new(noise_seed(seed, generation, index)),
+            samples: Vec::new(),
+            ply: 0,
+            search: None,
+            memo: Memo::default(),
+            waiting: None,
+        }
+    }
+
+    /// Plays on until the game needs the network (`true`) or is over
+    /// (`false`). The memo answers what it can on the way.
+    fn advance(&mut self, settings: &Settings) -> bool {
+        if self.waiting.is_some() {
+            return true;
+        }
+        loop {
+            let Some(search) = self.search.as_mut() else {
+                if self.state.is_terminal() || self.ply >= MAX_PLIES {
+                    return false;
+                }
+                let noise = settings.noise.as_ref().map(|n| (n, &mut self.rng));
+                match Search::new(&self.state, &settings.search, noise) {
+                    Some(s) => self.search = Some(s),
+                    None => return false,
+                }
+                continue;
+            };
+            if let Some((observation, legal)) = search.wants() {
+                let mut buf = [0u32; KEY_WORDS];
+                let k = key(observation, legal, &mut buf);
+                match self.memo.seen.get(k) {
+                    Some(e) => search.supply(e),
+                    None => {
+                        self.waiting = Some(k.into());
+                        return true;
+                    }
+                }
+                continue;
+            }
+            let Some(search) = self.search.take() else { return false };
+            let (result, _) = search.finish();
+            if !self.play(&result.visits, settings) {
+                return false;
+            }
+        }
+    }
+
+    /// The input the game is waiting on.
+    fn request(&self) -> Option<Request<'_>> {
+        self.search.as_ref()?.wants()
+    }
+
+    /// The network's answer to `request`: remembered, then handed to the
+    /// search.
+    fn supply(&mut self, eval: &Evaluation) {
+        if let (Some(k), Some(search)) = (self.waiting.take(), self.search.as_mut()) {
+            self.memo.seen.insert(k, eval.clone());
+            search.supply(eval);
+        }
+    }
+
+    /// The move sample, the move, and a boundary sample if the move resolved
+    /// a round. `false` if the move could not be played.
+    fn play(&mut self, root_visits: &[u32; ACTION_SPACE], settings: &Settings) -> bool {
+        let state = &mut self.state;
         let legal = state.legal_actions();
         let mut visits = [0u16; ACTION_SPACE];
-        for (v, &n) in visits.iter_mut().zip(&result.visits) {
+        for (v, &n) in visits.iter_mut().zip(root_visits) {
             *v = n.min(u32::from(u16::MAX)) as u16;
         }
         let seat = state.current_player();
-        samples.push((
+        self.samples.push((
             Sample { kind: Kind::Move, result: 0, observation: state.encode(), legal: legal_mask(legal.as_slice()), visits },
             seat,
         ));
-        let action = pick(&result.visits, ply, settings, &mut rng);
+        let action = pick(root_visits, self.ply, settings, &mut self.rng);
         let before = state.clone();
         if state.apply(action).is_err() {
-            break;
+            return false;
         }
-        ply += 1;
-        if !state.is_terminal() && is_boundary(&before, &state) {
-            samples.push((
+        self.ply += 1;
+        let boundary = is_boundary(&before, state);
+        if boundary {
+            // The memo holds one round: an input from before the deal is all
+            // but never asked again after it, since the observation carries
+            // the round index. That is for memory only; what the memo answers
+            // is exact however often it is emptied.
+            self.memo.seen.clear();
+        }
+        if !state.is_terminal() && boundary {
+            self.samples.push((
                 Sample {
                     kind: Kind::Boundary,
                     result: 0,
-                    observation: pre_deal_view(&before, &state),
+                    observation: pre_deal_view(&before, state),
                     legal: [0; LEGAL_BYTES],
                     visits: [0; ACTION_SPACE],
                 },
                 state.current_player(),
             ));
         }
+        true
     }
-    let outcome = state.outcome();
-    samples
-        .into_iter()
-        .map(|(mut s, seat)| {
-            s.result = result_for(outcome, seat);
-            s
-        })
-        .collect()
+
+    /// The samples, results filled in from the final outcome.
+    fn into_samples(self) -> Vec<Sample> {
+        let outcome = self.state.outcome();
+        self.samples
+            .into_iter()
+            .map(|(mut s, seat)| {
+                s.result = result_for(outcome, seat);
+                s
+            })
+            .collect()
+    }
+}
+
+/// [Z11-70]: plays the games `next` hands out, up to `lanes` at once, and
+/// gives each to `done` when it ends. Each round of the loop advances every
+/// game to its next network call and values them all in one batch. A game
+/// sees only its own evaluations, each the bits it would get alone, so what
+/// it plays does not depend on which games shared its batches.
+fn play_games<E: Evaluator>(
+    net: &E,
+    settings: &Settings,
+    seed: u64,
+    generation: u64,
+    lanes: usize,
+    mut next: impl FnMut() -> Option<u64>,
+    mut done: impl FnMut(u64, Vec<Sample>),
+) {
+    let lanes = lanes.max(1);
+    let mut games: Vec<Game> = Vec::with_capacity(lanes);
+    let mut evals = vec![Evaluation::default(); lanes];
+    loop {
+        let mut k = 0;
+        while k < lanes {
+            if k == games.len() {
+                match next() {
+                    Some(i) => games.push(Game::new(seed, generation, i)),
+                    None => break,
+                }
+            }
+            if games[k].advance(settings) {
+                k += 1;
+            } else {
+                let g = games.swap_remove(k);
+                done(g.index, g.into_samples());
+            }
+        }
+        if games.is_empty() {
+            return;
+        }
+        // Every game left is waiting: `advance` said so.
+        let requests: Vec<Request<'_>> = games.iter().filter_map(Game::request).collect();
+        debug_assert_eq!(requests.len(), games.len());
+        net.evaluate_batch(&requests, &mut evals[..requests.len()]);
+        drop(requests);
+        for (g, e) in games.iter_mut().zip(&evals) {
+            g.supply(e);
+        }
+    }
+}
+
+/// One self-play game on its own, unbatched: its samples, results filled in
+/// from the final outcome.
+pub fn play_game<E: Evaluator>(net: &E, settings: &Settings, seed: u64, generation: u64, index: u64) -> Vec<Sample> {
+    let mut out = Vec::new();
+    let mut once = Some(index);
+    play_games(net, settings, seed, generation, 1, || once.take(), |_, s| out = s);
+    out
 }
 
 /// Games `0..games` of generation `generation`, on `settings.threads` threads
-/// over one shared network, as the bytes of a sample file in game order. The
-/// order of the file does not depend on which thread played which game.
+/// over one shared network, each playing `GAMES_PER_THREAD` at once, as the
+/// bytes of a sample file in game order. The order of the file does not
+/// depend on which thread played which game, nor on which games shared a
+/// batch.
 pub fn self_play<E: Evaluator>(net: &E, settings: &Settings, seed: u64, generation: u64, games: usize) -> Vec<u8> {
     let next = AtomicUsize::new(0);
     let done: Mutex<Vec<Option<Vec<u8>>>> = Mutex::new(vec![None; games]);
     std::thread::scope(|scope| {
         for _ in 0..settings.threads.max(1) {
             scope.spawn(|| {
-                loop {
+                let take = || {
                     let i = next.fetch_add(1, Ordering::Relaxed);
-                    if i >= games {
-                        return;
-                    }
+                    (i < games).then_some(i as u64)
+                };
+                let finish = |i: u64, samples: Vec<Sample>| {
                     let mut bytes = Vec::new();
-                    for s in play_game(net, settings, seed, generation, i as u64) {
+                    for s in samples {
                         s.write(&mut bytes);
                     }
                     if let Ok(mut d) = done.lock() {
-                        d[i] = Some(bytes);
+                        d[i as usize] = Some(bytes);
                     }
-                }
+                };
+                play_games(net, settings, seed, generation, GAMES_PER_THREAD, take, finish);
             });
         }
     });

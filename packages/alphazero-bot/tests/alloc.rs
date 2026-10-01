@@ -8,7 +8,7 @@ mod support;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
 
-use azul_alphazero::network::{Evaluation, Evaluator};
+use azul_alphazero::network::{BATCH, Evaluation, Evaluator, Request};
 
 struct Counting;
 
@@ -35,7 +35,8 @@ unsafe impl GlobalAlloc for Counting {
 #[global_allocator]
 static GLOBAL: Counting = Counting;
 
-/// [Z11-10]: `forward` and `evaluate` make no allocation.
+/// [Z11-10]: `forward` and `evaluate` make no allocation, nor do their batched
+/// forms ([Z11-70]), over whole groups of four and short ones.
 ///
 /// Seen red: a `Vec` for the hidden activations in `Network::forward`, in a
 /// copy, counts one allocation per call here.
@@ -47,10 +48,16 @@ fn the_forward_pass_does_not_allocate() {
     let legal = s.legal_actions();
     let mut out = Evaluation::default();
     let mut logits = [0f32; 180];
+    let requests: Vec<Request<'_>> = (0..7).map(|_| (&obs, legal.as_slice())).collect();
+    let mut outs = vec![Evaluation::default(); 7];
+    let mut batch = [[0f32; 180]; BATCH];
     let before = ALLOCATIONS.with(Cell::get);
     for _ in 0..10 {
         net.forward(&obs, &mut logits);
         net.evaluate(&obs, legal.as_slice(), &mut out);
+        net.forward_batch([&obs; BATCH], &mut batch);
+        net.evaluate_batch(&requests, &mut outs);
+        net.evaluate_batch(&requests[..5], &mut outs[..5]);
     }
     assert_eq!(ALLOCATIONS.with(Cell::get) - before, 0);
 }

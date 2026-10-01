@@ -5,9 +5,9 @@
 //! network value from when it was expanded. Terminal and boundary nodes are
 //! leaves for good: valued once, on their first visit, and never expanded.
 
-use azul_engine::{ACTION_SPACE, Action, AzulState, Outcome, Player, Shuffler};
+use azul_engine::{ACTION_SPACE, Action, ActionList, AzulState, ENCODED_SIZE, Outcome, Player, Shuffler};
 
-use crate::network::{Evaluation, Evaluator};
+use crate::network::{Evaluation, Evaluator, Request};
 use crate::rng::Rng;
 use crate::view::{accounts_for, is_boundary, pre_deal_view};
 
@@ -84,75 +84,142 @@ fn terminal_value(outcome: Option<Outcome>, seat: Player) -> f32 {
     }
 }
 
-struct Tree<'a, S: Shuffler, E: Evaluator> {
-    net: &'a E,
-    config: &'a SearchConfig,
-    nodes: Vec<Node<S>>,
-    edges: Vec<Edge>,
-    eval: Evaluation,
-    stats: TreeStats,
+/// What a paused search is waiting for the network to value.
+enum Wait {
+    /// The root's own expansion, before the first simulation.
+    Root,
+    /// A new node below the edge, expanded on its own observation.
+    Expand(usize),
+    /// A boundary node below the edge, valued on its pre-deal view.
+    Boundary(usize),
 }
 
-impl<S: Shuffler, E: Evaluator> Tree<'_, S, E> {
-    /// Expands `state` into a new node: one network call on its own
-    /// observation, whose policy becomes the priors.
-    fn expand(&mut self, state: AzulState<S>) -> u32 {
-        let legal = state.legal_actions();
-        let obs = state.encode();
-        debug_assert!(accounts_for(&obs, &state), "an input that does not account for every tile ([Z11-51])");
-        self.net.evaluate(&obs, legal.as_slice(), &mut self.eval);
+struct Pending<S: Shuffler> {
+    wait: Wait,
+    state: AzulState<S>,
+    observation: [f32; ENCODED_SIZE],
+    /// `None` for a boundary: no policy is wanted there.
+    legal: Option<ActionList>,
+}
+
+/// A search that pauses wherever it needs the network ([Z11-70]): `wants`
+/// names the input, `supply` hands back its evaluation and runs on to the next
+/// one, and `finish` reads the tree once `wants` has nothing left to ask.
+/// Between pauses it is exactly the search [Z11-14] through [Z11-18] describe,
+/// so who evaluates, alone or in a batch, changes nothing it computes.
+pub struct Search<S: Shuffler> {
+    config: SearchConfig,
+    nodes: Vec<Node<S>>,
+    edges: Vec<Edge>,
+    stats: TreeStats,
+    path: Vec<(u32, usize)>,
+    /// Simulations still to run, the one paused included.
+    remaining: u32,
+    pending: Option<Pending<S>>,
+    /// `ε` and the root's Dirichlet draw, mixed in once the root is expanded.
+    noise: Option<(f64, Vec<f64>)>,
+}
+
+impl<S: Shuffler> Search<S> {
+    /// A search of `root`, paused on the root's expansion. `None` for a
+    /// terminal root ([Z11-62]). The root's noise is drawn here, which is the
+    /// first thing the search ever draws, so the generator's order is the one
+    /// it always had.
+    pub fn new(root: &AzulState<S>, config: &SearchConfig, noise: Option<(&SelfPlayNoise, &mut Rng)>) -> Option<Self> {
+        if root.is_terminal() {
+            return None;
+        }
+        let legal = root.legal_actions();
+        if legal.is_empty() {
+            return None;
+        }
+        let noise = noise.map(|(n, rng)| {
+            let mut dir = vec![0f64; legal.len()];
+            rng.dirichlet(f64::from(n.alpha), &mut dir);
+            (f64::from(n.epsilon), dir)
+        });
+        let pending = Some(Self::expansion(Wait::Root, root.clone()));
+        Some(Search {
+            config: config.clone(),
+            nodes: Vec::new(),
+            edges: Vec::new(),
+            stats: TreeStats::default(),
+            path: Vec::new(),
+            remaining: config.simulations,
+            pending,
+            noise,
+        })
+    }
+
+    fn expansion(wait: Wait, state: AzulState<S>) -> Pending<S> {
+        let observation = state.encode();
+        debug_assert!(accounts_for(&observation, &state), "an input that does not account for every tile ([Z11-51])");
+        let legal = Some(state.legal_actions());
+        Pending { wait, state, observation, legal }
+    }
+
+    /// The input the search is paused on, or `None` once it has finished.
+    pub fn wants(&self) -> Option<Request<'_>> {
+        self.pending.as_ref().map(|p| (&p.observation, p.legal.as_ref().map_or(&[][..], ActionList::as_slice)))
+    }
+
+    /// The evaluation of what `wants` named; the search runs on until it
+    /// needs the network again or has run every simulation.
+    pub fn supply(&mut self, eval: &Evaluation) {
+        let Some(p) = self.pending.take() else { return };
+        match p.wait {
+            Wait::Root => {
+                self.push_expanded(p.state, p.legal.as_ref(), eval);
+                if let Some((eps, dir)) = self.noise.take() {
+                    for (i, d) in self.nodes[0].edges.clone().zip(dir) {
+                        let prior = &mut self.edges[i].prior;
+                        *prior = ((1.0 - eps) * f64::from(*prior) + eps * d) as f32;
+                    }
+                }
+            }
+            Wait::Expand(e) => {
+                let c = self.push_expanded(p.state, p.legal.as_ref(), eval);
+                self.settle(e, c);
+            }
+            Wait::Boundary(e) => {
+                let seat = p.state.current_player();
+                self.stats.boundaries += 1;
+                let c = self.push(Node { state: p.state, seat, kind: Kind::Boundary, value: eval.value, visits: 0, edges: 0..0 });
+                self.settle(e, c);
+            }
+        }
+        self.run();
+    }
+
+    /// An expanded node: the evaluation's policy over the legal set becomes
+    /// its priors, its value the node's `V`.
+    fn push_expanded(&mut self, state: AzulState<S>, legal: Option<&ActionList>, eval: &Evaluation) -> u32 {
         let start = self.edges.len();
-        for &a in legal.as_slice() {
-            self.edges.push(Edge {
-                action: a,
-                prior: self.eval.policy[usize::from(a)],
-                visits: 0,
-                total: 0.0,
-                child: NONE,
-            });
+        for &a in legal.map_or(&[][..], ActionList::as_slice) {
+            self.edges.push(Edge { action: a, prior: eval.policy[usize::from(a)], visits: 0, total: 0.0, child: NONE });
         }
         self.stats.expanded += 1;
         let seat = state.current_player();
-        self.nodes.push(Node {
-            state,
-            seat,
-            kind: Kind::Expanded,
-            value: self.eval.value,
-            visits: 0,
-            edges: start..self.edges.len(),
-        });
+        self.push(Node { state, seat, kind: Kind::Expanded, value: eval.value, visits: 0, edges: start..self.edges.len() })
+    }
+
+    fn push(&mut self, node: Node<S>) -> u32 {
+        self.nodes.push(node);
         (self.nodes.len() - 1) as u32
     }
 
-    /// A new child of `parent` by `action`: terminal, boundary or expanded.
-    /// Terminal and boundary children are valued here, once ([Z11-14]).
-    fn child(&mut self, parent: u32, action: Action) -> u32 {
-        let (state, applied, view) = {
-            let before = &self.nodes[parent as usize].state;
-            let mut state = before.clone();
-            // The action came from `legal_actions`, so this cannot fail; if it
-            // somehow did, the unchanged clone is valued as a leaf of its own.
-            let applied = state.apply(action).is_ok();
-            if applied && !state.is_terminal() && !is_boundary(before, &state) {
-                return self.expand(state);
-            }
-            // Valued from the seat that opens the next round, on the view
-            // before the deal: nothing below reads a dealt tile ([Z11-15]).
-            let view = (applied && !state.is_terminal()).then(|| pre_deal_view(before, &state));
-            (state, applied, view)
-        };
-        let seat = state.current_player();
-        let (kind, value) = if state.is_terminal() || !applied {
-            self.stats.terminals += 1;
-            (Kind::Terminal, terminal_value(state.outcome(), seat))
-        } else {
-            let view = view.unwrap_or_else(|| state.encode());
-            self.net.evaluate(&view, &[], &mut self.eval);
-            self.stats.boundaries += 1;
-            (Kind::Boundary, self.eval.value)
-        };
-        self.nodes.push(Node { state, seat, kind, value, visits: 0, edges: 0..0 });
-        (self.nodes.len() - 1) as u32
+    /// The new child `c` hangs below edge `e`; its value is the simulation's.
+    fn settle(&mut self, e: usize, c: u32) {
+        self.edges[e].child = c;
+        let n = &self.nodes[c as usize];
+        self.backup(n.value, n.seat);
+    }
+
+    /// Simulations until one needs the network or none remain.
+    fn run(&mut self) {
+        while self.pending.is_none() && self.remaining > 0 {
+            self.simulate();
+        }
     }
 
     /// [Z11-16]: the legal action maximising `Q + cpuct · P · √Nₜ / (1 + N)`,
@@ -177,29 +244,57 @@ impl<S: Shuffler, E: Evaluator> Tree<'_, S, E> {
         chosen
     }
 
-    fn simulate(&mut self, path: &mut Vec<(u32, usize)>) {
-        path.clear();
+    /// One simulation: down to a leaf, then either its value backed up, or a
+    /// pause on the network with the path kept for when the value comes.
+    fn simulate(&mut self) {
+        self.path.clear();
         let mut node = 0u32;
-        let (mut value, mut seat) = loop {
+        loop {
             let e = self.select(node);
-            path.push((node, e));
-            let child = if self.edges[e].child == NONE {
-                let c = self.child(node, self.edges[e].action);
-                self.edges[e].child = c;
-                let n = &self.nodes[c as usize];
-                break (n.value, n.seat);
-            } else {
-                self.edges[e].child
-            };
+            self.path.push((node, e));
+            let child = self.edges[e].child;
+            if child == NONE {
+                return self.descend_new(node, e);
+            }
             let n = &self.nodes[child as usize];
             if n.kind != Kind::Expanded {
-                break (n.value, n.seat);
+                return self.backup(n.value, n.seat);
             }
             node = child;
-        };
-        // [Z11-17]: negate exactly where the seat to move changes, never by
-        // ply parity — a boundary ply can leave the same seat to move.
-        for &(node, e) in path.iter().rev() {
+        }
+    }
+
+    /// A new child of `parent` by edge `e`: terminal ones are valued and backed
+    /// up here; boundary and expanded ones pause on the network ([Z11-14]).
+    fn descend_new(&mut self, parent: u32, e: usize) {
+        let before = &self.nodes[parent as usize].state;
+        let mut state = before.clone();
+        // The action came from `legal_actions`, so this cannot fail; if it
+        // somehow did, the unchanged clone is valued as a leaf of its own.
+        let applied = state.apply(self.edges[e].action).is_ok();
+        if applied && !state.is_terminal() {
+            if !is_boundary(before, &state) {
+                self.pending = Some(Self::expansion(Wait::Expand(e), state));
+            } else {
+                // Valued from the seat that opens the next round, on the view
+                // before the deal: nothing below reads a dealt tile ([Z11-15]).
+                let observation = pre_deal_view(before, &state);
+                self.pending = Some(Pending { wait: Wait::Boundary(e), state, observation, legal: None });
+            }
+            return;
+        }
+        let seat = state.current_player();
+        self.stats.terminals += 1;
+        let value = terminal_value(state.outcome(), seat);
+        let c = self.push(Node { state, seat, kind: Kind::Terminal, value, visits: 0, edges: 0..0 });
+        self.settle(e, c);
+    }
+
+    /// [Z11-17]: negate exactly where the seat to move changes, never by ply
+    /// parity — a boundary ply can leave the same seat to move. Ends the
+    /// simulation.
+    fn backup(&mut self, mut value: f32, mut seat: Player) {
+        for &(node, e) in self.path.iter().rev() {
             let n = &mut self.nodes[node as usize];
             if n.seat != seat {
                 value = -value;
@@ -210,6 +305,30 @@ impl<S: Shuffler, E: Evaluator> Tree<'_, S, E> {
             edge.visits += 1;
             edge.total += f64::from(value);
         }
+        self.remaining -= 1;
+    }
+
+    /// The root's visits and backed-up value, and the tree's shape. Read once
+    /// `wants` is `None`.
+    pub fn finish(self) -> (SearchResult, TreeStats) {
+        debug_assert!(self.pending.is_none() && self.remaining == 0, "a search read before it finished");
+        let mut visits = [0u32; ACTION_SPACE];
+        let mut total = 0f64;
+        let mut count = 0u32;
+        let root = &self.nodes[0];
+        let mut action = self.edges[root.edges.start].action;
+        let mut most = 0u32;
+        for e in &self.edges[root.edges.clone()] {
+            visits[usize::from(e.action)] = e.visits;
+            total += e.total;
+            count += e.visits;
+            if e.visits > most {
+                most = e.visits;
+                action = e.action;
+            }
+        }
+        let value = if count == 0 { root.value } else { (total / f64::from(count)) as f32 };
+        (SearchResult { action, visits, value }, self.stats)
     }
 }
 
@@ -221,50 +340,14 @@ pub fn search<S: Shuffler, E: Evaluator>(
     config: &SearchConfig,
     noise: Option<(&SelfPlayNoise, &mut Rng)>,
 ) -> Option<(SearchResult, TreeStats)> {
-    if root.is_terminal() || root.legal_actions().is_empty() {
-        return None; // [Z11-62]: no evaluator call
+    // [Z11-62]: a terminal root asks for nothing.
+    let mut search = Search::new(root, config, noise)?;
+    let mut eval = Evaluation::default();
+    while let Some((observation, legal)) = search.wants() {
+        net.evaluate(observation, legal, &mut eval);
+        search.supply(&eval);
     }
-    let mut tree = Tree {
-        net,
-        config,
-        nodes: Vec::new(),
-        edges: Vec::new(),
-        eval: Evaluation::default(),
-        stats: TreeStats::default(),
-    };
-    // The root's expansion is not a simulation ([Z11-18]).
-    tree.expand(root.clone());
-    if let Some((noise, rng)) = noise {
-        let edges = tree.nodes[0].edges.clone();
-        let mut dir = vec![0f64; edges.len()];
-        rng.dirichlet(f64::from(noise.alpha), &mut dir);
-        let eps = f64::from(noise.epsilon);
-        for (i, d) in edges.zip(dir) {
-            let p = &mut tree.edges[i].prior;
-            *p = ((1.0 - eps) * f64::from(*p) + eps * d) as f32;
-        }
-    }
-    let mut path = Vec::new();
-    for _ in 0..config.simulations {
-        tree.simulate(&mut path);
-    }
-
-    let mut visits = [0u32; ACTION_SPACE];
-    let mut total = 0f64;
-    let mut count = 0u32;
-    let mut action = tree.edges[tree.nodes[0].edges.start].action;
-    let mut most = 0u32;
-    for e in &tree.edges[tree.nodes[0].edges.clone()] {
-        visits[usize::from(e.action)] = e.visits;
-        total += e.total;
-        count += e.visits;
-        if e.visits > most {
-            most = e.visits;
-            action = e.action;
-        }
-    }
-    let value = if count == 0 { tree.nodes[0].value } else { (total / f64::from(count)) as f32 };
-    Some((SearchResult { action, visits, value }, tree.stats))
+    Some(search.finish())
 }
 
 /// The player's move ([Z11-19]): an empty tree, no noise, the most-visited
