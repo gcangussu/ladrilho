@@ -508,6 +508,20 @@ The binary's commands, each loading one checkpoint and one run's settings:
   *The generation is in the seed because without it game `i` of every generation deals the same
   bag order: the run would train on the same 500 openings, twenty generations deep in the window,
   for its whole life, and nothing would say so.*
+- **[Z11-69]** Self-play MUST memoise its evaluator calls within each game: a call whose
+  observation and legal set are bit for bit those of an earlier call in the same game MUST be
+  answered with that call's evaluation and MUST NOT reach the network. The memo MAY be emptied at
+  any time, and play empties it at every boundary ply so that it holds one round. Because the
+  forward pass is a pure function of its input ([Z11-10]), every visit and every sample MUST be
+  exactly what the same game gives unmemoised. The memo sits below the search: the search still
+  asks once per node and keeps no transposition table ([Z11-42]). Play, milestones, the gate and
+  the latency lane do not memoise.
+
+  *Measured on run `fourth`'s generation 20 checkpoint, 59% of a game's calls repeat an earlier
+  one — about a quarter of them transposed move orders inside one search, the rest the subtree of
+  the move just played, searched again from its child — and the memo made twelve games 2.4 times
+  faster with identical visits. Reusing that subtree ([Z11-19]) would save less and change the
+  visits.*
 - **[Z11-27]** A sample file MUST be a sequence of fixed-size little-endian records:
 
   | Field | Type | Content |
@@ -1044,6 +1058,8 @@ this package, and MUST be corrected in the same change.
     file, and a parity file naming another corpus's hash rejected with the corpus error;
   - [Z11-26] by running `selfplay` for two generations of 16 games with the same config and
     checking that all 32 opening deals are pairwise distinct;
+  - [Z11-69] by checking a self-played game's move samples against plain searches of the same
+    positions with the same noise, visit for visit, and that the network was called fewer times;
   - [Z11-60] by running `play` with each `--search` on a config whose `playSimulations` and
     `milestoneSimulations` differ, checking the simulation count each reports, and that
     `--simulations` is refused by every command but `latency`;
