@@ -159,3 +159,34 @@ fn memoised_self_play_changes_no_visit() {
         plain.calls()
     );
 }
+
+/// [Z11-70]: `self_play`, four games to a thread and their leaves valued in
+/// batches, writes exactly the bytes of the same games played one at a time
+/// and unbatched, in game order. Eleven games on two threads, so batches run
+/// short as games end and at the generation's tail; the memo's answers and
+/// the network's mix within every batch.
+///
+/// Mutations, seen red ([Z11-48]), each in a copy with its anchor confirmed:
+/// in `play_games`, each game supplied the evaluation of the next game's
+/// request (`evals.iter().cycle().skip(1)`); and in `self_play`, each game's
+/// bytes stored in the next game's slot (`d[(i as usize + 1) % games]`).
+#[test]
+fn batched_self_play_is_each_game_alone() {
+    use azul_alphazero::config::{RunConfig, SearchKind, settings};
+    use azul_alphazero::selfplay::{play_game, self_play};
+    use support::fixture;
+
+    let cfg = RunConfig::parse(config_json(&[("selfPlaySimulations", "48"), ("threads", "2")]).as_bytes()).unwrap();
+    let s = settings(&cfg, SearchKind::SelfPlay).unwrap();
+    let net = fixture();
+    let games = 11;
+    let batched = self_play(&net, &s, cfg.seed, 4, games);
+    let mut alone = Vec::new();
+    for i in 0..games as u64 {
+        for sample in play_game(&net, &s, cfg.seed, 4, i) {
+            sample.write(&mut alone);
+        }
+    }
+    assert_eq!(batched.len(), alone.len(), "a different number of samples");
+    assert!(batched == alone, "batched self-play wrote different samples");
+}

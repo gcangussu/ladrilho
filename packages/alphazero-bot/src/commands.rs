@@ -9,7 +9,7 @@ use azul_alphazero::config::{RunConfig, SearchKind, Settings, settings};
 use azul_alphazero::network::{Evaluation, Evaluator, Network};
 use azul_alphazero::parity;
 use azul_alphazero::search::choose;
-use azul_alphazero::selfplay::self_play;
+use azul_alphazero::selfplay::{GAMES_PER_THREAD, self_play};
 use azul_alphazero::wire::{frame, read_canonical, read_messages};
 use azul_engine::{AzulState, Seeded};
 use clap::{Parser, Subcommand, ValueEnum};
@@ -243,7 +243,8 @@ fn throughput(checkpoint: &Path, config: &Path) -> Result<(), String> {
     }
     let per_second = evaluations as f64 / started.elapsed().as_secs_f64();
 
-    let games = u64::from(s.threads) * 2;
+    // Enough games that every thread fills its batch twice over ([Z11-70]).
+    let games = u64::from(s.threads) * GAMES_PER_THREAD as u64 * 2;
     let started = Instant::now();
     // Seeded apart from any generation a run will play: the games are thrown away.
     let bytes = self_play(&loaded.net, &s, loaded.config.seed ^ 0x7468_726f_7567_6870, u64::MAX, games as usize);
