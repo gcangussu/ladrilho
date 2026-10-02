@@ -87,7 +87,9 @@ def load(path: Path, width: int, config: dict):
     if path.exists():
         state = torch.load(path)
         heads.load_state_dict(state["heads"])
-        opt.load_state_dict(state["optimiser"])
+        from .train import restore
+
+        restore(opt, state["optimiser"], config)
     return heads, opt
 
 
