@@ -20,6 +20,7 @@ Add an entry when a run starts or ends, or when a decision changes the plan. Tim
 | `fourth` | 10-01 | `third`/90 | the gate off ([Z11-68]) | ladder | gen 140, ended with its session | `sharp` 0.79–0.89; the ladder saturated |
 | `fifth` | 10-01 | `fourth`/140 | the pool as yardstick ([Z11-73]) | pool | gen 270, stop rule | **+464** at gen 250; `sharp` 0.91 at 200 simulations |
 | `sixth` | 10-02 | `fifth`/250 | auxiliary targets ([Z11-67]) | pool | gen 80, stop rule | **+496** at gen 40, 32 above `fifth` |
+| `seventh` | 10-02 | `sixth`/40 | learning rate 0.02 → 0.002 | pool | running | |
 
 Progress on the ladder is the sum of four winrates (0 to 4). Pool ratings are Elo, with `third`/90,
 the checkpoint that passed the gate, at 0.
@@ -220,10 +221,23 @@ stop rule ended the run at 80 (10-02 13:33, `ea6d460`): 70 did not beat 60, and 
   is a noisy sample of where training is; the stop rule fired on a noisy sample. This is the
   strongest case yet for averaging the weights or decaying the rate.
 
+## `seventh`: a tenth of the learning rate (10-02 →)
+
+**Decision (the user):** start from `sixth`/40, the best checkpoint, with the learning rate cut
+from 0.02 to 0.002 and nothing else changed (aux targets on). A step decay once progress stalls
+is what AlphaZero did. The aim is the dips: at a lower rate, consecutive checkpoints should
+differ less, so the milestones measure the trend rather than the noise.
+
+- **A bug found before it ran.** PyTorch's `load_state_dict` restores the saved learning rate,
+  momentum and weight decay along with the momentum buffers. So a child run's `--set` of any of
+  the three was recorded in `from` and silently not used: `seventh` would have trained at 0.02.
+  No earlier run changed them. A restored optimiser now takes them from the run's config
+  (`25a1f36`, [Z11-66]), and generation 0's saved optimisers, body and aux, show 0.002.
+
 ## Next
 
-- **Weight averaging or learning-rate decay**, motivated by `fifth`'s dips: an exponential moving
-  average of the weights in the trainer, or a lower rate once progress slows. Trainer-only.
+- **Weight averaging** (an exponential moving average of the weights, trainer-only), if the lower
+  rate does not calm the dips or stalls early.
 - After those, in the report's order and as the evidence points: gating new networks (AlphaGo
   Zero style); better policy targets at low simulation counts (playout-cap randomisation, then
   Gumbel search); blending the result with the search's value; restarting self-play from saved
