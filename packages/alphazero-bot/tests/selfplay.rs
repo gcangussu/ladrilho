@@ -2,8 +2,11 @@
 
 mod support;
 
-use azul_alphazero::samples::{Kind, RECORD_BYTES, Sample, mask_has, read_all};
-use azul_engine::{OFF_FACTORIES, OFF_ROUND, OFF_TILES_LEFT};
+use azul_alphazero::samples::{
+    AUX_BYTES, Aux, Kind, RECORD_BYTES, Sample, aux_path, mask_has, read_all, read_all_aux,
+};
+use azul_alphazero::selfplay::final_aux;
+use azul_engine::{AzulState, OFF_FACTORIES, OFF_MY_WALL, OFF_OP_WALL, OFF_ROUND, OFF_TILES_LEFT, Player, Seeded};
 use support::{config_json, crate_dir, fixture_paths, run, scratch};
 
 /// [Z11-27]: a sample written is read back field for field, at the record size
@@ -102,6 +105,88 @@ fn self_play_deals_every_game_its_own_opening() {
     }
 }
 
+/// [Z11-67]: an aux record written is read back, at ten bytes; a wall mask
+/// with a bit past cell 24 is refused, and so is a partial record.
+#[test]
+fn an_aux_record_round_trips() {
+    assert_eq!(AUX_BYTES, 10);
+    let written = [
+        Aux { margin: 17, walls: [0b1_1111, 1 << 24] },
+        Aux { margin: -3, walls: [0, 0x1ff_ffff] },
+        Aux { margin: i16::MIN, walls: [12345, 54321] },
+    ];
+    let mut bytes = Vec::new();
+    for a in &written {
+        a.write(&mut bytes);
+    }
+    assert_eq!(read_all_aux(&bytes).unwrap(), written);
+    assert!(read_all_aux(&bytes[1..]).is_err());
+    let mut bad = Vec::new();
+    Aux { margin: 0, walls: [1 << 25, 0] }.write(&mut bad);
+    assert!(read_all_aux(&bad).is_err());
+    assert_eq!(aux_path(std::path::Path::new("runs/x/samples/16.bin")), std::path::Path::new("runs/x/samples/16.aux.bin"));
+}
+
+/// A finished game of uniformly random legal moves, from its seed.
+fn random_game(seed: u64) -> AzulState<Seeded> {
+    let mut s = AzulState::new_game(Seeded::new(seed));
+    let mut x = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+    while !s.is_terminal() {
+        let legal = s.legal_actions();
+        x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        s.apply(legal.as_slice()[(x >> 33) as usize % legal.len()]).unwrap();
+    }
+    s
+}
+
+/// [Z11-67]: `final_aux` is the seat's final score minus the other's, and the
+/// two final walls with the seat's first, cell `i` at bit `i` — against a
+/// reference written out here, on finished games, from both seats.
+///
+/// Mutations, seen red ([Z11-48]): the margin taken the other way round, the
+/// walls not swapped for seat 1, and a wall's cells numbered from the end.
+#[test]
+fn final_aux_is_the_game_end_from_the_seat() {
+    for seed in 1..=12 {
+        let s = random_game(seed);
+        let c = s.to_canonical();
+        let mask = |w: &[u8; 25]| (0..25).filter(|&i| w[i] == 1).map(|i| 1u32 << i).sum::<u32>();
+        let [m0, m1] = [mask(&c.walls[0]), mask(&c.walls[1])];
+        // A finished game has a full row on some wall.
+        assert!(m0.count_ones() >= 5 || m1.count_ones() >= 5, "seed {seed}: a finished game with no full row");
+        let margin = s.scores()[0] - s.scores()[1];
+        assert_eq!(final_aux(&s, Player::P0), Aux { margin: margin as i16, walls: [m0, m1] }, "seed {seed}");
+        assert_eq!(final_aux(&s, Player::P1), Aux { margin: -margin as i16, walls: [m1, m0] }, "seed {seed}");
+    }
+}
+
+/// [Z11-67]: `selfplay` writes the aux file beside the sample file, one record
+/// per sample in the same order, each the game's end from that sample's seat:
+/// the walls in its observation are a subset of the final walls on the same
+/// side, and the margin never disagrees with the result's sign. The sample
+/// file itself is what it was before the aux file existed: the existing
+/// cases above read it.
+///
+/// Mutation, seen red ([Z11-48]): the aux file's walls taken from the seat
+/// that ended the game instead of each sample's seat.
+#[test]
+fn the_aux_file_is_the_games_end_from_each_samples_seat() {
+    let dir = scratch();
+    let samples = selfplay(dir.path(), 3, 8);
+    let aux = read_all_aux(&std::fs::read(aux_path(&dir.path().join("3.bin"))).unwrap()).unwrap();
+    assert_eq!(aux.len(), samples.len());
+    let wall = |obs: &[f32], off: usize| (0..25).filter(|&i| obs[off + i] == 1.0).map(|i| 1u32 << i).sum::<u32>();
+    for (s, a) in samples.iter().zip(&aux) {
+        assert_eq!(wall(&s.observation, OFF_MY_WALL) & !a.walls[0], 0, "the seat's wall lost a tile");
+        assert_eq!(wall(&s.observation, OFF_OP_WALL) & !a.walls[1], 0, "the other wall lost a tile");
+        match s.result {
+            1 => assert!(a.margin >= 0, "a win with margin {}", a.margin),
+            -1 => assert!(a.margin <= 0, "a loss with margin {}", a.margin),
+            _ => assert_eq!(a.margin, 0, "a draw with margin {}", a.margin),
+        }
+    }
+}
+
 /// [Z11-69]: a self-played game's move samples are visit for visit what plain
 /// searches of the same positions give, with the same noise drawn in the same
 /// order, and the memo kept a share of those searches' calls from the network.
@@ -127,7 +212,7 @@ fn memoised_self_play_changes_no_visit() {
 
     let memoised = Counting::new(fixture());
     let samples = play_game(&memoised, &s, cfg.seed, generation, index);
-    let moves: Vec<Sample> = samples.into_iter().filter(|x| x.kind == Kind::Move).collect();
+    let moves: Vec<Sample> = samples.into_iter().map(|(x, _)| x).filter(|x| x.kind == Kind::Move).collect();
 
     let plain = Counting::new(fixture());
     let mut state = AzulState::new_game(Seeded::new(game_seed(cfg.seed, generation, index)));
@@ -180,13 +265,16 @@ fn batched_self_play_is_each_game_alone() {
     let s = settings(&cfg, SearchKind::SelfPlay).unwrap();
     let net = fixture();
     let games = 11;
-    let batched = self_play(&net, &s, cfg.seed, 4, games);
-    let mut alone = Vec::new();
+    let (batched, batched_aux) = self_play(&net, &s, cfg.seed, 4, games);
+    let (mut alone, mut alone_aux) = (Vec::new(), Vec::new());
     for i in 0..games as u64 {
-        for sample in play_game(&net, &s, cfg.seed, 4, i) {
+        for (sample, aux) in play_game(&net, &s, cfg.seed, 4, i) {
             sample.write(&mut alone);
+            aux.write(&mut alone_aux);
         }
     }
     assert_eq!(batched.len(), alone.len(), "a different number of samples");
     assert!(batched == alone, "batched self-play wrote different samples");
+    // [Z11-67]: and the aux file, record for record.
+    assert!(batched_aux == alone_aux, "batched self-play wrote different aux records");
 }

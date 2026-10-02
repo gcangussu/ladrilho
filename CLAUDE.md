@@ -182,7 +182,7 @@ pnpm -F alphazero-bot test:train # the trainer's pytest suite; needs uv. Not in 
 pnpm -F alphazero-bot train init --run <name>  # [Z11-58]: checkpoint 0 and the config
 pnpm -F alphazero-bot train init --run <name> --from <run>:<g> [--augment displays] \
     [--set gamesPerGeneration=3000] [--gate off] [--yardstick pool]
-                                               # [Z11-66], [Z11-65], [Z11-68], [Z11-73]: start from another run's
+                                               # [Z11-66], [Z11-65], [Z11-67], [Z11-68], [Z11-73]: start from another run's
                                                # checkpoint, window and latency record
 pnpm -F alphazero-bot latency --run <name>     # [Z11-57]: sets playSimulations; idle machine, hours
 pnpm -F alphazero-bot throughput --run <name>  # [Z11-53]: minutes per generation

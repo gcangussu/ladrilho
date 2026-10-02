@@ -81,5 +81,12 @@ describe('a run started from another [Z11-66]', () => {
     expect(childConfig({ ...parent, yardstick: 'pool' }, origin, 42, undefined, {}).yardstick).toBe('pool');
     expect(childConfig(parent, origin, 42, undefined, {}, undefined, 'pool').yardstick).toBe('pool');
     expect('yardstick' in childConfig(parent, origin, 42, undefined, {})).toBe(false);
+    // [Z11-67]: the aux weights are changes like any other, from an absent 0.
+    const aux = childConfig(parent, origin, 42, undefined, { auxMarginWeight: 0.5, auxWallsWeight: 0.5 });
+    expect(aux.auxMarginWeight).toBe(0.5);
+    expect(aux.from?.changes).toEqual({
+      auxMarginWeight: { parent: 0, run: 0.5 },
+      auxWallsWeight: { parent: 0, run: 0.5 },
+    });
   });
 });
