@@ -210,7 +210,7 @@ that do, so it phases in over the first generations. Throughput: 1.2 minutes a g
   `fifth` showed dips of this size.
 
 Then 30: +484, 40: **+496 ±7** (the best), 50: +454, 60: +486, 70: +483, and 80: **+424**. The
-stop rule ended the run at 80 (10-02 13:45, `ea6d460`): 70 did not beat 60, and 80 did not beat 70.
+stop rule ended the run at 80 (10-02 13:33, `ea6d460`): 70 did not beat 60, and 80 did not beat 70.
 
 - **Aux targets helped.** In 40 generations `sixth` passed `fifth`'s best by 32 Elo, against
   `fifth`'s last 60 generations within 458–464. Its plateau sits around +485, about 20 above
