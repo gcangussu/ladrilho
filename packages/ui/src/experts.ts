@@ -33,6 +33,9 @@ export interface ExpertSeats {
  * notice either.
  */
 export function chooseFor(request: ToWorker, seats: ExpertSeats): Choice | ExpertChoice {
+  // `master` runs in a worker of its own [W6-46], and this one never loads
+  // it: a request for it here is a routing defect, reported as one [W6-15].
+  if (request.tier === 'master') throw new Error('master is answered by the master worker, not this one');
   return request.tier === 'expert'
     ? seats.choose(request.position)
     : chooseMove(request.position, { tier: request.tier });

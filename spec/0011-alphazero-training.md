@@ -27,6 +27,9 @@ Does not cover:
 
 - **The interface.** Nothing here is offered as a difficulty setting, and nothing runs in the
   browser. Intent 0009 leaves both to a later intent, and with them the setting's name.
+  *(That intent is 0010, and its spec is *0012 — Master opponent*: the crate's library runs in
+  the browser through a web crate under `web/`, as `master`. Training, the crate's library and
+  every lane here are unchanged by it.)*
 - **`bot`.** *0004 — Computer opponent* and *0005 — Opponent strength* are unchanged. `bot` is used
   only as the measuring stick, through the arena export of [0005 M5-32], exactly as `ai-bot`'s gate
   uses it ([0008 A8-30]).
@@ -114,7 +117,8 @@ result, winrate) keep their meaning.
 - **[Z11-1]** The package MUST live in `packages/alphazero-bot`, a pnpm workspace package named
   `alphazero-bot` whose one runtime dependency is the workspace package `engine`. It MAY declare
   `bot` as a devDependency; only the lanes and their tests may import it. Nothing in the package
-  may import `ai-bot` or `ui`.
+  may import `ai-bot` or `ui`. *(Widened by [0012 T12-32]: the package exports `./web` and
+  `./web/settings` for `ui`, [0012 T12-12] and [0012 T12-15].)*
 - **[Z11-2]** The crate MUST be named `azul_alphazero`, with its `Cargo.toml` at the package root,
   Rust edition 2024, `publish = false`, one library target and one binary target named
   `alphazero`. It MUST depend on `azul_engine` by path (`../engine-rs`). Everything that is the
@@ -167,7 +171,8 @@ result, winrate) keep their meaning.
 - **[Z11-3]** Nothing in the package may be derived from `ai-bot` or from the program it ports:
   no weights, no encoding table, no search code, no constants. A source check MUST fail on an
   import of `ai-bot`, on the path `packages/ai-bot`, and on the string `alpha-zero-general`
-  anywhere in the package's sources.
+  anywhere in the package's sources — `web/` included ([0012 T12-32]), its generated payload
+  excepted.
 - **[Z11-4]** `package.json` scripts:
 
   | Script | Runs |
@@ -182,6 +187,12 @@ result, winrate) keep their meaning.
   | `gate <checkpoint>` | [Z11-35], [Z11-61] |
   | `latency --run <name>` | [Z11-40], [Z11-57] |
   | `throughput --run <name>` | [Z11-53] |
+  | `web` | [0012 T12-7]: the master's payload |
+  | `web-latency` | [0012 T12-25] |
+
+  *(Extended by [0012 T12-32].)* `test` also runs the web crate's `cargo test` and builds the
+  payload before the lanes' suite, and `typecheck` builds the payload first and lints the web
+  crate too.
 
   `milestone` and `gate` take a checkpoint at `milestones/<run>/<generation>/checkpoint.bin` and
   read the run and generation from that path; the checkpoint's header carries no run name. Where
@@ -1289,7 +1300,8 @@ this package, and MUST be corrected in the same change.
   sample, and that [Z11-67]'s targets are read in order, enter only where a sample has one, and its
   heads train, persist between generations and stay out of the checkpoint.
 - **[Z11-47]** A source check MUST cover [Z11-1], [Z11-2] — its list of crates and its build flag
-  in `.cargo/config.toml` included, failing if the file is absent or its flags differ — and
+  in the package root's `.cargo/config.toml` included, failing if the file is absent or its flags
+  differ; the web crate's own file is [0012 T12-2]'s — and
   [Z11-3], each clause run against a source it exists to reject, and MUST fail on a clock read
   (`Instant`, `SystemTime`) anywhere in the crate's library, which is everything under `src/`
   except `src/main.rs` and the modules only it declares.

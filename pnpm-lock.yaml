@@ -216,6 +216,9 @@ importers:
       ai-bot:
         specifier: workspace:*
         version: link:../ai-bot
+      alphazero-bot:
+        specifier: workspace:*
+        version: link:../alphazero-bot
       bot:
         specifier: workspace:*
         version: link:../bot

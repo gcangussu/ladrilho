@@ -24,6 +24,7 @@
     "test",
     "eval",
     "tools",
+    "web",
     "vitest.config.ts"
   ]
 }

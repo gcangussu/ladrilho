@@ -2,7 +2,7 @@
 title: Master opponent
 author: Gabriel Cangussu
 date: 2026-10-02
-status: draft
+status: implemented
 intent: 0010 — Playing the opponent we trained
 prefix: T12
 depends-on: 0003 — Web interface, 0006 — Opponent in the interface, 0009 — Engine in Rust, 0011 — AlphaZero training
@@ -156,7 +156,9 @@ export interface MasterChoice {
 export interface Master {
   choose(position: AzulJSON, simulations: number): MasterChoice;
 }
-export function createMaster(): Promise<Master>;  // [T12-12]
+/** `parity` defaults to the payload's; the suite passes a corrupted one ([T12-28]). */
+export function createMaster(parity?: Uint8Array): Promise<Master>;  // [T12-12]
+export function moduleBytes(): Uint8Array;  // the compiled module, for [T12-6]'s check
 export const SHIPPED: Readonly<Shipped>;
 ```
 
@@ -168,7 +170,7 @@ all on `wasm32` linear memory:
 | Export | Signature | Does |
 | --- | --- | --- |
 | `alloc` | `(len: usize) -> *mut u8` | A buffer of `len` bytes that JavaScript fills. Never freed. |
-| `load` | `(ck, ck_len, par, par_len, cpuct: f32, fpu: f32) -> i32` | `Network::load` with the parity check ([0011 Z11-13]). Returns `0`, or `-1` with the error text set. |
+| `load` | `unsafe (ck, ck_len, par, par_len, cpuct: f32, fpu: f32) -> i32` | `Network::load` with the parity check ([0011 Z11-13]). Returns `0`, or `-1` with the error text set. |
 | `words_ptr` | `() -> *mut u32` | A buffer of at least 512 words for one canonical block ([0010 C10-8]). |
 | `choose` | `(n_words: usize, simulations: u32) -> i32` | The action, or `-1` for a terminal position, or `-2` for a refused block, with the error text set. |
 | `value` | `() -> f32` | The value of the last `choose`. |
@@ -314,14 +316,14 @@ interface Seating {
 
 ### The interface
 
-These requirements are proposals for *0006*, in the manner of [0008 A8-33]. Each lands in
+These requirements were proposals for *0006*, in the manner of [0008 A8-33]. Each has landed in
 `spec/0006-opponent-in-the-interface.md` under the number shown, and is cited from there.
 
-- **[T12-18]** *(Proposed [0006 W6-43].)* The interface MUST always offer `master`, labelled
+- **[T12-18]** *(Landed as [0006 W6-43].)* The interface MUST always offer `master`, labelled
   `Computer — master`. In the order of [0006 W6-1] it comes last: after `sharp`, and after
   `expert` when [0008 A8-33] offers that. Nothing gates it. *(Intent 0010 drops the pass-or-fail
   match against `sharp` that 0006's player needed.)*
-- **[T12-19]** *(Proposed [0006 W6-44].)* Each seat's simulations setting is part of the seating,
+- **[T12-19]** *(Landed as [0006 W6-44].)* Each seat's simulations setting is part of the seating,
   and the two are independent. A request for a `master` seat carries that seat's setting.
   - Each MUST default to `MASTER_SIMULATIONS.default`.
   - A new game MUST keep both, as it keeps the seats.
@@ -340,7 +342,7 @@ These requirements are proposals for *0006*, in the manner of [0008 A8-33]. Each
   make an uneven `master`-against-`master` game possible, which is the cheapest way to watch what
   extra search buys.*
 
-- **[T12-20]** *(Proposed [0006 W6-45].)* The advanced control MUST be rendered only while at
+- **[T12-20]** *(Landed as [0006 W6-45].)* The advanced control MUST be rendered only while at
   least one seat is `master`. It sits inside a closed-by-default `<details>` whose summary reads
   `Advanced`.
   - It holds one number input for each `master` seat, and none for any other seat. Each is
@@ -348,11 +350,16 @@ These requirements are proposals for *0006*, in the manner of [0008 A8-33]. Each
     `max` and the current value from that seat's setting. One line states the default and the
     range.
   - A valid value, committed on `change`, MUST apply [T12-19] to that seat alone. An invalid one
-    MUST leave both settings and the game as they were, and MUST be announced in the live region of
-    [0003 U3-56] with the range.
-  - The control MUST follow [0003 U3-29]'s discipline while a search is in flight, exactly as the
-    new-game control does: it stays available ([0006 W6-23]).
-- **[T12-21]** *(Proposed [0006 W6-46].)* `master` MUST run in its own dedicated module worker,
+    MUST leave both settings and the game as they were, restore the input to the seat's setting,
+    and say why, with the range, in a `role="status"` line inside the control.
+  - It stays available while a search is in flight, as the new-game control does
+    ([0006 W6-23]).
+
+  *A status line of its own rather than [0003 U3-56]'s live region, which is derived from the view
+  model alone. A refused entry changes nothing the view model holds, and giving it a place there
+  would add state to the state module for a message about a form field.*
+
+- **[T12-21]** *(Landed as [0006 W6-46].)* `master` MUST run in its own dedicated module worker,
   `master-worker.ts`, constructed by the exact shape [0003 U3-8] permits.
   - It is created lazily, on the first `master` request, and terminated on every deal, as
     [0006 W6-13] terminates the first worker.
@@ -365,16 +372,17 @@ These requirements are proposals for *0006*, in the manner of [0008 A8-33]. Each
   3.6 MB as base64, and it is only ever loaded by a worker nobody creates until a seat is
   `master`. A seating with no `master` loads exactly what it loaded before.*
 
-- **[T12-22]** *(Proposed [0006 W6-47].)* The master worker MUST hold at most one `Master`, created
+- **[T12-22]** *(Landed as [0006 W6-47].)* The master worker MUST hold at most one `Master`, created
   by `createMaster()` on its first request and shared by both seats. Each request is answered by
-  `choose(position, simulations)` and posted as `{ ok: true, choice }`. A rejection from
+  `choose(position, simulations)`, in the order the requests arrive, and posted as
+  `{ ok: true, choice }`. A rejection from
   `createMaster` or a throw from `choose` MUST be reported as `{ ok: false, message }`
   ([0006 W6-15]).
 
   *One instance for both seats is sound where [0006 W6-40]'s sessions are not: `choose` keeps
   nothing between moves. Sharing it pays for instantiation and the parity check once.*
 
-- **[T12-23]** *(Proposed [0006 W6-48].)* The real seam MUST route each request to the worker its
+- **[T12-23]** *(Landed as [0006 W6-48].)* The real seam MUST route each request to the worker its
   level runs on. [0006 W6-7]'s single outstanding request and [0006 W6-42]'s per-generation reply
   routing MUST hold **across both workers**: a reply from either worker settles only a request
   that worker was sent. The fast suite MUST exercise the real seam against two stand-in `Worker`s,
@@ -406,14 +414,14 @@ These requirements are proposals for *0006*, in the manner of [0008 A8-33]. Each
 ## Verification
 
 - **[T12-26]** The web crate's `cargo test` MUST call its exports, natively, on at least 50
-  latency-corpus positions at 800 simulations. It MUST assert action and value bit for bit equal
+  latency-corpus positions at 800 simulations, with the package's fixture network. It MUST assert action and value bit for bit equal
   to `azul_alphazero::search::choose` on the same network and settings. That covers the decoding
   of [T12-4], the settings of [T12-3] and the memo's transparency together.
 - **[T12-27]** The package's vitest suite MUST build the payload, call `createMaster()` and
   `choose` in Node on the same positions at 800 simulations, and assert two things:
-  - the **same action** as `alphazero serve --search milestone` on a config carrying the shipped
+  - the **same action** as `alphazero play --search milestone` on a config carrying the shipped
     milestone's `cpuct`, `fpu` and `milestoneSimulations: 800`;
-  - a **value within 1e-5** of `serve`'s value.
+  - a **value within 1e-5** of `play`'s value.
 
   *Bit equality is asserted where it is promised, in [T12-26] on one build. Across native macOS and
   wasm, `exp` and `tanh` come from different libms, so the value is compared to a tolerance and the
@@ -454,7 +462,7 @@ These requirements are proposals for *0006*, in the manner of [0008 A8-33]. Each
 
 | Requirement | Why it is not testable here |
 | --- | --- |
-| [T12-18] through [T12-24] | Proposals for *0006*. They are cited in `packages/ui` under the numbers they take there. |
+| [T12-18], [T12-19], [T12-20], [T12-21], [T12-22], [T12-23], [T12-24] | Proposals for *0006*. They are cited in `packages/ui` under the numbers they take there. |
 | [T12-25] | A lane run on purpose, on an idle machine. |
 | [T12-32] | A process promise about what lands in which commit. |
 | [T12-30] | Asserted in `packages/ui`'s browser lane, under [0006 W6-30] as amended. |

@@ -20,6 +20,7 @@
  */
 
 import { afterEach, describe, expect, it } from 'vitest';
+import { EXPERT_AVAILABLE } from '../../src/opponent.js';
 
 const SEED = 909;
 
@@ -143,7 +144,17 @@ describe('the opponent against a real worker [W6-30]', () => {
    * lifetime, and intent 0006's one performance promise — the page stays alive
    * however long it thinks — is only observable off the main thread.
    */
-  it('[W6-30] [W6-40] plays a whole game against a real worker running expert', async () => {
+  //
+  // Skipped while the committed gate withdraws `expert` ([0008 A8-33]): the
+  // URL may not seat a level the interface does not offer ([W6-4]), so the
+  // game would be hot-seat and the case would time out waiting for a move,
+  // failing for a reason that has nothing to do with [W6-30]. The answer is
+  // the interface's own `EXPERT_AVAILABLE`, not a second reading of the file,
+  // and `skipIf` makes the reporter say so rather than pass in silence.
+  //
+  // Seen to work, on a copy: with the condition inverted to
+  // `skipIf(EXPERT_AVAILABLE)` the case runs, and fails as it did before.
+  it.skipIf(!EXPERT_AVAILABLE)('[W6-30] [W6-40] plays a whole game against a real worker running expert', async () => {
     const { doc, win } = await load('expert-expert');
 
     let worst = 0;
@@ -208,5 +219,66 @@ describe('the opponent against a real worker [W6-30]', () => {
     // [W6-42]. Either half alone keeps it green — the new request merely
     // waits behind the old search — so each is held by its own fast test.
     await until(() => tilesLeft(doc) < opening, 20_000, 'the opponent to move in the new game');
+  }, 60_000);
+});
+
+/** Every resource the frame requested, by URL: the workers' scripts included. */
+function requested(win: Window): string[] {
+  return win.performance.getEntriesByType('resource').map((e) => e.name);
+}
+
+describe('the master against its real worker [0012 T12-30]', () => {
+  /**
+   * [W6-30] as extended by [0012 T12-30]: a complete game with `master` on
+   * both seats, each at its own setting from the URL [W6-44], in the master
+   * worker [W6-46] — the WebAssembly module and the trained weights loaded
+   * from the bundle's bytes, and the page alive throughout [W6-26], [W6-35].
+   */
+  it('[W6-30] [W6-46] [W6-44] plays a whole game with master on both seats, at each seat\'s setting', async () => {
+    const { doc, win } = await load('master-master&p1Simulations=100&p2Simulations=200');
+
+    let worst = 0;
+    let last = win.performance.now();
+    const timer = win.setInterval(() => {
+      const now = win.performance.now();
+      worst = Math.max(worst, now - last);
+      last = now;
+    }, 10);
+
+    try {
+      await until(
+        () => /wins|draw/i.test(doc.querySelector('.game-over')?.textContent ?? ''),
+        600_000,
+        'the game to finish',
+      );
+    } finally {
+      win.clearInterval(timer);
+    }
+
+    expect(tilesLeft(doc)).toBe(0);
+    expect(worst, `longest main-thread gap was ${worst.toFixed(0)}ms`).toBeLessThan(400);
+    // The positive control for the next case: the master worker's script is
+    // a resource this check can see when it is loaded.
+    expect(requested(win).some((url) => url.includes('master-worker'))).toBe(true);
+    expect(requested(win).some((url) => /\/worker\.ts/.test(url)), 'the tiers\' worker, in a game without a tier').toBe(false);
+  }, 900_000);
+
+  /**
+   * [W6-46]: a game without a `master` seat never builds the master worker,
+   * so it never loads the payload it carries.
+   */
+  it('[W6-46] loads nothing of the master in a game against sharp', async () => {
+    // `sharp` opens, so a real ply arrives through the tiers' worker with no
+    // person's move needed.
+    const { doc, win } = await load('sharp-human');
+    const before = tilesLeft(doc);
+    await until(() => tilesLeft(doc) < before, 20_000, 'sharp to move');
+    expect(requested(win).some((url) => /\/worker\.ts/.test(url)), "the tiers' worker").toBe(true);
+    // The settings module is the main thread's to load [W6-46]; nothing else
+    // of the package, and not the master worker, may be. Matched on the
+    // package path, since a checkout's own directory may say "alphazero" too.
+    const master = /master-worker|\/src\/masters\.ts|\/alphazero-bot\/web\/(?!settings\.ts)/;
+    expect(requested(win).some((url) => url.includes('/alphazero-bot/web/settings.ts')), 'the control: settings is seen').toBe(true);
+    expect(requested(win).filter((url) => master.test(url))).toEqual([]);
   }, 60_000);
 });

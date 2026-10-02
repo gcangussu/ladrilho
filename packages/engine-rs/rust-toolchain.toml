@@ -1,5 +1,7 @@
 # [R9-1]: an exact stable release, so every machine builds with the same compiler.
+# [0012 T12-8]: the wasm target the master opponent's web build needs.
 [toolchain]
 channel = "1.98.1"
 components = ["clippy", "rustfmt"]
+targets = ["wasm32-unknown-unknown"]
 profile = "minimal"

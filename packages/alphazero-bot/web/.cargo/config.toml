@@ -1,0 +1,4 @@
+# [T12-2]: SIMD128 for the browser build. Like the crate's AVX2 flag, it
+# changes instructions and not results: every sum's order is in the source.
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=+simd128"]

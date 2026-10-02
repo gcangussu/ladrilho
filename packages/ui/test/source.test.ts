@@ -33,6 +33,9 @@ const SEAM = 'opponent.ts';
 const WORKER = 'worker.ts';
 /** The expert's per-seat sessions, which the worker owns [W6-40]. */
 const EXPERTS = 'experts.ts';
+/** What runs inside the master worker [W6-46], and the one player it holds [W6-47]. */
+const MASTER_WORKER = 'master-worker.ts';
+const MASTERS = 'masters.ts';
 
 interface Source {
   /** Path relative to `src`, so a failure reads as `components/App.tsx`. */
@@ -236,6 +239,17 @@ const CLAUSES: Clause[] = [
   },
   {
     cites: '[U3-8]',
+    what: 'WebAssembly instantiated from a network response',
+    // [U3-8] as widened by [0012 T12-32]: bytes already in the bundle may be
+    // instantiated; a response may not, since getting one means fetching.
+    find: (files) => matches(files, /\b(?:instantiate|compile)Streaming\b/g),
+    offenders: [
+      { file: 'bad.ts', code: "await WebAssembly.instantiateStreaming(fetch('./m.wasm'));\n" },
+      { file: 'bad.ts', code: 'const m = await WebAssembly.compileStreaming(response);\n' },
+    ],
+  },
+  {
+    cites: '[U3-8]',
     what: 'a dynamic import',
     find: (files) => matches(files, /\bimport\s*\(/g),
     offenders: [{ file: 'bad.ts', code: "const m = await import('./late.js');\n" }],
@@ -247,6 +261,28 @@ const CLAUSES: Clause[] = [
     offenders: [{ file: 'bad.ts', code: "const logo = 'https://example.com/logo.png';\n" }],
   },
 ];
+
+/**
+ * [W6-46]: who reaches the master's payload, and what the master worker
+ * reaches. Value imports of `alphazero-bot/web` — not its `settings`, not a
+ * type-only import — belong in `masters.ts` alone, and only the master worker
+ * imports that; the two of them reach neither other player, nor the state
+ * module, nor a component.
+ */
+function payloadFaults(files: Source[]): string[] {
+  const out: string[] = [];
+  const VALUE_IMPORT = /import\s+(?!type\b)[^;]*?from\s*'alphazero-bot\/web'/g;
+  for (const { file, code } of files) {
+    if (file !== MASTERS) out.push(...[...code.matchAll(VALUE_IMPORT)].map((m) => `${file}: ${m[0]}`));
+    if (file !== MASTER_WORKER && /from\s+'\.\/masters\.js'/.test(code)) out.push(`${file} imports ${MASTERS}`);
+    if (file === MASTERS || file === MASTER_WORKER) {
+      for (const m of code.matchAll(/from\s+'(bot|ai-bot)(?:\/[^']*)?'|from\s+'\.\/(game\.js|components\/[^']*)'/g)) {
+        out.push(`${file}: ${m[0]}`);
+      }
+    }
+  }
+  return out;
+}
 
 const src = sources();
 const styles = sources(/\.css$/);
@@ -337,13 +373,47 @@ describe('the module layout the check runs against', () => {
     );
   });
 
+  /**
+   * [W6-46]. The master's payload — megabytes — is reached by one module, the
+   * one the master worker runs, so a game without a `master` seat never loads
+   * it. A type-only import is erased by the compiler and carries nothing.
+   */
+  // Seen red ([0012 T12-29]), on a copy, with `worker.ts` importing
+  // `SHIPPED` from `alphazero-bot/web`.
+  it('[W6-46] keeps the payload out of every module but the master worker\'s', () => {
+    expect(payloadFaults(src)).toEqual([]);
+    // The ones that may really do, so the clause is not vacuous.
+    expect(src.find((s) => s.file === MASTERS)!.code).toMatch(/import\s*\{[^}]*\}\s*from\s*'alphazero-bot\/web'/);
+    expect(src.find((s) => s.file === MASTER_WORKER)!.code).toMatch(/from\s+'\.\/masters\.js'/);
+    const offenders: Source[] = [
+      { file: SEAM, code: "import { createMaster } from 'alphazero-bot/web';\n" },
+      { file: WORKER, code: "import { createMasterSeat } from './masters.js';\n" },
+      { file: EXPERTS, code: "import { createMasterSeat } from './masters.js';\n" },
+      { file: `${COMPONENTS}Bad.tsx`, code: "import { SHIPPED } from 'alphazero-bot/web';\n" },
+      { file: MASTER_WORKER, code: "import { chooseMove } from 'bot';\n" },
+      { file: MASTERS, code: "import { createExpert } from 'ai-bot';\n" },
+      { file: MASTERS, code: "import { view } from './game.js';\n" },
+      { file: MASTER_WORKER, code: "import { App } from './components/App.jsx';\n" },
+      { file: STATE_MODULE, code: "import * as web from 'alphazero-bot/web';\n" },
+    ];
+    for (const bad of offenders) expect(payloadFaults([bad]), bad.code).not.toEqual([]);
+    // What is allowed: types, and the settings module.
+    expect(payloadFaults([{ file: SEAM, code: "import type { MasterChoice } from 'alphazero-bot/web';\n" }])).toEqual([]);
+    expect(payloadFaults([{ file: SEAM, code: "import { MASTER_SIMULATIONS } from 'alphazero-bot/web/settings';\n" }])).toEqual([]);
+  });
+
+  it('[W6-12] keeps the master worker\'s payload under 5 MB', () => {
+    const payload = join(HERE, '..', '..', 'alphazero-bot', 'web', 'dist', 'payload.ts');
+    expect(statSync(payload).size).toBeLessThan(5 * 2 ** 20);
+  });
+
   it('[U3-78] finds the single state module and the components beside it', () => {
     expect(inStateModule(src)).toHaveLength(1);
     expect(inComponents(src).length).toBeGreaterThan(3);
     // Anything outside those two sides has to be accounted for here, or a
     // clause below would quietly stop covering it.
     const other = src.filter((s) => s.file !== STATE_MODULE && !s.file.startsWith(COMPONENTS));
-    expect(other.map((s) => s.file).sort()).toEqual([SEAM, EXPERTS, 'main.tsx', WORKER].sort());
+    expect(other.map((s) => s.file).sort()).toEqual([SEAM, EXPERTS, 'main.tsx', WORKER, MASTER_WORKER, MASTERS].sort());
   });
 });
 

@@ -4,9 +4,13 @@
   "private": true,
   "type": "module",
   "description": "A player trained from scratch by self-play on the Rust engine (spec 0011).",
+  "exports": {
+    "./web": "./web/index.ts",
+    "./web/settings": "./web/settings.ts"
+  },
   "scripts": {
-    "test": "cargo test --locked && vitest run",
-    "typecheck": "tsc --noEmit && cargo clippy --locked --all-targets -- -D warnings",
+    "test": "cargo test --locked && cargo test --locked --manifest-path web/Cargo.toml && node tools/web.mjs && vitest run",
+    "typecheck": "node tools/web.mjs && tsc --noEmit && cargo clippy --locked --all-targets -- -D warnings && cargo clippy --locked --all-targets --manifest-path web/Cargo.toml -- -D warnings",
     "test:train": "cargo build --locked && cargo test --locked --test selfplay a_sample_round_trips && bash train/venv.sh -m pytest -q tests",
     "train": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs train",
     "stop-simulation": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs stop-simulation",
@@ -16,7 +20,9 @@
     "latency-corpus": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs latency-corpus",
     "throughput": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs throughput",
     "augment-fixtures": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs augment-fixtures",
-    "pool": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs pool"
+    "pool": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs pool",
+    "web": "node tools/web.mjs",
+    "web-latency": "node tools/web.mjs && node tools/bundle.mjs && node node_modules/.alphazero/web-latency.mjs"
   },
   "dependencies": {
     "engine": "workspace:*"

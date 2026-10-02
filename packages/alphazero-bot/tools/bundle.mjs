@@ -7,8 +7,13 @@
 import { build } from 'esbuild';
 
 await build({
-  entryPoints: [new URL('../eval/cli.ts', import.meta.url).pathname],
-  outfile: new URL('../node_modules/.alphazero/cli.mjs', import.meta.url).pathname,
+  // The master's latency lane ([0012 T12-25]) is bundled beside the lanes.
+  entryPoints: {
+    cli: new URL('../eval/cli.ts', import.meta.url).pathname,
+    'web-latency': new URL('../eval/web-latency.ts', import.meta.url).pathname,
+  },
+  outdir: new URL('../node_modules/.alphazero', import.meta.url).pathname,
+  outExtension: { '.js': '.mjs' },
   bundle: true,
   format: 'esm',
   platform: 'node',

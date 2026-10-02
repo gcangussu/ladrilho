@@ -1,0 +1,26 @@
+[package]
+name = "azul_alphazero_web"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "The trained player of spec 0011, compiled to WebAssembly for the master opponent (spec 0012)."
+
+# [T12-1]: a cdylib for the browser, an rlib so the tests can call the same
+# exports natively.
+[lib]
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+# [T12-1]: the crate's own library and the engine, by path, and nothing else.
+[dependencies]
+azul_alphazero = { path = ".." }
+azul_engine = { path = "../../engine-rs" }
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+
+# As the crate's own ([0011 Z11-64]): the tests search at speed.
+[profile.test]
+opt-level = 2
+debug-assertions = true

@@ -31,6 +31,7 @@ import {
   workerThinker,
   type Choice,
   type ExpertChoice,
+  type MasterChoice,
   type Seating,
   type Thinker,
   type ToWorker,
@@ -68,7 +69,7 @@ export interface ViewModel {
    * be rendered [W6-24], [W6-25] — intent 0003 rules out explaining a move, and
    * [0003 U3-30] already rules out judging one before it is made.
    */
-  lastChoice: Choice | ExpertChoice | null;
+  lastChoice: Choice | ExpertChoice | MasterChoice | null;
   /**
    * How the engine scored the most recent round [U3-82], or `null` before the
    * first one has scored.
@@ -111,9 +112,10 @@ let thinking: Thinking = null;
 
 /**
  * The last choice, for [W6-25] only. Never rendered [W6-24] — which now
- * covers `ExpertChoice.value` as well, a number in [-1, 1] rather than points.
+ * covers `ExpertChoice.value` and `MasterChoice.value` as well, numbers in
+ * [-1, 1] rather than points.
  */
-let lastChoice: Choice | ExpertChoice | null = null;
+let lastChoice: Choice | ExpertChoice | MasterChoice | null = null;
 
 /**
  * The most recent `RoundScoring`, or `null` [U3-82]. Replaced only by a later
@@ -347,7 +349,11 @@ function pendingRequest(): ToWorker | null {
   const tier = tierAt(seating, seat);
   if (tier === null) return null;
   thinking = { seat };
-  return { generation, position: toJSON(state), tier };
+  const position = toJSON(state);
+  // A master seat searches with its own setting [W6-44].
+  return tier === 'master'
+    ? { generation, position, tier, simulations: seating.simulations[seat] }
+    : { generation, position, tier };
 }
 
 /**
@@ -411,8 +417,10 @@ export function startNewGame(): void {
  * a person and half by a program is one whose seed no longer describes a match
  * — which is exactly what [0003 U3-14] shows the seed for.
  */
-export function startWithSeating(next: Seating): void {
-  seating = next;
+export function startWithSeating(next: { players: Seating['players']; simulations?: Seating['simulations'] }): void {
+  // The simulations settings are kept unless the change names them [W6-44]:
+  // choosing who sits where does not reset how hard a master thinks.
+  seating = { players: next.players, simulations: next.simulations ?? seating.simulations };
   startGame(freshSeed());
 }
 

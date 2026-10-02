@@ -1,6 +1,12 @@
 import type { JSX } from '@solidjs/web';
-import { For } from 'solid-js';
-import { LEVELS, type Level, type Seating as SeatingModel } from '../opponent.js';
+import { For, Show, createSignal } from 'solid-js';
+import {
+  LEVELS,
+  MASTER_SIMULATIONS,
+  validSimulations,
+  type Level,
+  type Seating as SeatingModel,
+} from '../opponent.js';
 
 /**
  * Who plays each seat [W6-1], [W6-5].
@@ -31,7 +37,15 @@ const LABELS: Readonly<Record<Level, string>> = {
   steady: 'Computer — steady',
   sharp: 'Computer — ruthless',
   expert: 'Computer — expert',
+  master: 'Computer — master',
 };
+
+/** A seat's simulations input, by the name the seat is shown under [W6-45]. */
+export function simulationsLabel(seat: 0 | 1): string {
+  return `Player ${seat + 1}: simulations per move`;
+}
+
+const RANGE = `${MASTER_SIMULATIONS.min.toLocaleString('en')} to ${MASTER_SIMULATIONS.max.toLocaleString('en')}`;
 
 const CHOICES: readonly { value: Level | 'human'; label: string }[] = [
   { value: 'human', label: 'Person' },
@@ -46,8 +60,32 @@ export function Seating(props: {
     const level = value === 'human' ? null : (value as Level);
     const players: [Level | null, Level | null] = [...props.seating.players];
     players[seat] = level;
-    props.onChoose({ players });
+    props.onChoose({ players, simulations: props.seating.simulations });
   };
+
+  /** Why the last entry was refused, or nothing [W6-45]. */
+  const [refusal, setRefusal] = createSignal('');
+
+  /**
+   * [W6-45]: a valid number applies to that seat alone, and deals a new game
+   * [W6-44]; anything else leaves both settings and the game as they were, and
+   * says why.
+   */
+  const setSimulations = (seat: 0 | 1, input: HTMLInputElement): void => {
+    const raw = input.value.trim();
+    const n = Number(raw);
+    if (!/^\d+$/.test(raw) || !validSimulations(n)) {
+      input.value = String(props.seating.simulations[seat]);
+      setRefusal(`${raw === '' ? 'An empty value' : raw} is not a number of simulations from ${RANGE}.`);
+      return;
+    }
+    setRefusal('');
+    const simulations: [number, number] = [...props.seating.simulations];
+    simulations[seat] = n;
+    props.onChoose({ players: props.seating.players, simulations });
+  };
+
+  const masterSeats = (): (0 | 1)[] => ([0, 1] as const).filter((seat) => props.seating.players[seat] === 'master');
 
   return (
     <section class="seating" aria-label="Who is playing">
@@ -69,6 +107,35 @@ export function Seating(props: {
         )}
       </For>
       <p class="seating-note">Changing this starts a new game.</p>
+      <Show when={masterSeats().length > 0}>
+        <details class="advanced">
+          <summary>Advanced</summary>
+          <For each={masterSeats()}>
+            {(seat) => (
+              <p>
+                <label>
+                  {simulationsLabel(seat)}{' '}
+                  <input
+                    type="number"
+                    inputmode="numeric"
+                    min={MASTER_SIMULATIONS.min}
+                    max={MASTER_SIMULATIONS.max}
+                    step="1"
+                    value={props.seating.simulations[seat]}
+                    onChange={(event) => setSimulations(seat, event.currentTarget)}
+                  />
+                </label>
+              </p>
+            )}
+          </For>
+          <p class="seating-note">
+            {`More simulations play stronger and slower. Default ${MASTER_SIMULATIONS.default.toLocaleString('en')}; from ${RANGE}.`}
+          </p>
+          <p class="seating-note" role="status">
+            {refusal()}
+          </p>
+        </details>
+      </Show>
     </section>
   );
 }

@@ -128,7 +128,8 @@ describe('the expert is offered exactly when the gate passed [0008 A8-33]', () =
     // the import altogether, agreed with the file as long as it said yes.
     const failed = await withGate(false);
     expect(failed.EXPERT_AVAILABLE).toBe(false);
-    expect(failed.LEVELS).toEqual(['easy', 'steady', 'sharp']);
+    // `master` is offered either way: nothing gates it [W6-43].
+    expect(failed.LEVELS).toEqual(['easy', 'steady', 'sharp', 'master']);
     expect(failed.seatingFromUrl('?seating=expert-human')).toBeNull();
     // The three tiers keep working: intent 0006 says picking any other setting
     // plays exactly as it did before.
@@ -136,7 +137,7 @@ describe('the expert is offered exactly when the gate passed [0008 A8-33]', () =
 
     const gated = await withGate(true);
     expect(gated.EXPERT_AVAILABLE).toBe(true);
-    expect(gated.LEVELS).toEqual(['easy', 'steady', 'sharp', 'expert']);
+    expect(gated.LEVELS).toEqual(['easy', 'steady', 'sharp', 'expert', 'master']);
     expect(gated.seatingFromUrl('?seating=expert-human')?.players).toEqual(['expert', null]);
   });
 
@@ -162,7 +163,7 @@ describe('the expert is offered exactly when the gate passed [0008 A8-33]', () =
   it('[W6-4] carries expert in the URL exactly when it is offered', () => {
     const round = seatingFromUrl('?seating=expert-human');
     if (EXPERT_AVAILABLE) {
-      expect(round).toEqual({ players: ['expert', null] });
+      expect(round).toEqual({ players: ['expert', null], simulations: [10_000, 10_000] });
       expect(seatingToUrl({ players: ['expert', null] })).toBe('expert-human');
     } else {
       // A setting the interface does not offer is not one a URL may name, or a
@@ -189,6 +190,7 @@ describe('what the seat selector offers [W6-1]', () => {
         'steady',
         'sharp',
         'expert',
+        'master',
       ]);
       // By a name a player can act on, never a number [W6-1], and in the order
       // the settings rank: swapping two labels is a different interface.
@@ -198,6 +200,7 @@ describe('what the seat selector offers [W6-1]', () => {
         'Computer — steady',
         'Computer — ruthless',
         'Computer — expert',
+        'Computer — master',
       ]);
     }
   });
@@ -214,6 +217,7 @@ describe('what the seat selector offers [W6-1]', () => {
         'easy',
         'steady',
         'sharp',
+        'master',
       ]);
     }
   });
