@@ -19,7 +19,7 @@ Add an entry when a run starts or ends, or when a decision changes the plan. Tim
 | `third` | 09-30 | `second`/70 | 3000 games a generation | ladder | gen 90, **gate passed** | 0.79 against `sharp` at full strength |
 | `fourth` | 10-01 | `third`/90 | the gate off ([Z11-68]) | ladder | gen 140, ended with its session | `sharp` 0.79–0.89; the ladder saturated |
 | `fifth` | 10-01 | `fourth`/140 | the pool as yardstick ([Z11-73]) | pool | gen 270, stop rule | **+464** at gen 250; `sharp` 0.91 at 200 simulations |
-| `sixth` | 10-02 | `fifth`/250 | auxiliary targets ([Z11-67]) | pool | running | gen 10: +476 |
+| `sixth` | 10-02 | `fifth`/250 | auxiliary targets ([Z11-67]) | pool | gen 80, stop rule | **+496** at gen 40, 32 above `fifth` |
 
 Progress on the ladder is the sum of four winrates (0 to 4). Pool ratings are Elo, with `third`/90,
 the checkpoint that passed the gate, at 0.
@@ -209,9 +209,19 @@ that do, so it phases in over the first generations. Throughput: 1.2 minutes a g
 - Generation 20: +459 ±6 after the extra games, keeping the pool. One milestone is not a trend:
   `fifth` showed dips of this size.
 
+Then 30: +484, 40: **+496 ±7** (the best), 50: +454, 60: +486, 70: +483, and 80: **+424**. The
+stop rule ended the run at 80 (10-02 13:45, `ea6d460`): 70 did not beat 60, and 80 did not beat 70.
+
+- **Aux targets helped.** In 40 generations `sixth` passed `fifth`'s best by 32 Elo, against
+  `fifth`'s last 60 generations within 458–464. Its plateau sits around +485, about 20 above
+  `fifth`'s. They stay on.
+- **The dips grew.** Generation 50 fell 42 below its predecessor and 80 fell 59, the largest drop
+  between neighbouring milestones in either run. A checkpoint at a constant learning rate of 0.02
+  is a noisy sample of where training is; the stop rule fired on a noisy sample. This is the
+  strongest case yet for averaging the weights or decaying the rate.
+
 ## Next
 
-- **`sixth`** (above) is running. If it beats `fifth`'s +464 clearly, aux targets stay on.
 - **Weight averaging or learning-rate decay**, motivated by `fifth`'s dips: an exponential moving
   average of the weights in the trainer, or a lower rate once progress slows. Trainer-only.
 - After those, in the report's order and as the evidence points: gating new networks (AlphaGo
