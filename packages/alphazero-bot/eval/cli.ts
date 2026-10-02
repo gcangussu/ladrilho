@@ -4,6 +4,7 @@
  */
 
 import { cpus } from 'node:os';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DISPLAYS_FIXTURE, LAYOUT, displayFixture, displayLayout } from './augment.js';
 import { writeAtomic, writeJson } from './files.js';
@@ -15,13 +16,15 @@ import {
   milestoneCommand,
   parseFrom,
   parseSet,
+  poolInit,
   throughputLane,
   trainLoop,
   type Changeable,
 } from './loop.js';
 import { CORPUS } from './paths.js';
 import { seriesWorker } from './series.js';
-import { table } from './stop-rule-simulation.js';
+import { POOL, readSeed } from './pool.js';
+import { poolTable, table } from './stop-rule-simulation.js';
 
 function option(args: string[], name: string): string | undefined {
   const i = args.indexOf(`--${name}`);
@@ -64,7 +67,11 @@ async function main(): Promise<void> {
         });
         const gate = option(rest, 'gate');
         if (gate !== undefined && gate !== 'end' && gate !== 'off') throw new Error('--gate takes end or off');
-        return initRun(option(rest, 'run') ?? '', from === undefined ? undefined : parseFrom(from), augment, set, gate);
+        const yardstick = option(rest, 'yardstick');
+        if (yardstick !== undefined && yardstick !== 'ladder' && yardstick !== 'pool') {
+          throw new Error('--yardstick takes ladder or pool');
+        }
+        return initRun(option(rest, 'run') ?? '', from === undefined ? undefined : parseFrom(from), augment, set, gate, yardstick);
       }
       {
         const until = option(rest, 'until');
@@ -83,8 +90,20 @@ async function main(): Promise<void> {
       return milestoneCommand(resolve(rest[0] ?? ''), workers(rest));
     case 'gate':
       return gateCommand(resolve(rest[0] ?? ''), workers(rest));
+    case 'pool': {
+      if (rest[0] !== 'init') throw new Error('usage: pool init --members <run>:<g>,… --games <n> [--simulations 200]');
+      const members = (option(rest, 'members') ?? '').split(',').filter((m) => m !== '').map(parseFrom);
+      const games = Number(option(rest, 'games'));
+      const simulations = Number(option(rest, 'simulations') ?? 200);
+      if (!Number.isInteger(games) || games < 2) throw new Error('--games is a whole number of at least 2');
+      if (!Number.isInteger(simulations) || simulations < 1) throw new Error('--simulations is a whole number');
+      return poolInit(members, games, simulations, workers(rest));
+    }
     case 'stop-simulation':
-      process.stdout.write(`${table(Number(option(rest, 'runs') ?? 20000))}\n`);
+      process.stdout.write(`${table(Number(option(rest, 'runs') ?? 20000))}\n\n`);
+      // The committed pool's own count, so the spec's table is what this prints ([Z11-56]).
+      const poolGames = option(rest, 'pool-games') ?? (existsSync(POOL) ? String(readSeed().gamesPerMember) : '300');
+      process.stdout.write(`${poolTable(Number(option(rest, 'runs') ?? 20000), Number(poolGames))}\n`);
       return;
     case 'latency-corpus': {
       const c = recordCorpus();
@@ -102,9 +121,9 @@ async function main(): Promise<void> {
       return seriesWorker();
     default:
       throw new Error(
-        'usage: train init --run <name> [--from <run>:<generation>] [--augment none|displays] [--set <setting>=<n>]… [--gate end|off] | train --run <name> [--override "<reason>"] | latency --run <name> | ' +
+        'usage: train init --run <name> [--from <run>:<generation>] [--augment none|displays] [--set <setting>=<n>]… [--gate end|off] [--yardstick ladder|pool] | train --run <name> [--override "<reason>"] | latency --run <name> | ' +
           'throughput --run <name> | milestone <checkpoint> | gate <checkpoint> | stop-simulation | latency-corpus | ' +
-          'augment-fixtures',
+          'augment-fixtures | pool init --members <run>:<g>,… --games <n>',
       );
   }
 }

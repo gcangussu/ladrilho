@@ -27,11 +27,24 @@ export function gateSetting(config: { gate?: unknown } | undefined): GateSetting
   return config?.gate === 'off' ? 'off' : 'end';
 }
 
-/** What a milestone measured: each rung's winrate, and the ladder it played. */
-export interface MilestoneResults {
-  rungs: Record<Rung, { winrate: number }>;
-  /** [Z11-63]: a change starts the comparison afresh. */
-  ladderHash: string;
+/**
+ * What a milestone measured, and the ladder it played ([Z11-63]: a change
+ * starts the comparison afresh): each rung's winrate on the ladder of
+ * [Z11-31], or the challenger's Elo rating against the pool of [Z11-73].
+ */
+export type MilestoneResults =
+  | { rungs: Record<Rung, { winrate: number }>; ladderHash: string }
+  | { rating: number; ladderHash: string };
+
+/** The ladder's kind of results. */
+export type LadderResults = Extract<MilestoneResults, { rungs: unknown }>;
+
+/**
+ * The number the rule compares ([Z11-33], [Z11-73]): progress on the ladder,
+ * or the rating against the pool, both at [grain].
+ */
+export function measureOf(results: MilestoneResults): number {
+  return 'rungs' in results ? progress(results.rungs) : grain(results.rating) / 1e9;
 }
 
 /** A gate's outcome as the decision reads it ([Z11-35]). */
@@ -49,7 +62,8 @@ export interface MilestoneEntry {
   run: string;
   date: string;
   generation: number;
-  results: MilestoneResults['rungs'];
+  /** The ladder's rungs, or the pool's members, each with its series' winrate. */
+  results: Record<string, { winrate: number }>;
   ladderHash: string;
   progress: number;
   previousProgress: number | null;
@@ -96,7 +110,7 @@ export function atLeast(a: number, b: number): boolean {
 }
 
 /** The sum of the ladder's winrates, in `[0, 4]`, rounded to nine decimals. */
-export function progress(rungs: MilestoneResults['rungs']): number {
+export function progress(rungs: LadderResults['rungs']): number {
   return grain(LADDER.reduce((sum, r) => sum + rungs[r].winrate, 0)) / 1e9;
 }
 
@@ -175,10 +189,11 @@ export function freshStart(entries: readonly LogEntry[], results: MilestoneResul
 export function due(entries: readonly LogEntry[], results: MilestoneResults, gate: GateSetting = 'end'): boolean {
   // [Z11-68]: a run whose gate is off never runs it, so never ends done.
   if (gate === 'off') return false;
-  if (results.rungs.sharp.winrate < GATE_TRIGGER) return false;
+  // [Z11-73]: the pool has no `sharp`, so a pool milestone never runs the gate.
+  if (!('rungs' in results) || results.rungs.sharp.winrate < GATE_TRIGGER) return false;
   const w = walk(entries);
   if (freshReason(w.previous, w.overrideSince, results.ladderHash) !== null) return true;
-  return w.lastFailure === null || !atLeast(w.lastFailure.progress, progress(results.rungs));
+  return w.lastFailure === null || !atLeast(w.lastFailure.progress, measureOf(results));
 }
 
 /**
@@ -195,7 +210,7 @@ export function decide(
   if (gate?.passed === true && due(entries, results)) return 'done';
   const w = walk(entries);
   const fresh = freshReason(w.previous, w.overrideSince, results.ladderHash) !== null;
-  const improves = fresh || (w.previous !== null && atLeast(progress(results.rungs), w.previous.progress));
+  const improves = fresh || (w.previous !== null && atLeast(measureOf(results), w.previous.progress));
   if (!improves && !w.previousImproved) return 'stop';
   return 'continue';
 }

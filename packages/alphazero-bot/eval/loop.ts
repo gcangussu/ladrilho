@@ -18,6 +18,7 @@ import {
   atLeast,
   due,
   entriesOf,
+  measureOf,
   gateSetting,
   freshStart,
   isDone,
@@ -35,7 +36,17 @@ import { findPlaySimulations, machine, meetsHalfBudget, measure, passesBudget, P
 import { withLock } from './lock.js';
 import { appendLog, readLog } from './log.js';
 import { runGate, runMilestone, type Player } from './milestone.js';
-import { CORPUS, LATENCY, checkRunName, milestoneCheckpoint, parseMilestonePath, runPaths } from './paths.js';
+import { CORPUS, LATENCY, RUNS, checkRunName, milestoneCheckpoint, parseMilestonePath, runPaths } from './paths.js';
+import { fitPool } from './elo.js';
+import {
+  POOL,
+  currentPool,
+  memberName,
+  playPoolMilestone,
+  playSeedRoundRobin,
+  readSeed,
+  type PoolSeed,
+} from './pool.js';
 import { provenance } from './provenance.js';
 
 /** A sample record's size ([Z11-27]). */
@@ -109,8 +120,9 @@ export function childConfig(
   augment: 'none' | 'displays' | undefined,
   set: Partial<Record<Changeable, number>> = {},
   gate?: GateSetting,
+  yardstick?: 'ladder' | 'pool',
 ): RunConfig {
-  const { from: _grandparent, augment: parentAugment, gate: parentGate, ...inherited } = pc;
+  const { from: _grandparent, augment: parentAugment, gate: parentGate, yardstick: parentYardstick, ...inherited } = pc;
   const changes: RunOrigin['changes'] = {};
   for (const [k, v] of Object.entries(set) as [Changeable, number][]) {
     // An absent aux weight is 0, off ([Z11-67]).
@@ -124,6 +136,8 @@ export function childConfig(
     augment: augment ?? parentAugment ?? 'none',
     // [Z11-68]: written only when set, so a config without it still reads as before.
     ...((gate ?? parentGate) === undefined ? {} : { gate: gate ?? parentGate }),
+    // [Z11-73]: likewise the yardstick.
+    ...((yardstick ?? parentYardstick) === undefined ? {} : { yardstick: yardstick ?? parentYardstick }),
     from: { ...origin, changes },
   };
 }
@@ -140,6 +154,7 @@ export function initRun(
   augment?: 'none' | 'displays',
   set: Partial<Record<Changeable, number>> = {},
   gate?: GateSetting,
+  yardstick?: 'ladder' | 'pool',
 ): void {
   checkRunName(name);
   const p = runPaths(name);
@@ -150,6 +165,7 @@ export function initRun(
       ...startingConfig(),
       ...(augment === undefined ? {} : { augment }),
       ...(gate === undefined ? {} : { gate }),
+      ...(yardstick === undefined ? {} : { yardstick }),
     };
     mkdirSync(p.dir, { recursive: true });
     writeJson(p.config, config);
@@ -187,6 +203,7 @@ export function initRun(
     augment,
     set,
     gate,
+    yardstick,
   );
   mkdirSync(p.dir, { recursive: true });
   writeJson(p.config, config);
@@ -333,21 +350,27 @@ export function reasonFor(
   decision: Decision,
   previousImproved: boolean,
   gateSet: GateSetting,
+  pool?: string,
 ): string {
-  const p = progress(results.rungs);
-  const sharp = results.rungs.sharp.winrate;
-  const parts = [`progress ${pct(p)} (sharp ${pct(sharp)})`];
+  const p = measureOf(results);
+  const ladder = 'rungs' in results;
+  // [Z11-73]: a rating reads in whole Elo points.
+  const show = ladder ? pct : (x: number): string => x.toFixed(0);
+  const parts = ladder
+    ? [`progress ${pct(p)} (sharp ${pct(results.rungs.sharp.winrate)})`]
+    : [`rating ${show(p)} against the pool${pool === undefined ? '' : ` (${pool})`}`];
   if (fresh !== null) parts.push(`a fresh start: ${fresh}`);
   else if (previous !== null) {
     parts.push(
       atLeast(p, previous.progress)
-        ? `improved on ${pct(previous.progress)} at generation ${previous.generation}`
-        : `did not improve on ${pct(previous.progress)} at generation ${previous.generation}` +
+        ? `improved on ${show(previous.progress)} at generation ${previous.generation}`
+        : `did not improve on ${show(previous.progress)} at generation ${previous.generation}` +
             (previousImproved ? ', which had improved' : ', which had not improved either'),
     );
   }
-  if (gateSet === 'off') parts.push('the gate is off for this run');
-  else if (sharp < GATE_TRIGGER) parts.push(`sharp below ${pct(GATE_TRIGGER)}, so no gate`);
+  if (!ladder) parts.push('the pool has no gate');
+  else if (gateSet === 'off') parts.push('the gate is off for this run');
+  else if (results.rungs.sharp.winrate < GATE_TRIGGER) parts.push(`sharp below ${pct(GATE_TRIGGER)}, so no gate`);
   else if (!gateDue) parts.push(`gate not due: progress has not passed ${pct(lastFailure ?? 0)}, where the last gate failed`);
   else if (gate !== null) {
     parts.push(
@@ -418,6 +441,129 @@ async function milestoneStep(
   return entry;
 }
 
+/** The run's config at the pool's count, which both sides of a pool game read ([Z11-73]). */
+function poolConfig(name: string, config: RunConfig, simulations: number): string {
+  const path = join(runPaths(name).dir, 'pool-config.json');
+  writeJson(path, { ...config, milestoneSimulations: simulations });
+  return path;
+}
+
+/** Step 5 of [Z11-28] for a run whose yardstick is the pool ([Z11-73], [Z11-74]). */
+async function poolMilestoneStep(
+  name: string,
+  generation: number,
+  config: RunConfig,
+  state: RunState,
+  bin: string,
+  workers: number,
+): Promise<MilestoneEntry> {
+  const p = runPaths(name);
+  const started = Date.now();
+  const dest = milestoneCheckpoint(name, generation);
+  mkdirSync(dirname(dest), { recursive: true });
+  writeAtomic(dest.replace(/\.bin$/, '.parity'), readFileSync(p.checkpoint(generation).replace(/\.bin$/, '.parity')));
+  writeAtomic(dest, readFileSync(p.checkpoint(generation)));
+
+  const seed = readSeed();
+  const log = readLog();
+  const members = currentPool(seed, log);
+  const side = { binary: bin, config: poolConfig(name, config, seed.simulations) };
+  const played = await playPoolMilestone(side, dest, seed, members, workers);
+  const prov = provenance();
+  const results: MilestoneResults = { rating: played.record.rating, ladderHash: prov.ladderHash };
+  const entries = ruleEntries(log, name);
+  const { previous, previousImproved } = context(entries);
+  const fresh = freshStart(entries, results);
+  const decision = decide(entries, results, null);
+  const r = played.record;
+  const pool =
+    `±${r.se.toFixed(0)} over ${r.gamesPerMember + r.extraPerMember} games a champion` +
+    `${r.extraPerMember > 0 ? `, ${r.extraPerMember} of them extra` : ''}; ` +
+    (r.replaced === null
+      ? `the weakest, ${memberName(r.weakest)} at ${r.weakest.rating.toFixed(0)}, keeps its place`
+      : `replaces ${memberName(r.weakest)} at ${r.weakest.rating.toFixed(0)}`);
+  const entry: MilestoneEntry = {
+    kind: 'milestone',
+    run: name,
+    date: today(),
+    generation,
+    sinceRunStartSeconds: Math.round((Date.now() - Date.parse(state.startedAt)) / 1000),
+    milestoneSeconds: Math.round((Date.now() - started) / 1000),
+    games: generation * config.gamesPerGeneration,
+    samples: sampleCount(name, generation),
+    config,
+    simulations: played.simulations,
+    results: played.results,
+    ladderHash: prov.ladderHash,
+    progress: measureOf(results),
+    previousProgress: previous?.progress ?? null,
+    freshStart: { fresh: fresh !== null, why: fresh },
+    gate: { due: false, ran: false, outcome: null },
+    pool: r,
+    losses: lossesSince(name, previous?.generation ?? 0, generation),
+    provenance: prov,
+    decision,
+    reason: reasonFor(results, previous, fresh, false, null, null, decision, previousImproved, gateSetting(config), pool),
+  };
+  appendLog(entry);
+  process.stdout.write(`milestone ${name}/${generation}: ${entry.reason}\n`);
+  return entry;
+}
+
+/**
+ * [Z11-73]: seeds the pool with a round robin among `members`, `games` a
+ * pairing at `simulations`, the first member the anchor at 0 Elo. Writes
+ * `milestones/pool.json`, to be committed. Refuses when a pool exists.
+ */
+export async function poolInit(
+  members: { run: string; generation: number }[],
+  games: number,
+  simulations: number,
+  workers: number,
+): Promise<void> {
+  await withLock('pool init', async () => {
+    if (existsSync(POOL)) throw new Error('milestones/pool.json exists: the pool is seeded once');
+    if (members.length < 2) throw new Error('a pool needs at least two members');
+    const seeded = members.map((m) => {
+      const checkpoint = `milestones/${m.run}/${m.generation}/checkpoint.bin`;
+      if (!existsSync(milestoneCheckpoint(m.run, m.generation))) throw new Error(`${checkpoint} is not committed`);
+      return { ...m, checkpoint };
+    });
+    // The anchor's config as its committed log entry holds it, so the pool is
+    // seeded from the repository alone, never from git-ignored `runs/`.
+    const anchorEntry = readLog().find(
+      (e) => e.kind === 'milestone' && e.run === members[0].run && e.generation === members[0].generation,
+    ) as MilestoneEntry | undefined;
+    if (anchorEntry === undefined) throw new Error(`no logged milestone ${memberName(members[0])}`);
+    const config = anchorEntry.config as RunConfig;
+    const scratch = join(RUNS, 'pool-seed');
+    mkdirSync(scratch, { recursive: true });
+    const configPath = join(scratch, 'config.json');
+    writeJson(configPath, { ...config, milestoneSimulations: simulations });
+    const side = { binary: buildRelease(), config: configPath };
+    const { pairings, seconds } = await playSeedRoundRobin(side, seeded, games, simulations, workers);
+    const index = new Map(seeded.map((m, i) => [memberName(m), i]));
+    const ratings = fitPool(
+      seeded.length,
+      pairings.map((q) => ({ a: index.get(q.a) ?? -1, b: index.get(q.b) ?? -1, games: q.games, score: q.score })),
+      0,
+    );
+    const seed: PoolSeed = {
+      simulations,
+      gamesPerMember: games,
+      anchor: { run: members[0].run, generation: members[0].generation },
+      members: seeded.map((m, i) => ({ ...m, rating: ratings[i].rating, se: ratings[i].se })),
+      date: today(),
+      pairings,
+      seconds,
+    };
+    writeJson(POOL, seed);
+    process.stdout.write(
+      `pool seeded in ${seconds} s: ${seed.members.map((m) => `${memberName(m)} ${m.rating.toFixed(0)}±${m.se.toFixed(0)}`).join(', ')}\n`,
+    );
+  });
+}
+
 /** [Z11-28]: starts or resumes a run, from the first step not on disk. */
 export async function trainLoop(
   name: string,
@@ -479,7 +625,8 @@ export async function trainLoop(
       const logged = entriesOf(readLog(), name).some((e) => e.kind === 'milestone' && e.generation === next);
       let decision: Decision = 'continue';
       if (next % config.milestoneEvery === 0 && !logged) {
-        decision = (await milestoneStep(name, next, config, state, bin, opts.workers)).decision;
+        const step = config.yardstick === 'pool' ? poolMilestoneStep : milestoneStep;
+        decision = (await step(name, next, config, state, bin, opts.workers)).decision;
       }
       state.generation = next;
       writeJson(p.state, state);

@@ -747,7 +747,7 @@ movement and stop a run that is learning quickly. Summing the ladder lets early 
 the progress they make against the weaker rungs; once those saturate, the sum moves only with
 `sharp`, and the rule is the intent's as written.
 
-- **[Z11-31]** A milestone MUST play the checkpoint, with the shipped architecture and
+- **[Z11-31]** On a run whose yardstick is the ladder ([Z11-73]), a milestone MUST play the checkpoint, with the shipped architecture and
   `milestoneSimulations` simulations a move, against each rung of the ladder over the first 100
   seeds of [0005 M5-16]'s wide list, one single-seed `match` per seed with seats alternated, as
   [0008 A8-30] plays its gate. `sharp` and `steady` play at their shipped budgets with the
@@ -828,6 +828,16 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
   | flat at 0.45 (0.50 shipped), 5 / 10 milestones | 0.37 / 0.71 | 0.00 / 0.00 | 0.7 / 0.9 |
   | flat at 0.55 (0.60 shipped), 5 / 10 milestones | 0.12 / 0.19 | 0.73 / 0.77 | 1.4 / 1.4 |
 
+  On the pool of [Z11-73], the same rule compares ratings:
+
+  | rating per milestone (σ ≈ 7.1 Elo, 800 games a champion) | P(`stop`) within 5 / 10 milestones |
+  | --- | --- |
+  | flat | 0.41 / 0.76 |
+  | climbs 5 Elo | 0.10 / 0.25 |
+  | climbs 10 Elo | 0.01 / 0.03 |
+  | climbs 20 Elo | 0.00 / 0.00 |
+  | climbs 40 Elo | 0.00 / 0.00 |
+
   *These are the committed simulation's figures, 20 000 runs a row, exactly as
   `pnpm -F alphazero-bot stop-simulation` prints them. They replaced a first simulation's, made
   while revising this spec, and differ from it by at most 0.03. They were last rerun when the
@@ -843,11 +853,77 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
   names its numbers ([Z11-34]), and [Z11-36] lets them continue. The 0.05 gap between the two
   simulation counts is an assumption the first milestones and gates will measure.*
 
+- **[Z11-73]** A run's config MAY set `yardstick` to `pool`; absent means `ladder`, the yardstick of
+  [Z11-31]. A run started from another inherits its parent's unless `train init` is given
+  `--yardstick ladder|pool` ([Z11-66]). The **pool** is three champions, each a committed milestone
+  checkpoint with an Elo rating, played at a simulation count of the pool's own, 200:
+
+  - `pnpm -F alphazero-bot pool init --members <run>:<g>,… --games <n>` MUST seed it once, refusing
+    when it exists: a round robin of `n` games a pairing over the first `n` seeds of the pool's
+    seed list, each side `serve --search milestone` on a config whose `milestoneSimulations` is
+    the pool's count, seats alternated; the members' ratings fitted to those games by maximum
+    likelihood with the first member, the **anchor**, held at 0. It MUST read the anchor's config
+    from its committed log entry, not from `runs/`, and write `milestones/pool.json`: the count,
+    `n` as `gamesPerMember`, the anchor, the members with their ratings and standard errors, and
+    the pairings. A person commits it.
+  - `pool.json` is the pool as seeded, and no milestone writes it. The pool as it stands MUST be the
+    seed with every logged replacement ([Z11-74]) applied in log order, so the log stays the one
+    record of it.
+  - The pool's seed list is [0005 M5-16]'s formula, `19910101 + 104729·i`, run on past its 200 to
+    2000 seeds.
+  - A pool milestone never has a gate due ([Z11-37]: it has no `sharp`), and the stop rule of
+    [Z11-33] compares its **rating** where a ladder milestone compares its progress, at the same
+    nine decimals.
+  - Ratings use the logistic model: a player rated `r` scores `1 / (1 + 10^((R − r)/400))` against
+    one rated `R`, a draw counting half. A **performance rating** is the `r` at which the expected
+    score over its games equals the actual one, bounded 800 points past the opponents' range; its
+    standard error is the inverse square root of the likelihood's curvature there.
+
+  *The ladder served its purpose: by run `fourth` the player scored 1.00 and 0.98 on its lower rungs
+  and 0.80 against `sharp`, so every gain was squeezed into one rung on its way to a ceiling, and a
+  saturated ladder would have stopped a run that was still improving. The losses cannot take its
+  place: they moved not at all through `fourth` while `sharp` went from 0.63 to 0.80, and not at
+  all through `first` while nothing improved. A pool of our own checkpoints has no ceiling; the
+  anchor pins the scale, so ratings stay comparable after it leaves; and three champions, rather
+  than one, guard against a challenger that only beats its predecessor. 200 simulations is
+  self-play's count: what the network carries without a deep search, which is what training
+  changes.*
+
+- **[Z11-74]** A pool milestone MUST play the checkpoint against every champion, `gamesPerMember`
+  games each over the first seeds of the pool's list, at the pool's count, seats alternated, and
+  rate it by its performance against their ratings. Against the weakest champion, it MUST:
+  - take its place when its rating is at least two standard errors above;
+  - leave it when at least two below;
+  - otherwise play `⌈gamesPerMember / 3⌉` more games against every champion, on the seeds that
+    follow, rate it again on all its games, and take the place only when that rating is higher.
+
+  A champion's rating never changes; one replaced leaves, and the challenger joins at its rating.
+  The log entry MUST record, as `pool`, the count, the games and the extra games a champion, the
+  champions played with their ratings, the rating and standard error after every game and after
+  the first games alone, the weakest champion, the verdict (`replace`, `keep`, `more`), the
+  settling and the champion replaced or none; `results` each champion's series; and `progress`
+  the rating. The replay of [Z11-45] MUST recompute the verdict from the first rating, the
+  settling from the last, and that only the weakest was ever replaced. A milestone's informal
+  budget is ten minutes of the machine's whole CPU, which `gamesPerMember` is chosen to fit when
+  the pool is seeded; `stop-simulation` reads it from the committed pool.
+
+  *Measured when the pool was seeded: a game between two champions at 200 simulations costs
+  0.23 s of the machine at eight workers, so 800 games a champion make a milestone of about nine
+  minutes, twelve with the extra games, and a rating good to about ±7 Elo. The seeding itself, a
+  round robin of 800 games a pairing, took 532 s and put `fourth`'s generations 50 and 70 at
+  +156 and +181 against `third`'s generation 90, the checkpoint that passed the gate.*
+
+  *Two standard errors decide outright, so noise rarely swaps a champion; within them, a third
+  more games settles it without a second margin, because by then the challenger is close enough
+  that either answer costs little.*
+
 - **[Z11-56]** The simulation behind [Z11-33]'s table MUST be committed as
   `eval/stop-rule-simulation.ts`, runnable by `pnpm -F alphazero-bot stop-simulation`, and MUST
   call the two functions of [Z11-37] themselves rather than a copy of the rule, with the gate
-  modelled as the table states. A change to the rule
-  MUST rerun it and update the table in the same change.
+  modelled as the table states, and the pool's rows of [Z11-73] beside it, a rating drawn as its
+  true value plus normal noise of the standard error `gamesPerMember` games against three
+  champions of about its strength give. A change to the rule MUST rerun it and update the tables
+  in the same change.
 - **[Z11-34]** `packages/alphazero-bot/milestones/log.json` MUST be a list of entries, each with a
   `kind`, a run and a date:
 
@@ -1235,6 +1311,14 @@ this package, and MUST be corrected in the same change.
   | The gate due at every milestone above 0.50, ignoring the last failure | [Z11-45] |
   | `due` ignoring a run's `gate: off` | [Z11-68]'s case |
   | A child run dropping its parent's `gate` setting | [Z11-68]'s config case |
+  | The expected score's sign reversed | [Z11-73]'s Elo cases |
+  | The anchor fitted with the others | [Z11-73]'s pool-fit case |
+  | The margin at one standard error; a tie going to the challenger | [Z11-74]'s verdict case |
+  | A replacement applied without removing the champion it replaced | [Z11-73]'s current-pool case |
+  | No extra games within two standard errors; the settling rating from the first games alone | [Z11-74]'s extra-games case |
+  | The place taken from the strongest champion | [Z11-74]'s replacement case |
+  | The rule reading the ladder's sum where the results hold a rating | [Z11-73]'s rule case |
+  | A child run dropping its parent's `yardstick` | [Z11-73]'s config case |
   | Progress compared as raw floating-point sums, in `decide`, in the walk, or in `due` | [Z11-33]'s run `first` cases |
   | The inverse permutation, of the displays or of the actions | [Z11-65]'s fixture case |
   | The display flags left in place | [Z11-65]'s fixture case |

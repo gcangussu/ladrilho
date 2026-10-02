@@ -77,6 +77,10 @@ describe('a run started from another [Z11-66]', () => {
     expect(childConfig({ ...parent, gate: 'off' }, origin, 42, undefined, {}).gate).toBe('off');
     expect(childConfig(parent, origin, 42, undefined, {}, 'off').gate).toBe('off');
     expect('gate' in childConfig(parent, origin, 42, undefined, {})).toBe(false);
+    // [Z11-73]: and so is the yardstick.
+    expect(childConfig({ ...parent, yardstick: 'pool' }, origin, 42, undefined, {}).yardstick).toBe('pool');
+    expect(childConfig(parent, origin, 42, undefined, {}, undefined, 'pool').yardstick).toBe('pool');
+    expect('yardstick' in childConfig(parent, origin, 42, undefined, {})).toBe(false);
     // [Z11-67]: the aux weights are changes like any other, from an absent 0.
     const aux = childConfig(parent, origin, 42, undefined, { auxMarginWeight: 0.5, auxWallsWeight: 0.5 });
     expect(aux.auxMarginWeight).toBe(0.5);
