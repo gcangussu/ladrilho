@@ -173,11 +173,12 @@ type Selection = { source: number; color: Color } | null;
 
 ### Package and build
 
-- **[U3-7]** `packages/ui` MUST depend on `engine`, `bot` and `ai-bot` as workspace dependencies,
-  and `engine` MUST be the only dependency that carries any knowledge of **the rules of** Azul.
-  `bot` and `ai-bot` know how to play but ask the engine what is legal; this requirement is about
-  rules, not about strategy. *(Widened by [0006 W6-28]; the parenthetical it replaces anticipated
-  exactly this. Widened again by [0008 A8-33], for `ai-bot`.)*
+- **[U3-7]** `packages/ui` MUST depend on `engine`, `bot`, `ai-bot` and `alphazero-bot` as
+  workspace dependencies, and `engine` MUST be the only dependency that carries any knowledge of
+  **the rules of** Azul. `bot`, `ai-bot` and `alphazero-bot` know how to play but ask the engine
+  what is legal; this requirement is about rules, not about strategy. *(Widened by [0006 W6-28];
+  the parenthetical it replaces anticipated exactly this. Widened again by [0008 A8-33], for
+  `ai-bot`, and by [0012 T12-32], for `alphazero-bot`.)*
 - **[U3-8]** The client MUST make **no network request at runtime**: no `fetch`,
   `XMLHttpRequest`, `WebSocket`, `navigator.sendBeacon`, dynamic `import()`, or asset addressed by
   an absolute URL. There is no server and there are no accounts.
@@ -187,6 +188,12 @@ type Selection = { source: number; color: Color } | null;
   thing the client loads at run time ([0006 W6-11]). It is a script the bundler resolves at build
   time and emits beside the client, not a request for data and not a dynamic `import()`; every
   other item above stays forbidden. *(Widened by [0006 W6-28].)*
+
+  *(Widened by [0012 T12-32].)* There are two such workers, `./worker.ts` and
+  `./master-worker.ts` ([0006 W6-46]), each constructed by that exact shape. Instantiating
+  WebAssembly from bytes already in the bundle is not a network request and is permitted;
+  `WebAssembly.instantiateStreaming` and `WebAssembly.compileStreaming`, which take a network
+  response, are forbidden with `fetch`.
 - **[U3-9]** The build output MUST be static files, servable from any file host.
 - **[U3-10]** The package MUST build against Solid **v2** — see <https://v2.solidjs.com>, and the
   notes under *Solid v2* below. v1 patterns are not merely dated here; several are gone.
@@ -205,7 +212,8 @@ type Selection = { source: number; color: Color } | null;
   Two further modules are named and are neither: `opponent.ts`, the worker seam, which is the only
   file that may import `bot` ([0006 W6-31]); and `worker.ts`, which runs inside the worker and MUST
   NOT be reachable from the state module or from a component ([0006 W6-12]).
-  *(Extended by [0006 W6-28].)*
+  *(Extended by [0006 W6-28].)* *(Extended by [0012 T12-32]: `master-worker.ts` runs inside the
+  master worker, on the same terms as `worker.ts` ([0006 W6-46]).)*
 
   *A structural requirement because three checks depend on being able to name the two sides:
   [U3-75] cannot look for "`apply` outside the submit path" or "a component reading the state"
@@ -687,29 +695,34 @@ budget.
   asserting that the game reached a terminal state, that every control it used was reached by
   roving-tabindex navigation ([U3-53]), and that the live region announced each event of [U3-56].
 - **[U3-72]** The suite MUST assert [U3-66] by running a game with `localStorage`,
-  `sessionStorage`, `indexedDB`, `document.cookie`, `fetch`, `XMLHttpRequest`, `WebSocket` and
-  `navigator.sendBeacon` replaced by throwing stubs — the way [0002 V2-31] treats [0001 E1-50].
+  `sessionStorage`, `indexedDB`, `document.cookie`, `fetch`, `XMLHttpRequest`, `WebSocket`,
+  `navigator.sendBeacon`, `WebAssembly.instantiateStreaming` and `WebAssembly.compileStreaming`
+  replaced by throwing stubs *(the last two added by [0012 T12-32])* — the way [0002 V2-31] treats [0001 E1-50].
   "No persistence" and "no network" are behaviour, and behaviour is testable.
 - **[U3-73]** The suite MUST check [U3-58], [U3-59], [U3-16], the positional half of [U3-81],
   and [U3-86], [U3-88], [U3-89], [U3-92] and [U3-94], under Vitest browser mode with the Playwright
   provider, which the testing guide names for real-browser needs. *(Extended by [0006 W6-30]: the
   lane also drives a **real worker** — a tier's ply with the main thread watched for a freeze, and
   one complete game from `expert` ([0008 A8-33]) — because jsdom has no `Worker`, no thread to keep
-  free, and no way to tell a search that ran off it from one that did not.)* Layout requirements need a
+  free, and no way to tell a search that ran off it from one that did not.)* *(Extended by
+  [0012 T12-30]: a complete game with `master` on both seats, against the real master worker.)* Layout requirements need a
   layout engine and a reload requirement needs a reload; excusing them because jsdom has neither
   would excuse nine requirements that came straight from an intent.
 - **[U3-74]** The suite MUST assert that `packages/ui`'s `dependencies` are exactly `engine`, `bot`,
-  `ai-bot` and the Solid v2 runtime [U3-10], that each workspace package is declared with a
+  `ai-bot`, `alphazero-bot` and the Solid v2 runtime [U3-10], that each workspace package is declared with a
   `workspace:` range, and that the declared `vitest` range satisfies [U3-11]. An allowlist, not a
   judgement about which packages "carry the rules" — adding one is a spec change to [U3-7].
-  *(Widened by [0006 W6-28], and again by [0008 A8-33].)*
+  *(Widened by [0006 W6-28], again by [0008 A8-33], and by [0012 T12-32].)* The package's
+  `dev`, `build`, `test`, `test:browser` and `typecheck` scripts run `pnpm -F alphazero-bot web`
+  first, so the master's payload exists before anything imports it.
 - **[U3-75]** The suite MUST include a source check over the **TypeScript** in `packages/ui/src`
   — `.ts` and `.tsx` — using the module layout of [U3-78], that fails on: a module-level numeric
   table of length 5, 7 or 25; either penalty ladder; any `%` expression whose right operand is `5`
   or `NUM_COLORS`; and the action multipliers `30` and `6` in arithmetic ([U3-49]); `clone`,
   `structuredClone` or `fromCanonical` followed by `apply` ([U3-50]); `apply` called outside the
   state module ([U3-18]); the state binding imported under `src/components/` ([U3-1]); a read of
-  `tilesLeft` in the state module ([U3-40]); and `import(` or an absolute `http(s)` URL in a
+  `tilesLeft` in the state module ([U3-40]); `instantiateStreaming` or `compileStreaming`
+  ([U3-8] as widened by [0012 T12-32]); and `import(` or an absolute `http(s)` URL in a
   string literal or JSX attribute — comments excepted,
   since [U3-10] sends implementers to the Solid docs by URL ([U3-8]).
 

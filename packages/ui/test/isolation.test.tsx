@@ -73,6 +73,18 @@ function slamShut(): string[] {
     Object.defineProperty(navigator, 'sendBeacon', { configurable: true, value: beacon });
   });
 
+  // [U3-8] as widened by [0012 T12-32]: WebAssembly may be instantiated from
+  // bytes in the bundle, never from a network response.
+  const wasm = (globalThis as unknown as { WebAssembly: Record<string, unknown> }).WebAssembly;
+  for (const name of ['instantiateStreaming', 'compileStreaming']) {
+    const original = Object.getOwnPropertyDescriptor(wasm, name);
+    Object.defineProperty(wasm, name, { configurable: true, value: () => trap(`WebAssembly.${name}`) });
+    restore.push(() => {
+      if (original) Object.defineProperty(wasm, name, original);
+      else delete wasm[name];
+    });
+  }
+
   return opened;
 }
 
@@ -91,8 +103,17 @@ describe('[U3-72] the stubs themselves', () => {
     expect(() => window.WebSocket).toThrow();
     expect(() => document.cookie).toThrow();
     expect(() => navigator.sendBeacon('/anywhere')).toThrow();
+    const wasm = (globalThis as unknown as { WebAssembly: Record<string, () => unknown> }).WebAssembly;
+    expect(() => wasm.instantiateStreaming()).toThrow();
+    expect(() => wasm.compileStreaming()).toThrow();
     expect(opened.sort()).toEqual(
-      [...DOORS, 'document.cookie', 'navigator.sendBeacon'].sort(),
+      [
+        ...DOORS,
+        'document.cookie',
+        'navigator.sendBeacon',
+        'WebAssembly.instantiateStreaming',
+        'WebAssembly.compileStreaming',
+      ].sort(),
     );
   });
 });
@@ -142,5 +163,18 @@ describe('[U3-72] a game played with every door stubbed to throw', () => {
     flush();
 
     expect(opened, 'the interface reached for something it must never touch').toEqual([]);
+  });
+});
+
+describe('[U3-72] the master, loaded with every door stubbed to throw', () => {
+  // [U3-8] as widened by [0012 T12-32]: the module and its weights come from
+  // bytes in the bundle, so instantiating them and searching opens nothing.
+  it('[U3-66] [W6-47] instantiates the module and plays a move without a request', { timeout: 60_000 }, async () => {
+    const opened = slamShut();
+    const { createMasterSeat } = await import('../src/masters.js');
+    const position = toJSON(newGame(GAME_SEED));
+    const reply = await createMasterSeat().answer({ generation: 1, position, tier: 'master', simulations: 100 });
+    expect(reply.ok).toBe(true);
+    expect(opened).toEqual([]);
   });
 });

@@ -21,7 +21,8 @@ interface Source {
 
 function walk(dir: string, out: Source[] = []): Source[] {
   for (const name of readdirSync(dir)) {
-    if (['node_modules', 'target', '.venv', '__pycache__', 'runs', '.pytest_cache'].includes(name)) continue;
+    // `dist`: the web build's generated payload ([0012 T12-7]), megabytes of base64.
+    if (['node_modules', 'target', '.venv', '__pycache__', 'runs', '.pytest_cache', 'dist'].includes(name)) continue;
     const p = join(dir, name);
     if (statSync(p).isDirectory()) walk(p, out);
     else if (/\.(ts|mjs|rs|py|toml|json|sh|in|txt|md)$/.test(name)) {
@@ -226,8 +227,13 @@ function rustFaults(files: Source[]): string[] {
 }
 
 const SCRIPTS: Record<string, RegExp> = {
-  test: /^cargo test --locked && vitest run$/,
-  typecheck: /^tsc --noEmit && cargo clippy --locked --all-targets -- -D warnings$/,
+  // [0012 T12-7]: the web crate is tested and linted beside the crate, and the
+  // payload the suite imports is built before it runs.
+  test: /^cargo test --locked && cargo test --locked --manifest-path web\/Cargo\.toml && node tools\/web\.mjs && vitest run$/,
+  typecheck:
+    /^node tools\/web\.mjs && tsc --noEmit && cargo clippy --locked --all-targets -- -D warnings && cargo clippy --locked --all-targets --manifest-path web\/Cargo\.toml -- -D warnings$/,
+  web: /^node tools\/web\.mjs$/,
+  'web-latency': /web-latency\.mjs$/,
   'test:train': /pytest/,
   train: /cli\.mjs train$/,
   'stop-simulation': /cli\.mjs stop-simulation$/,

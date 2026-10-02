@@ -27,10 +27,16 @@ import { CENTER, apply, decodeAction, legalActions, newGame, toJSON, type AzulJS
 import { pickName, picksIn } from '../src/components/Displays.jsx';
 import { floorLineName } from '../src/components/FloorLine.jsx';
 import { patternLineName } from '../src/components/PatternLines.jsx';
+import { createMasterSeat } from '../src/masters.js';
+import { simulationsLabel } from '../src/components/Seating.jsx';
 import {
   EXPERT_AVAILABLE,
+  LEVELS,
+  MASTER_SIMULATIONS,
   seatingFromUrl,
   seatingToUrl,
+  simulationsFromUrl,
+  simulationsToUrl,
   workerThinker,
   type FromWorker,
   type Thinker,
@@ -483,9 +489,12 @@ class StubWorker extends EventTarget {
   readonly posted: ToWorker[] = [];
   terminated = false;
   private replied = 0;
+  /** The module it was built from: which of the two workers it stands in for [W6-48]. */
+  readonly url: string;
 
-  constructor() {
+  constructor(url?: URL | string) {
     super();
+    this.url = String(url ?? '');
     StubWorker.made.push(this);
   }
 
@@ -739,7 +748,8 @@ describe('a whole game with a computer opponent [W6-29]', () => {
   // the whole of what the interface knows about the difference, and a loop
   // that never ran with `expert` would leave [W6-40]'s configuration
   // unexercised through the rendered interface.
-  it.for(['easy', 'expert'] as const)(
+  // And once with the master [W6-43], whose requests carry a setting [W6-44].
+  it.for(['easy', 'expert', 'master'] as const)(
     '[W6-29] [W6-32] [W6-34] [W6-41] plays through against %s, one request at a time',
     { timeout: 60_000 },
     async (level, { skip }) => {
@@ -792,6 +802,9 @@ describe('a whole game with a computer opponent [W6-29]', () => {
     expect(answered).toBeGreaterThan(10);
     // The requests really did name the level under test.
     expect(harness.pending[0].tier).toBe(level);
+    if (level === 'master') {
+      for (const asked of harness.pending) expect(asked).toMatchObject({ simulations: MASTER_SIMULATIONS.default });
+    }
   },
   );
 });
@@ -862,3 +875,225 @@ function clickThrough(screen: Screen, game: AzulJSON, action: number): void {
   (screen.getByRole('button', { name }) as HTMLElement).click();
   flush();
 }
+
+/** `master` on a request, for the stand-in workers. */
+function masterRequest(generation: number, simulations = 100): ToWorker {
+  return { generation, position: toJSON(newGame(7)), tier: 'master', simulations };
+}
+
+describe('the master is offered, and seated [W6-43], [W6-44]', () => {
+  it('[W6-43] offers master last, by name, whatever the gate says', async () => {
+    expect(LEVELS.at(-1)).toBe('master');
+    const { screen } = await mount('?seed=42');
+    for (const select of screen.getAllByRole('combobox') as HTMLSelectElement[]) {
+      const last = [...select.options].at(-1)!;
+      expect([last.value, last.textContent]).toEqual(['master', 'Computer — master']);
+    }
+  });
+
+  it("[W6-44] reads each seat's setting from the URL, and discards a bad one alone", () => {
+    expect(simulationsFromUrl('?p1Simulations=500&p2Simulations=99')).toEqual([500, 10_000]);
+    expect(simulationsFromUrl('?p1Simulations=abc&p2Simulations=200000')).toEqual([10_000, 200_000]);
+    for (const bad of ['1e3', '200001', '-5', '100.5', '', ' 300']) {
+      expect(simulationsFromUrl(`?p1Simulations=${encodeURIComponent(bad)}`), bad).toEqual([10_000, 10_000]);
+    }
+    expect(simulationsFromUrl('')).toEqual([10_000, 10_000]);
+    expect(seatingFromUrl('?seating=master-master&p1Simulations=300')).toEqual({
+      players: ['master', 'master'],
+      simulations: [300, 10_000],
+    });
+  });
+
+  it('[W6-44] puts a setting in a link only for a master seat away from the default', () => {
+    expect(simulationsToUrl({ players: ['master', 'master'], simulations: [300, 10_000] })).toEqual({ p1Simulations: '300' });
+    expect(simulationsToUrl({ players: ['sharp', 'master'], simulations: [300, 700] })).toEqual({ p2Simulations: '700' });
+    expect(simulationsToUrl({ players: [null, 'easy'], simulations: [300, 700] })).toEqual({});
+    // The round trip a link makes.
+    const seating = { players: ['master', 'master'] as ['master', 'master'], simulations: [300, 700] as [number, number] };
+    const search = `?${new URLSearchParams({ seating: seatingToUrl(seating), ...simulationsToUrl(seating) })}`;
+    expect(seatingFromUrl(search)).toEqual(seating);
+  });
+
+  // Seen red, on a copy, with `seating.simulations[seat]` replaced by
+  // `seating.simulations[0]` in `pendingRequest`: seat 1 asked with seat 0's.
+  it("[W6-44] asks each master seat with that seat's own setting", async () => {
+    const { harness } = await load('?seed=42&seating=master-master&p1Simulations=300&p2Simulations=700');
+    expect(harness.pending[0]).toMatchObject({ tier: 'master', simulations: 300 });
+    await harness.answer(0);
+    expect(harness.pending[1]).toMatchObject({ tier: 'master', simulations: 700 });
+  });
+
+  it('[W6-44] keeps both settings across new games and seat changes, and deals when one changes', async () => {
+    const { state, harness } = await load('?seed=42&seating=master-human&p1Simulations=300');
+    state.startNewGame();
+    flush();
+    expect(state.view().seating.simulations).toEqual([300, 10_000]);
+    state.startWithSeating({ players: ['master', 'sharp'] });
+    flush();
+    expect(state.view().seating.simulations).toEqual([300, 10_000]);
+    const before = state.view().seed;
+    state.startWithSeating({ players: ['master', 'sharp'], simulations: [400, 10_000] });
+    flush();
+    expect(state.view().seed).not.toBe(before);
+    expect(harness.pending.at(-1)).toMatchObject({ tier: 'master', simulations: 400 });
+  });
+});
+
+describe('the advanced control [W6-45]', () => {
+  const spinbuttons = (screen: Screen): HTMLInputElement[] => screen.queryAllByRole('spinbutton') as HTMLInputElement[];
+  const commit = (input: HTMLInputElement, value: string): void => {
+    input.value = value;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    flush();
+  };
+
+  it('[W6-45] is not there without a master seat', async () => {
+    const { screen } = await mount('?seed=42&seating=human-sharp');
+    expect(screen.queryByText('Advanced')).toBeNull();
+    expect(spinbuttons(screen)).toEqual([]);
+  });
+
+  it("[W6-45] holds one closed input per master seat, labelled by the seat's name", async () => {
+    const { screen } = await mount('?seed=42&seating=human-master');
+    const details = screen.getByText('Advanced').closest('details')!;
+    expect(details.open).toBe(false);
+    const inputs = spinbuttons(screen);
+    expect(inputs).toHaveLength(1);
+    expect(screen.getByLabelText(simulationsLabel(1))).toBe(inputs[0]);
+    expect([inputs[0].value, inputs[0].min, inputs[0].max]).toEqual(['10000', '100', '200000']);
+    expect(details.textContent).toContain('Default 10,000; from 100 to 200,000.');
+  });
+
+  // Seen red, on a copy, with the refusal branch's `return` deleted: the
+  // value 50 reached the seating.
+  it('[W6-45] [W6-44] applies a valid number to its seat alone and deals, and refuses the rest', async () => {
+    const { screen, state } = await mount('?seed=42&seating=master-master&p2Simulations=700');
+    const [first] = spinbuttons(screen);
+    expect(first).toBe(screen.getByLabelText(simulationsLabel(0)));
+
+    const before = state.view().seed;
+    commit(first, '2500');
+    expect(state.view().seating.simulations).toEqual([2500, 700]);
+    expect(state.view().seed).not.toBe(before);
+
+    const dealt = state.view().seed;
+    for (const bad of ['50', '200001', '12.5', '']) {
+      commit(spinbuttons(screen)[0], bad);
+      expect(state.view().seating.simulations, bad).toEqual([2500, 700]);
+      expect(state.view().seed, bad).toBe(dealt);
+      expect(spinbuttons(screen)[0].value, bad).toBe('2500');
+      const said = [...screen.container.querySelectorAll('.advanced [role="status"]')].map((n) => n.textContent).join('');
+      expect(said, bad).toContain('100 to 200,000');
+    }
+  });
+});
+
+describe("the master worker's one player [W6-47]", () => {
+  const fake = (choose: () => { action: number; value: number; simulations: number }) => () =>
+    Promise.resolve({ choose: () => choose() });
+
+  // Seen red, on a copy, with `master === null` dropped from the guard: two
+  // creations for two requests.
+  it('[W6-47] creates one Master on the first request and shares it between the seats', async () => {
+    let made = 0;
+    const seat = createMasterSeat(() => {
+      made++;
+      return fake(() => ({ action: 3, value: 0, simulations: 100 }))();
+    });
+    expect(seat.created).toBe(0);
+    const position = toJSON(newGame(7));
+    const replies = await Promise.all([
+      seat.answer({ generation: 1, position, tier: 'master', simulations: 100 }),
+      seat.answer({ generation: 1, position: { ...position, currentPlayer: 1 }, tier: 'master', simulations: 200 }),
+    ]);
+    expect(made).toBe(1);
+    expect(seat.created).toBe(1);
+    expect(replies.map((r) => r.ok)).toEqual([true, true]);
+  });
+
+  it('[W6-47] [W6-15] reports a refused load and a failed search, never rejecting', async () => {
+    const refused = createMasterSeat(() => Promise.reject(new Error('parity: corpus entry 3')));
+    expect(await refused.answer(masterRequest(4) as never)).toEqual({ generation: 4, ok: false, message: 'parity: corpus entry 3' });
+    const failing = createMasterSeat(() => Promise.resolve({ choose: () => { throw new RangeError('simulations must be…'); } }));
+    expect(await failing.answer(masterRequest(5) as never)).toMatchObject({ generation: 5, ok: false });
+  });
+
+  it('[W6-47] plays a legal move with the real module, from the bytes in the bundle', { timeout: 60_000 }, async () => {
+    const seat = createMasterSeat();
+    const request = masterRequest(6, 100) as Extract<ToWorker, { tier: 'master' }>;
+    const reply = await seat.answer(request);
+    expect(reply.ok).toBe(true);
+    if (reply.ok) {
+      expect(request.position.legalActions).toContain(reply.choice.action);
+      expect(reply.choice).toMatchObject({ simulations: 100 });
+    }
+  });
+});
+
+describe('two workers behind the real seam [W6-48]', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    StubWorker.made.length = 0;
+  });
+
+  const isMaster = (w: StubWorker): boolean => w.url.includes('master-worker');
+
+  // Seen red, on a copy, with the seam sending every request to the tiers'
+  // worker: the master's request went where its payload is not.
+  it('[W6-48] [W6-13] routes master to its own worker, built only when asked, and no reply crosses', async () => {
+    vi.stubGlobal('Worker', StubWorker);
+    const seam = workerThinker();
+    const got: { tier: FromWorker | null; master: FromWorker | null } = { tier: null, master: null };
+    void seam.think(request(1)).then((reply) => (got.tier = reply));
+    expect(StubWorker.made.map(isMaster), 'the master worker before any master request').toEqual([false]);
+    void seam.think(masterRequest(1)).then((reply) => (got.master = reply));
+    expect(StubWorker.made.map(isMaster)).toEqual([false, true]);
+    const [tiers, master] = StubWorker.made;
+    expect(tiers.posted.map((r) => r.tier)).toEqual(['easy']);
+    expect(master.posted.map((r) => r.tier)).toEqual(['master']);
+
+    // The tiers' worker answering generation 1 settles its own request only,
+    // though the master's carries the same generation.
+    tiers.reply();
+    await settle();
+    expect(got.tier).toMatchObject({ generation: 1, ok: true });
+    expect(got.master, "the tiers' reply settled the master's request").toBeNull();
+    master.reply();
+    await settle();
+    expect(got.master).toMatchObject({ generation: 1, ok: true });
+
+    seam.terminate();
+    expect(StubWorker.made.map((w) => w.terminated)).toEqual([true, true]);
+  });
+
+  it('[W6-48] [W6-7] [W6-13] ends both workers on a deal mid-search, and plays on', async () => {
+    vi.stubGlobal('Worker', StubWorker);
+    const state = await loadReal('?seed=42&seating=master-easy&p1Simulations=100');
+    expect(state.view().thinking).toEqual({ seat: 0 });
+    expect(StubWorker.made.map(isMaster)).toEqual([true]);
+    // At most one request outstanding, across both workers [W6-7].
+    expect(StubWorker.made.flatMap((w) => w.posted)).toHaveLength(1);
+    StubWorker.made[0].reply();
+    await settle();
+    flush();
+    expect(state.view().thinking).toEqual({ seat: 1 });
+    expect(StubWorker.made.map(isMaster)).toEqual([true, false]);
+    expect(StubWorker.made.flatMap((w) => w.posted)).toHaveLength(2);
+
+    // A new game while the tier thinks: both workers end, and the new game's
+    // opening ask — the master's again — goes to a fresh worker.
+    state.startNewGame();
+    flush();
+    expect(StubWorker.made.slice(0, 2).map((w) => w.terminated)).toEqual([true, true]);
+    // The old workers finishing what they were asked changes nothing.
+    for (const worker of StubWorker.made.slice(0, 2)) worker.replyAll();
+    await settle();
+    flush();
+    const fresh = StubWorker.made.slice(2);
+    expect(fresh.map(isMaster)).toEqual([true]);
+    fresh[0].reply();
+    await settle();
+    flush();
+    expect(state.view().thinking).toEqual({ seat: 1 });
+  });
+});

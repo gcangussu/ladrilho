@@ -65,7 +65,8 @@ Constants are 0001's, unchanged, and exported under the same names ([R9-14]).
   `azul_engine`, Rust edition 2024, with `publish = false`. Its toolchain MUST be pinned by a
   `rust-toolchain.toml` naming an exact stable release (`1.98.1` at the time of writing) with the
   `clippy` component, and `Cargo.lock` MUST be committed. Every `cargo` invocation the package
-  scripts make MUST pass `--locked`.
+  scripts make MUST pass `--locked`. *(The file also names `targets = ["wasm32-unknown-unknown"]`
+  since [0012 T12-8], for the master's web build; its byte-identical copies change with it.)*
 - **[R9-2]** The directory MUST carry a `package.json` named `engine-rs`, so the pnpm workspace
   picks it up and the root `pnpm test` and `pnpm typecheck` include it. Its scripts MUST delegate
   to `cargo`:

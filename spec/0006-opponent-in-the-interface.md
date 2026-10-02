@@ -3,7 +3,9 @@ title: Opponent in the interface
 author: Gabriel Cangussu
 date: 2026-09-06
 status: implemented
-intent: 0003 — Computer opponent
+intent:
+  - 0003 — Computer opponent
+  - 0010 — Playing the opponent we trained
 prefix: W6
 depends-on: 0001 — Engine core, 0003 — Web interface, 0004 — Computer opponent
 summary: >
@@ -67,7 +69,7 @@ there. Terms from *0004* — tier, `Choice`, `curtailed` — carry theirs.
 
 | Term | Meaning |
 | --- | --- |
-| **Seating** | Who occupies each of the two seats for the current game: a person, a tier, or *0008*'s expert. |
+| **Seating** | Who occupies each of the two seats for the current game — a person, a tier, *0008*'s expert or *0012*'s master — and each seat's simulations setting ([W6-44]). |
 | **Request** | One `(position, options)` sent to the worker, and the `Choice` it returns. |
 | **Generation** | A counter incremented whenever a game is dealt or the seating changes. A response whose generation is not current is stale ([W6-16]). |
 | **Thinking** | A request is outstanding. The view model says so ([W6-19]); nothing else infers it. |
@@ -77,12 +79,14 @@ there. Terms from *0004* — tier, `Choice`, `curtailed` — carry theirs.
 Added to the view model of [0003 U3-6]:
 
 ```ts
-/** *(Added by [0008 A8-33].)* A tier of `bot`, or the expert of *0008*. */
-type Level = Tier | 'expert';
+/** *(Added by [0008 A8-33] and [0012 T12-18].)* A tier of `bot`, the expert of *0008*, or the master of *0012*. */
+type Level = Tier | 'expert' | 'master';
 
 interface Seating {
   /** `null` is a person; a level is the computer at that strength. */
   players: [Level | null, Level | null];
+  /** *(Added by [0012 T12-19].)* Each seat's simulations setting, read only for a master seat [W6-44]. */
+  simulations: [number, number];
 }
 
 type Thinking = { seat: Player } | null;
@@ -92,16 +96,18 @@ interface ViewModel {
   seating: Seating;                 // [W6-2]
   thinking: Thinking;               // [W6-19]
   /** The last search's own report, for [W6-25] only. Never rendered as a judgement. */
-  lastChoice: Choice | ExpertChoice | null;  // [W6-25]
+  lastChoice: Choice | ExpertChoice | MasterChoice | null;  // [W6-25]
 }
 ```
 
 The worker protocol, both directions structurally cloneable ([0001 E1-52], [0004 B4-40]):
 
 ```ts
-type ToWorker   = { generation: number; position: AzulJSON; tier: Level };
+type ToWorker =   // a master request carries its seat's setting [W6-44]
+  | { generation: number; position: AzulJSON; tier: Tier | 'expert' }
+  | { generation: number; position: AzulJSON; tier: 'master'; simulations: number };
 type FromWorker =
-  | { generation: number; ok: true;  choice: Choice | ExpertChoice }
+  | { generation: number; ok: true;  choice: Choice | ExpertChoice | MasterChoice }
   | { generation: number; ok: false; message: string };
 ```
 
@@ -118,10 +124,13 @@ type FromWorker =
   test reads that file. Intent 0006 asked for a learned opponent that ships only if it wins clearly
   more often than our hardest setting, so what decides whether the setting exists is the gate's
   recorded answer, not a flag anyone can set.
+
+  *(Extended by [0012 T12-18].)* It MUST always offer `master`, last, as [W6-43] says.
 - **[W6-2]** The seating MUST be a published view-model field, and MUST be the only thing that
   decides whether a seat's moves come from the worker.
 - **[W6-3]** Changing the seating MUST start a new game with a freshly generated seed, per
-  [0003 U3-13] and [0003 U3-47].
+  [0003 U3-13] and [0003 U3-47]. *(Extended by [0012 T12-19]: so does changing a seat's
+  simulations setting, [W6-44].)*
 
   *Rather than swapping an opponent into a game in progress. [0003 U3-65] says the position only
   ever moves forward from a `newGame`, and a game half-played by a person and half by a program is
@@ -132,7 +141,9 @@ type FromWorker =
   reproduce the same deal and the same seating ([0003 U3-16]), discarding a malformed value the way
   [0003 U3-13] discards a malformed seed. *(Extended by [0008 A8-33]: the parameter accepts
   `expert` exactly when [W6-1] offers it — a setting the interface does not offer is not one a URL
-  may name, or a link would seat an opponent nobody can choose.)*
+  may name, or a link would seat an opponent nobody can choose.)* *(Extended by [0012 T12-19]:
+  each seat's simulations setting travels beside it as `p1Simulations` and `p2Simulations`,
+  [W6-44].)*
 
   *Which makes something new true and worth having: because [0004 B4-30] makes the bot
   deterministic, a seed plus a seating plus the person's own moves reproduce the **whole game**,
@@ -152,7 +163,8 @@ type FromWorker =
   task later rather than synchronously is what lets the board paint first, and what leaves room for
   [W6-18]'s seam to be substituted before the first request.*
 - **[W6-7]** There MUST be at most one request outstanding. A second MUST NOT be issued until the
-  first has resolved or been abandoned ([W6-16]).
+  first has resolved or been abandoned ([W6-16]). *(Extended by [0012 T12-23]: across both
+  workers, [W6-48].)*
 - **[W6-8]** A `Choice` that arrives for the current generation MUST be submitted through
   `submit(choice.action)` — the same path a person's move takes ([0003 U3-18], [0003 U3-31]) — and
   MUST NOT reach the state by any other route.
@@ -164,6 +176,9 @@ type FromWorker =
 
 - **[W6-11]** The search MUST run in a dedicated worker, constructed from a module URL relative to
   the interface's own source. It MUST be the only thing in the client loaded at run time.
+  *(Widened by [0012 T12-21]: one of two dedicated workers. A `master` seat's search runs in the
+  master worker of [W6-46], every other level's in the first, and together they are the only
+  things loaded at run time.)*
 - **[W6-12]** The worker's module graph MUST reach `bot`, `ai-bot` and `engine`, and MUST NOT reach
   anything in `src/components/` or the state module. [W6-31]'s clause covers `ai-bot` as it covers
   `bot`.
@@ -176,8 +191,12 @@ type FromWorker =
   *(Widened by [0008 A8-33].)* The worker's bundle therefore carries the expert's weights — about
   630 KB, which MUST stay under 1 MB — whatever setting it runs. Intent 0006's "plays exactly as
   it did before" is about play, and this cost to loading is accepted here, in writing.
+
+  *(Extended by [0012 T12-21].)* The first worker's graph MUST NOT reach `alphazero-bot/web`,
+  whose payload is the master worker's alone ([W6-46]); that bundle MUST stay under 5 MB.
 - **[W6-13]** The worker MUST be created lazily — not at all in a two-person game — and MUST be
-  terminated when the seating no longer needs it and when a new game is dealt.
+  terminated when the seating no longer needs it and when a new game is dealt. *(Widened by
+  [0012 T12-21]: both workers, each created lazily, and both terminated on every deal.)*
 
   *Dealing is the one place both happen: a seating change deals ([W6-3]), so terminating on every
   deal covers both clauses. For a while nothing did. The comments said the worker ended with its
@@ -194,7 +213,7 @@ type FromWorker =
   promised by the bot.*
 
 - **[W6-15]** The worker MUST catch a throw from `chooseMove` and reply `{ ok: false, message }`,
-  and the main thread MUST then throw rather than continue. A silent fallback move MUST NOT exist. *(Extended by [0008 A8-33]: a throw from `createExpert` or from a session's `choose` is caught and reported the same way.)*
+  and the main thread MUST then throw rather than continue. A silent fallback move MUST NOT exist. *(Extended by [0008 A8-33]: a throw from `createExpert` or from a session's `choose` is caught and reported the same way. Extended by [0012 T12-22]: so is a rejection from `createMaster` or a throw from a `Master`'s `choose`.)*
 
   *[0003 U3-20]'s discipline, one boundary further out. A bot that cannot choose a move is a defect,
   and a client that quietly plays something else hides it in the one place nobody would look.*
@@ -228,7 +247,10 @@ type FromWorker =
   the old reply settled both, so the new request got a stale generation and was dropped, and its
   own reply then arrived to nobody. `thinking` stayed set and the computer never moved again.
   [W6-13] now keeps two requests off one worker in the shipped client, and this requirement keeps
-  that from being the only thing standing between the player and the freeze. The fast suite
+  that from being the only thing standing between the player and the freeze.
+
+  *(Extended by [0012 T12-23]: a reply from either worker settles only a request that worker was
+  sent, [W6-48].)* The fast suite
   cannot see any of it through [W6-18]'s injected seam, which answers each request by its own
   resolver and so cannot cross its wires.*
 
@@ -263,7 +285,7 @@ type FromWorker =
 
   *(Unchanged by [0008 A8-33], and now covering `ExpertChoice.value` too: a number in [-1, 1] from
   the seat's perspective rather than points, which is if anything easier to mistake for a verdict
-  on a move.)*
+  on a move. And by [0012 T12-24], `MasterChoice.value`, which is the same kind of number.)*
 
 ### Responsiveness
 
@@ -273,7 +295,8 @@ type FromWorker =
 
   *(Unchanged by [0008 A8-33], and applying to `expert`: however long it thinks, the page stays
   alive. Intent 0006 puts speed out of scope and exempts that setting alone from intent 0003's "a
-  couple of seconds at most", so this is the one performance promise it does make.)*
+  couple of seconds at most", so this is the one performance promise it does make.)* *(And to
+  `master` at any simulations setting, [0012 T12-25]'s machine-of-record budget aside.)*
 - **[W6-27]** A ply submitted from a worker response MUST reach the next paint within the same
   budget a person's ply has ([0003 U3-67], 50 ms) — measured from the response, not from the
   request.
@@ -318,13 +341,19 @@ widened requirement is edited in place and a genuinely new one takes the next fr
 
 - **[W6-29]** The fast suite MUST include a property test that plays complete games through the
   *rendered* interface with one seat a computer and the seam of [W6-18] injected — including one
-  run with that seat `expert` ([W6-41]) — asserting
+  run with that seat `expert` ([W6-41]) and one with that seat `master` ([0012 T12-18]) —
+  asserting
   [0003 U3-61] and [0003 U3-62] at every human ply, [W6-22] at every computer ply, and [W6-32]
   through [W6-34] throughout. Seeds MUST be recorded and reported on failure, as [0003 U3-70]
   requires.
 - **[W6-30]** The browser lane of [0003 U3-73] MUST play, against a **real worker**: at least one
-  real ply from a tier, and at least one **complete game** from `expert` ([0008 A8-33]). It MUST
+  real ply from a tier, and at least one **complete game** from `expert` ([0008 A8-33]) while
+  [W6-1] offers it — skipped, and reported as skipped, while the committed gate withdraws it,
+  since a URL may not seat a level the interface does not offer ([W6-4]). It MUST
   assert [W6-26] and [W6-35] by measuring main-thread task durations while a search is in flight.
+  *(Extended by [0012 T12-30]: a complete game with `master` on both seats against the real master
+  worker, loaded with `p1Simulations=100` and `p2Simulations=200`; and a person-against-`sharp`
+  ply that requests nothing of the master worker's chunk.)*
 
   *Corrected by [0008 A8-33], and the correction is an admission: the first clause used to demand a
   complete game from a tier, and the lane has never played one — three tests, two of which play a
@@ -378,6 +407,78 @@ it keeps state between requests, which is what these two requirements are about.
   shared by mistake, and nothing in this suite has ever held state between requests to find out.
   The same reasoning that produced [0001 E1-72].*
 
+### The master
+
+*Added by [0012 T12-18] through [0012 T12-23]. `master` is a fifth difficulty and not a tier of
+`bot`: it is the player of *0011*, compiled to WebAssembly, in a worker of its own. Unlike
+`expert` it keeps nothing between moves, so it needs no sessions; what it needs is a setting per
+seat, and a worker that a game without it never builds.*
+
+- **[W6-43]** The interface MUST always offer `master`, labelled `Computer — master`. In the order
+  of [W6-1] it comes last: after `sharp`, and after `expert` when [0008 A8-33] offers that.
+  Nothing gates it. *(Intent 0010 drops the pass-or-fail match against `sharp` that 0006's player
+  needed.)*
+- **[W6-44]** Each seat's simulations setting is part of the seating, and the two are
+  independent. A request for a `master` seat carries that seat's setting.
+  - Each MUST default to `MASTER_SIMULATIONS.default` ([0012 T12-16]).
+  - A new game MUST keep both, as it keeps the seats.
+  - Changing either MUST deal a new game with a fresh seed, as a seating change does ([W6-3]).
+  - They MUST be carried in the URL beside `seed` and `seating` ([W6-4]), as `p1Simulations` for
+    seat 0 ("Player 1") and `p2Simulations` for seat 1 ("Player 2"). A parameter MUST be written
+    only when its seat is `master` and its value is not the default. A value that fails
+    `validSimulations` MUST be discarded for the default, the way [0003 U3-13] discards a seed,
+    and that does not affect the other seat's.
+  - They MUST NOT be written to storage ([0003 U3-15]): they last as long as the page or the URL.
+
+  *Because the master's move is a pure function of position and setting ([0011 Z11-24]), a seed, a
+  seating, both settings and the person's moves reproduce the whole game, `master`'s play
+  included — [W6-4]'s promise, kept for the new level.*
+
+- **[W6-45]** The advanced control MUST be rendered only while at least one seat is `master`. It
+  sits inside a closed-by-default `<details>` whose summary reads `Advanced`.
+  - It holds one number input for each `master` seat, and none for any other seat, labelled
+    `Player 1: simulations per move` or `Player 2: simulations per move`, with `min`, `max` and the
+    current value from that seat's setting. One line states the default and the range.
+  - A valid value, committed on `change`, MUST apply [W6-44] to that seat alone. An invalid one
+    MUST leave both settings and the game as they were, restore the input to the seat's setting,
+    and say why — with the range — in a `role="status"` line inside the control.
+  - It stays available while a search is in flight, as the new-game control does ([W6-23]).
+
+  *A status line of its own rather than [0003 U3-56]'s live region, which is derived from the view
+  model alone: a refused entry changes nothing the view model holds, and giving it a place there
+  would add state to the state module for a message about a form field.*
+
+- **[W6-46]** `master` MUST run in its own dedicated module worker, `master-worker.ts`,
+  constructed by the exact shape [0003 U3-8] permits.
+  - It is created lazily, on the first `master` request, and terminated on every deal, as
+    [W6-13] terminates the first worker.
+  - Its module graph MUST reach `engine` and `alphazero-bot/web`, and MUST NOT reach `bot`,
+    `ai-bot`, `src/components/` or the state module.
+  - The first worker's graph, the main thread's graph and everything under `src/components/` MUST
+    NOT reach `alphazero-bot/web` or its payload, except by a type-only import, which the compiler
+    erases. They MAY reach `alphazero-bot/web/settings`.
+
+  *Intent 0010's "only paid for by those who use it", kept simple: the payload is about 3.6 MB as
+  base64, and only a worker nobody creates until a seat is `master` ever loads it.*
+
+- **[W6-47]** The master worker MUST hold at most one `Master`, created by `createMaster()` on its
+  first request and shared by both seats, and answer its requests in the order they arrive. A
+  rejection from `createMaster` or a throw from `choose` MUST be reported as `{ ok: false,
+  message }` ([W6-15]). The logic MUST live in a module importable without a `Worker`.
+
+  *One instance for both seats is sound where [W6-40]'s sessions are not: `choose` keeps nothing
+  between moves, so sharing it pays for instantiation and the parity check once.*
+
+- **[W6-48]** The real seam MUST route each request to the worker its level runs on. [W6-7]'s
+  single outstanding request and [W6-42]'s per-generation reply routing MUST hold **across both
+  workers**: a reply from either worker settles only a request that worker was sent. The fast
+  suite MUST exercise the real seam against two stand-in `Worker`s, with a `master` seat against
+  a tier, across a deal mid-search, asserting that both workers are terminated and that no reply
+  crosses.
+
+  *[W6-42] exists because a seam once crossed its wires on one worker. Two workers are a new
+  configuration of the same seam, so it gets a case in that configuration.*
+
 ### Traceability exemptions
 
 | Requirement | Why it is not testable |
@@ -409,3 +510,4 @@ it keeps state between requests, which is what these two requirements are about.
 - Spec [0003 — Web interface](0003-web-interface.md) — amended here
 - Spec [0004 — Computer opponent](0004-computer-opponent.md)
 - Spec [0005 — Opponent strength](0005-opponent-strength.md)
+- Spec [0012 — Master opponent](0012-master-opponent.md) — the master, [W6-43] through [W6-48]

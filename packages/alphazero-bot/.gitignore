@@ -2,3 +2,4 @@ target/
 runs/
 .lock
 train/.venv/
+web/dist/

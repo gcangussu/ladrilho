@@ -5,15 +5,16 @@
   "type": "module",
   "description": "Hot-seat two-player Azul web client (spec 0003).",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "test": "vitest run",
-    "test:browser": "vitest run --config vitest.browser.config.ts",
-    "typecheck": "tsc --noEmit"
+    "dev": "pnpm -F alphazero-bot web && vite",
+    "build": "pnpm -F alphazero-bot web && vite build",
+    "test": "pnpm -F alphazero-bot web && vitest run",
+    "test:browser": "pnpm -F alphazero-bot web && vitest run --config vitest.browser.config.ts",
+    "typecheck": "pnpm -F alphazero-bot web && tsc --noEmit"
   },
   "dependencies": {
     "@solidjs/web": "2.0.0-rc.6",
     "ai-bot": "workspace:*",
+    "alphazero-bot": "workspace:*",
     "bot": "workspace:*",
     "engine": "workspace:*",
     "solid-js": "2.0.0-rc.6"

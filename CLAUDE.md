@@ -67,7 +67,17 @@ checked on every load ([Z11-13]); a checkpoint without one is not a checkpoint. 
 writes, but never commits: `milestones/log.json`, the milestone checkpoints, `gate/` and `latency/`
 are for a person to commit, while `runs/` is git-ignored scratch. Like `ai-bot`'s gate, its
 milestones and gate play `sharp`, so a change to `sharp`'s play starts every run's comparison
-afresh ([Z11-63]). Nothing offers it in the interface yet.
+afresh ([Z11-63]).
+
+The interface offers it as **`master`** (spec 0012), the crate's own library compiled to
+WebAssembly by a thin export crate under `packages/alphazero-bot/web` — no player code there, and
+raw `extern "C"` exports rather than `wasm-bindgen`, for the reasons 0012 records. It runs in a
+second worker, so a game without a `master` seat never loads its payload. Two things cost time if
+forgotten. The milestone it ships is named by `web/shipped.json`, and a test holds that to the
+highest pool rating in the log: **committing a milestone that out-rates it fails the suite until
+`shipped.json` names it** — one edit, in the same commit. And the payload (the module and the
+weights as base64, git-ignored) is built by `pnpm -F alphazero-bot web`, which `ui`'s scripts run
+first; `rust-toolchain.toml` names the `wasm32-unknown-unknown` target for it.
 
 The repo is a **pnpm monorepo** of the seven packages above. `pnpm test` and `pnpm typecheck` run
 `cargo` for `engine-rs`, for the cross-check's checker and for `azul_alphazero`, so a Rust
@@ -194,6 +204,8 @@ pnpm -F alphazero-bot latency-corpus           # [Z11-38]: re-record latency/cor
 pnpm -F alphazero-bot augment-fixtures         # [Z11-65]: train/layout.json and the display fixture
 pnpm -F alphazero-bot pool init --members third:90,fourth:50,fourth:70 --games <n>
                                                # [Z11-73]: seed the champions' pool; once, then commit
+pnpm -F alphazero-bot web                      # [T12-7]: the master's payload, from web/shipped.json
+pnpm -F alphazero-bot web-latency              # [T12-25]: master's moves at the default; idle machine
 
 pnpm -F bot test                 # the move chooser: evaluation, search, tiers
 pnpm -F bot bench                # the [B4-47]..[B4-50] budgets, non-gating, bundled
