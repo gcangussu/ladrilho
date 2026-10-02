@@ -39,6 +39,12 @@ export interface RunConfig {
    */
   augment?: 'none' | 'displays';
   /**
+   * [Z11-67]: the weights of the final margin's and the final walls' losses
+   * beside the policy's and the value's. Absent is 0, which is off.
+   */
+  auxMarginWeight?: number;
+  auxWallsWeight?: number;
+  /**
    * [Z11-68]: `off` never runs the gate in the loop, so the run never ends
    * done and goes on until the stop rule stops it. Absent is `end`.
    */

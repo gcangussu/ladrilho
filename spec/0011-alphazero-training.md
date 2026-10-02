@@ -576,6 +576,8 @@ The binary's commands, each loading one checkpoint and one run's settings:
   | legal | 23 bytes | a 180-bit mask, action `a` at bit `a % 8` of byte `a / 8`; all zero for a boundary sample |
   | visits | 180 × u16 | root visits; all zero for a boundary sample |
 
+  Beside it, `selfplay` MUST write the sample file's **aux file** of [Z11-67].
+
 - **[Z11-28]** The loop MUST, per generation `g`:
   1. run `selfplay` with checkpoint `g` for `gamesPerGeneration` games, unless generation `g`'s
      sample file is already complete;
@@ -586,8 +588,9 @@ The binary's commands, each loading one checkpoint and one run's settings:
      fewer of its own ([Z11-66]), and with `augment: displays` each drawn sample is permuted
      ([Z11-65]);
   4. write the optimiser state as its own file for generation `g + 1`, never overwriting
-     generation `g`'s, then checkpoint `g + 1` and its parity file, then the manifest
-     `generations/<g + 1>.json` naming all three with their sha256. The manifest is the commit
+     generation `g`'s — and, for a run with [Z11-67]'s heads, their state as its own file —
+     then checkpoint `g + 1` and its parity file, then the manifest `generations/<g + 1>.json`
+     naming each with its sha256. The manifest is the commit
      point: a generation without one is incomplete, and its step 3 runs again;
   5. if `g + 1` is a multiple of `milestoneEvery` and the log has no entry for it, run the
      milestone of [Z11-31] on checkpoint `g + 1` and act on its decision;
@@ -617,7 +620,8 @@ The binary's commands, each loading one checkpoint and one run's settings:
   latency record holds, and each changed setting with its parent's value and its own. `--set` MUST
   refuse every setting but those of how a run trains and self-plays — `gamesPerGeneration`,
   `window`, `stepsPerGeneration`, `batch`, `learningRate`, `momentum`, `weightDecay`,
-  `boundaryWeight`, `selfPlaySimulations`, `threads` and `torchThreads` — and any value that is not
+  `boundaryWeight`, `selfPlaySimulations`, `threads`, `torchThreads`, `auxMarginWeight` and
+  `auxWallsWeight` — and any value that is not
   a positive number: the network, the searches the ladder and the gate measure, and the count the
   latency record stands behind stay the parent's. Checkpoint `0` MUST be
   the parent's checkpoint `g` with its generation relabelled `0` and a parity file of its own, and
@@ -663,6 +667,41 @@ The binary's commands, each loading one checkpoint and one run's settings:
   not be mistaken for a bug in training; `first`'s losses then showed the value head fitting its
   own samples at 0.34 and fresh ones at 0.92, the memorising this counters. It adds no game
   results, so it cannot answer the open question of too few value labels on its own.*
+
+- **[Z11-67]** `selfplay` MUST write, beside each sample file `<g>.bin`, its **aux file**
+  `<g>.aux.bin`: one little-endian record per sample, in the sample file's order —
+
+  | Field | Type | Content |
+  | --- | --- | --- |
+  | margin | i16 | the game's final score of the sample's seat minus the other seat's |
+  | walls | 2 × u32 | the two final walls, the sample's seat's first, cell `i` (row-major) at bit `i` |
+
+  — where a sample's seat is the one its `result` is from ([Z11-26]). The aux file MUST be written
+  before the sample file, each atomically, so a complete sample file always has its aux file. The
+  sample file is unchanged by it, byte for byte.
+
+  A run's config MAY set `auxMarginWeight` and `auxWallsWeight`; absent is 0. While either is
+  positive, the trainer MUST train two **auxiliary heads** on the body's output beside [Z11-6]'s:
+  the margin over 20 points (a hidden layer of 64, then one output) and the 50 wall cells (one
+  linear layer of logits). Step 3 of [Z11-28] MUST add to [Z11-29]'s loss `auxMarginWeight` times
+  the margin's squared error and `auxWallsWeight` times the walls' mean binary cross-entropy, both
+  over the drawn samples that have an aux record — a sample file without one (a parent's, or one
+  written before this requirement) contributes none — and zero when none do. The heads MUST NOT be
+  exported: the checkpoint of [Z11-11] and everything that loads it are unchanged. They and their
+  own optimiser (the run's SGD settings) MUST be saved as `aux/<g + 1>.pt` in step 4 and loaded in
+  the next generation, fresh when the file is absent, and a run started from another copies its
+  parent's when it has one ([Z11-66]). [Z11-54]'s record MUST carry, for such a run, the aux losses
+  on generation `g`'s own samples before training, and the training means with the weights and the
+  share of the window that had targets.
+
+  *A result is one ±1 label shared by every position of a game, and early in a game close to a
+  coin flip; run `third` showed the value head stop improving once it stopped memorising, at an
+  error near 0.73 on fresh games. What the game ended as — by how many points, which cells each
+  player filled — is a far richer target for the same positions, and the body learns from it what
+  the value needs. KataGo found its score and ownership targets the most valuable of its additions
+  (learning 1.65× slower without them); the final walls are Azul's ownership. Not exported, so
+  latency, parity and the search stay as they were, and the weights are a run's settings, so a run
+  tests them as its one change.*
 
 - **[Z11-30]** Everything a run writes MUST live under `packages/alphazero-bot/runs/<name>/`, which
   is git-ignored, except the files of [Z11-34], [Z11-35] and [Z11-40], which are written where
@@ -1102,6 +1141,7 @@ not required: [Z11-25] makes the file the record, and a later run MAY change any
 | --- | --- | --- |
 | `width`, `blocks` | 256, 4 | about 640 000 weights, 2.5 MB a checkpoint |
 | `seed` | random, chosen by `train init` | [Z11-26] |
+| `auxMarginWeight`, `auxWallsWeight` | absent, meaning 0 | [Z11-67] |
 | `augment` | absent, meaning `none` | [Z11-65] |
 | `playSimulations` | set by [Z11-57] | the shipped setting |
 | `selfPlaySimulations` | 200 | |
@@ -1241,7 +1281,8 @@ this package, and MUST be corrected in the same change.
   weight decay is applied once, that [Z11-65]'s permutation is the engine's, that a run started
   from another ([Z11-66]) begins from its parent's weights, optimiser and window, and that
   [Z11-54]'s value by round reads rounds as the engine encodes them and fits its formula out of
-  sample.
+  sample, and that [Z11-67]'s targets are read in order, enter only where a sample has one, and its
+  heads train, persist between generations and stay out of the checkpoint.
 - **[Z11-47]** A source check MUST cover [Z11-1], [Z11-2] — its list of crates and its build flag
   in `.cargo/config.toml` included, failing if the file is absent or its flags differ — and
   [Z11-3], each clause run against a source it exists to reject, and MUST fail on a clock read
@@ -1287,6 +1328,11 @@ this package, and MUST be corrected in the same change.
   | A child's changes not recorded in `from` | [Z11-66]'s config case |
   | The round read without its scale | [Z11-54]'s round case |
   | The formula fitted on the samples it is scored on, in the measure or in the trainer | [Z11-54]'s out-of-sample and generation cases |
+  | The margin taken the other way round, the walls not swapped for seat 1, or a wall's cells numbered from the end | [Z11-67]'s `final_aux` case |
+  | The aux file's walls taken from the seat that ended the game instead of each sample's | [Z11-67]'s file case |
+  | The wall targets read from bit 24 down | [Z11-67]'s targets case |
+  | The `has` mask ignored, so samples without targets carry aux loss | [Z11-67]'s mask case |
+  | The heads not saved, or not loaded, between generations; the aux loss left out of the total; or added with the weights at 0 | [Z11-67]'s heads case |
   | The fold of `finish` summing the lanes in sequence instead of in halves | [Z11-10]'s reference case |
   | The second row of `lanes2` accumulated against the first row's weights | [Z11-10]'s reference case |
   | The unpaired last row of `linear` left uncomputed | [Z11-10]'s reference case, at odd width |
@@ -1326,10 +1372,8 @@ this package, and MUST be corrected in the same change.
 
 ## Open questions
 
-- **Is the outcome alone enough of a value target?** Azul's result is a margin as much as a win,
-  and a second value head predicting the final score difference is a common, cheap way to give an
-  early network more signal. It would change [Z11-6] and [Z11-29], not the search. Worth trying if
-  the first milestones stall.
+- **Is the outcome alone enough of a value target?** Answered by [Z11-67] as auxiliary targets
+  that change neither [Z11-6]'s exported network nor the search; run `fourth` tests them.
 - **Should the input spell out what the next deal can hold?** [Z11-9] and [Z11-51] guarantee the
   network can work out, per colour, what the next deal will certainly hold and what it might. They
   do not hand it over. A few extra inputs per colour would cost almost nothing, but they would

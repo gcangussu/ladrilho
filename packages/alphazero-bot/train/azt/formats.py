@@ -114,6 +114,27 @@ def read_samples(path: Path) -> np.ndarray:
     return np.frombuffer(data, dtype=SAMPLE)
 
 
+AUX = np.dtype([("margin", "<i2"), ("walls", "<u4", (2,))])
+assert AUX.itemsize == 10
+
+
+def aux_path(samples: Path) -> Path:
+    """The aux file beside a sample file ([Z11-67]): `16.bin` -> `16.aux.bin`."""
+    return Path(samples).with_suffix(".aux.bin")
+
+
+def read_aux(samples: Path) -> np.ndarray | None:
+    """The aux records of a sample file, or `None` when it has none — a run's
+    samples written before [Z11-67], or a parent's."""
+    f = aux_path(samples)
+    if not f.exists():
+        return None
+    data = f.read_bytes()
+    if len(data) % AUX.itemsize:
+        raise ValueError(f"{f}: not a whole number of aux records")
+    return np.frombuffer(data, dtype=AUX)
+
+
 def legal_bits(masks: np.ndarray) -> np.ndarray:
     """`[n, 23]` bytes to `[n, 180]` booleans: action `a` at bit `a % 8` of byte `a // 8`."""
     bits = np.unpackbits(masks, axis=1, bitorder="little")

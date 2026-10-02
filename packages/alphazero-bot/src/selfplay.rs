@@ -4,13 +4,13 @@
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use azul_engine::{ACTION_SPACE, AzulState, Outcome, Player, Seeded};
+use azul_engine::{ACTION_SPACE, AzulState, Outcome, Player, Seeded, Shuffler};
 
 use crate::config::Settings;
 use crate::memo::Memo;
 use crate::network::{BATCH, Evaluation, Evaluator, Request};
 use crate::rng::{Rng, game_seed, noise_seed};
-use crate::samples::{Kind, LEGAL_BYTES, Sample, legal_mask};
+use crate::samples::{Aux, Kind, LEGAL_BYTES, Sample, legal_mask, wall_mask};
 use crate::search::Search;
 use crate::view::{is_boundary, pre_deal_view};
 
@@ -25,6 +25,24 @@ fn result_for(outcome: Option<Outcome>, seat: Player) -> i8 {
         _ => 0,
     }
 }
+
+/// What a finished game ended as, from `seat` ([Z11-67]): the seat's final
+/// score minus the other's, and both final walls, the seat's first.
+pub fn final_aux<S: Shuffler>(state: &AzulState<S>, seat: Player) -> Aux {
+    let scores = state.scores();
+    let walls = state.to_canonical().walls.map(|w| wall_mask(&w));
+    let (me, them) = (seat.index(), seat.other().index());
+    // Saturating: a margin past ±32 767 points is not a game of Azul.
+    let margin = (scores[me] - scores[them]).clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16;
+    Aux { margin, walls: [walls[me], walls[them]] }
+}
+
+/// One game's records: its samples, each beside what the game ended as from
+/// its seat ([Z11-67]).
+pub type Records = Vec<(Sample, Aux)>;
+
+/// One game's bytes: its sample records and its aux records.
+type GameBytes = (Vec<u8>, Vec<u8>);
 
 /// Picks the move from root visits: sampled in proportion to `N^(1/τ)` for the
 /// first `temp_plies` plies, then the most visited, ties to the lowest index.
@@ -187,14 +205,16 @@ impl Game {
         true
     }
 
-    /// The samples, results filled in from the final outcome.
-    fn into_samples(self) -> Vec<Sample> {
+    /// The samples, results filled in from the final outcome, each beside
+    /// what the game ended as from its seat ([Z11-67]).
+    fn into_records(self) -> Records {
         let outcome = self.state.outcome();
+        let state = &self.state;
         self.samples
             .into_iter()
             .map(|(mut s, seat)| {
                 s.result = result_for(outcome, seat);
-                s
+                (s, final_aux(state, seat))
             })
             .collect()
     }
@@ -212,7 +232,7 @@ fn play_games<E: Evaluator>(
     generation: u64,
     lanes: usize,
     mut next: impl FnMut() -> Option<u64>,
-    mut done: impl FnMut(u64, Vec<Sample>),
+    mut done: impl FnMut(u64, Records),
 ) {
     let lanes = lanes.max(1);
     let mut games: Vec<Game> = Vec::with_capacity(lanes);
@@ -230,7 +250,7 @@ fn play_games<E: Evaluator>(
                 k += 1;
             } else {
                 let g = games.swap_remove(k);
-                done(g.index, g.into_samples());
+                done(g.index, g.into_records());
             }
         }
         if games.is_empty() {
@@ -248,8 +268,8 @@ fn play_games<E: Evaluator>(
 }
 
 /// One self-play game on its own, unbatched: its samples, results filled in
-/// from the final outcome.
-pub fn play_game<E: Evaluator>(net: &E, settings: &Settings, seed: u64, generation: u64, index: u64) -> Vec<Sample> {
+/// from the final outcome, each beside its aux record ([Z11-67]).
+pub fn play_game<E: Evaluator>(net: &E, settings: &Settings, seed: u64, generation: u64, index: u64) -> Records {
     let mut out = Vec::new();
     let mut once = Some(index);
     play_games(net, settings, seed, generation, 1, || once.take(), |_, s| out = s);
@@ -260,10 +280,16 @@ pub fn play_game<E: Evaluator>(net: &E, settings: &Settings, seed: u64, generati
 /// over one shared network, each playing `GAMES_PER_THREAD` at once, as the
 /// bytes of a sample file in game order. The order of the file does not
 /// depend on which thread played which game, nor on which games shared a
-/// batch.
-pub fn self_play<E: Evaluator>(net: &E, settings: &Settings, seed: u64, generation: u64, games: usize) -> Vec<u8> {
+/// batch; and the bytes of its aux file, in the same order ([Z11-67]).
+pub fn self_play<E: Evaluator>(
+    net: &E,
+    settings: &Settings,
+    seed: u64,
+    generation: u64,
+    games: usize,
+) -> (Vec<u8>, Vec<u8>) {
     let next = AtomicUsize::new(0);
-    let done: Mutex<Vec<Option<Vec<u8>>>> = Mutex::new(vec![None; games]);
+    let done: Mutex<Vec<Option<GameBytes>>> = Mutex::new(vec![None; games]);
     std::thread::scope(|scope| {
         for _ in 0..settings.threads.max(1) {
             scope.spawn(|| {
@@ -271,13 +297,15 @@ pub fn self_play<E: Evaluator>(net: &E, settings: &Settings, seed: u64, generati
                     let i = next.fetch_add(1, Ordering::Relaxed);
                     (i < games).then_some(i as u64)
                 };
-                let finish = |i: u64, samples: Vec<Sample>| {
+                let finish = |i: u64, records: Records| {
                     let mut bytes = Vec::new();
-                    for s in samples {
+                    let mut aux = Vec::new();
+                    for (s, a) in records {
                         s.write(&mut bytes);
+                        a.write(&mut aux);
                     }
                     if let Ok(mut d) = done.lock() {
-                        d[i as usize] = Some(bytes);
+                        d[i as usize] = Some((bytes, aux));
                     }
                 };
                 play_games(net, settings, seed, generation, GAMES_PER_THREAD, take, finish);
@@ -285,5 +313,10 @@ pub fn self_play<E: Evaluator>(net: &E, settings: &Settings, seed: u64, generati
         }
     });
     let done = done.into_inner().unwrap_or_default();
-    done.into_iter().flatten().flatten().collect()
+    let (mut samples, mut aux) = (Vec::new(), Vec::new());
+    for (s, a) in done.into_iter().flatten() {
+        samples.extend(s);
+        aux.extend(a);
+    }
+    (samples, aux)
 }
