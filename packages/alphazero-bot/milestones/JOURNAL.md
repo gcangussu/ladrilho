@@ -18,7 +18,8 @@ Add an entry when a run starts or ends, or when a decision changes the plan. Tim
 | `second` | 09-30 | `first`/210 | display permutation ([Z11-65]) | ladder | gen 75, paused for the CPU | progress ≈ 1.97, no clear gain |
 | `third` | 09-30 | `second`/70 | 3000 games a generation | ladder | gen 90, **gate passed** | 0.79 against `sharp` at full strength |
 | `fourth` | 10-01 | `third`/90 | the gate off ([Z11-68]) | ladder | gen 140, ended with its session | `sharp` 0.79–0.89; the ladder saturated |
-| `fifth` | 10-01 | `fourth`/140 | the pool as yardstick ([Z11-73]) | pool | running | gen 20: +312 Elo |
+| `fifth` | 10-01 | `fourth`/140 | the pool as yardstick ([Z11-73]) | pool | gen 270, stop rule | **+464** at gen 250; `sharp` 0.91 at 200 simulations |
+| `sixth` | 10-02 | `fifth`/250 | auxiliary targets ([Z11-67]) | pool | running | gen 10: +476 |
 
 Progress on the ladder is the sum of four winrates (0 to 4). Pool ratings are Elo, with `third`/90,
 the checkpoint that passed the gate, at 0.
@@ -170,16 +171,55 @@ continues `fourth`/140 with only the yardstick changed (run detached, `--workers
 - Generation 20: **+312 ±7.5**, improved. It scored 52.9% against its own predecessor and replaced
   `fourth`/50 (`a767c24`). 448 s.
 
+The climb went on for 230 more generations, slowing as it went: +342 at 50, +362 at 100, +410 at
+150, +428–436 around 200, and **+464 ±6 at generation 250** (`5b104a5`). Generations 260 (+463) and
+270 (+455) did not beat it, and the stop rule ended the run at 270 (10-02 08:09, `ef0b65b`). The
+extra third of games was needed at seven milestones, all near the top, where the champions sit
+within a few Elo of each other.
+
+- **Dips between checkpoints.** Generations 30 (+231), 60 (+251), 110 (+326) and 170 (+346) each
+  rated 50–90 Elo below their neighbours, and the next milestone recovered. The losses did not
+  show them. The learning rate stays at 0.02 throughout, so a checkpoint is one noisy point on a
+  path; averaging the weights or decaying the rate are the likely remedies (see *Next*).
+- **Is the scale inflated?** Each new rating is measured only against recent champions, which could
+  drift if strength were not transitive. `fifth`/130 was played against the two old anchors
+  (`third`/90 and `fourth`/70) instead: **+395 ±17**, against the pool's +383. No material drift.
+- **Against `sharp` (10-02).** `fifth`/250 at 200 simulations, 200 games on the wide seeds:
+  **0.9125** (182 wins, 17 losses, 1 draw), Wilson lower bound 0.874, 0.92 / 0.905 by seat, mean
+  score 48 to 38. `third`/90 passed the gate with 0.7875 at 11,300 simulations, 56 times the
+  search. Most of the strength is now in the network.
+
+## `sixth`: auxiliary targets (10-02 →)
+
+**Decision (the user, authorised in advance):** when `fifth` plateaued, start the most promising
+idea. `sixth` starts from `fifth`/250, the highest rated milestone, with one change: two
+training-only heads predicting the final score margin (÷20) and the 50 final wall cells, weighted
+0.5 each ([Z11-67], branch `alphazero-aux` merged in `ee5f133`). Neither head is exported, so the
+search, the checkpoint format and the latency are unchanged. The motivation: the value head stopped
+improving at about 0.73 on fresh games, and these targets carry far more signal per game than one
+win or loss. The window's inherited samples have no aux targets; the aux loss uses only the samples
+that do, so it phases in over the first generations. Throughput: 1.2 minutes a generation.
+
+- **The heads are healthy.** On each generation's fresh games, before training, the margin loss
+  sits at about 0.25 and the walls loss fell from 0.71 to 0.32 by generation 19, matching the
+  training losses: they generalise, they do not memorise. The share of samples with targets rose
+  by 5% a generation, reaching 100% at generation 19.
+- Generation 10: **+476 ±7**, a new best by 12 Elo, about 1.7 standard errors. It replaced
+  `fifth`/230.
+- Generation 20: +459 ±6 after the extra games, keeping the pool. One milestone is not a trend:
+  `fifth` showed dips of this size.
+
 ## Next
 
-- **`sixth`: auxiliary targets** ([Z11-67], branch `alphazero-aux`, `df1175a`, ready and checked),
-  once the pool shows `fifth` has plateaued. It adds two training-only heads, the final score margin
-  and the final walls, neither exported, so search and latency are unchanged. Weights 0.5 / 0.5.
-  The motivation: the value head stopped improving at about 0.73 on fresh games once it stopped
-  memorising, and early-game results are close to coin flips.
-- After it, in the report's order and as the evidence points: better policy targets at low
-  simulation counts (playout-cap randomisation, then Gumbel search); blending the result with the
-  search's value; restarting self-play from saved round starts.
+- **`sixth`** (above) is running. If it beats `fifth`'s +464 clearly, aux targets stay on.
+- **Weight averaging or learning-rate decay**, motivated by `fifth`'s dips: an exponential moving
+  average of the weights in the trainer, or a lower rate once progress slows. Trainer-only.
+- After those, in the report's order and as the evidence points: gating new networks (AlphaGo
+  Zero style); better policy targets at low simulation counts (playout-cap randomisation, then
+  Gumbel search); blending the result with the search's value; restarting self-play from saved
+  round starts; reanalyse; a bigger network, which needs a new latency record.
+- The latency record has room (p95 551 ms against 1.5 s), so a shipped move could use about twice
+  the simulations. That is a new latency lane, and the user's call.
 
 ## Ways of working that this run settled
 
