@@ -8,9 +8,8 @@ summary: >
   Offer the player we trained by self-play as "master", a difficulty setting
   above "ruthless", playing in the browser on the player's own machine. By
   default it looks ahead 10 000 times before each move, which takes well under
-  a second on our laptop, and it is offered only while it beats "ruthless"
-  clearly at that amount of thinking. An advanced setting lets a person make it
-  think more or less.
+  a second on our laptop. An advanced setting lets a person make it think more
+  or less.
 ---
 
 # Playing the opponent we trained
@@ -44,43 +43,35 @@ Before writing this down we tried three ways of getting the player into a browse
 uses the same code that trains and measures it, unchanged. The second is a simplified copy
 rewritten for the browser. The third runs the network in a general-purpose runtime someone else
 maintains. The unchanged code came out at least as fast as the other two, and much the smallest.
-It also plays the moves we measured, where the general-purpose runtime does its arithmetic in
-its own order, so its moves could drift from the measured ones. So there is no second player to
+It also plays exactly as the trained player does, where the general-purpose runtime does its
+arithmetic in its own order, so its moves could drift from the trained player's. So there is no second player to
 keep in step with the first.
 
 ## What good looks like
 
 - "master" is offered next to the other settings, and picking it is the only new thing.
   Choosing a person, "gentle", "steady" or "ruthless" plays exactly as it did before.
-- It is offered only while the player it carries passes 0009's bar at the default amount of
-  thinking: 60 or more games in every 100 against "ruthless" as it is at the time. That result
-  is written down where anyone can read it. If no player has passed, "master" is not offered.
-- At the default, it plays the moves we measured. Given the same position, it chooses the move
-  the measured player chooses, so the 60-in-100 result describes the opponent people face.
 - On this laptop, in the browser, every move at the default takes under a second, and most take
   a small fraction of that.
 - The advanced setting is easy to find for someone looking for it, and doesn't get in the way of
   someone who isn't. It accepts anything from 100, below which it plays carelessly, up to
   200 000, where its slowest moves take around a quarter of a minute on this laptop. Whatever
-  number is set within that range is used as given, and the setting makes clear that the
-  measured result is for the default only.
+  number is set within that range is used as given.
 - A number set there is kept from one game to the next, and a link to a game carries it, so
   whoever opens the link faces the same opponent.
 - The page stays alive while it thinks, however much it has been told to think, exactly as it
   does for the other settings.
-- The same position, with the same amount of thinking, gets the same move every time, and it
-  never sees what is coming out of the bag.
-- When training produces a stronger player that passes the same bar, putting it in place of the
-  current one is a routine step, not a project. Which player is in place is written down too.
+- It never sees what is coming out of the bag.
+- When training produces a stronger player, putting it in place of the current one is a
+  routine step, not a project. Which player is in place is written down too.
 
 ## Constraints
 
-- **The player we measured is the player we ship.** The browser runs the same code that trained
-  and measured it, built for the browser. It is not rewritten in another language and not handed
-  to someone else's runtime. A faster version that plays differently is a different player, and
-  it would need measuring again.
-- **The strongest player that has passed the bar.** We ship the best milestone that has cleared
-  60 in 100 at the default, not simply the latest one.
+- **The player we trained is the player we ship.** The browser runs the same code that trained
+  it, built for the browser. It is not rewritten in another language and not handed to someone
+  else's runtime. A faster version that plays differently would be a different player.
+- **The strongest player we have.** We ship the best milestone, as training's own record ranks
+  them, not simply the latest one.
 - **Simple limits.** The advanced setting's limits are round numbers, worked out once from
   measurements we already have. The top one is set by memory, not time: a search keeps what it
   has looked at, and at 200 000 that is already a few hundred megabytes. Thinking for a full
@@ -106,6 +97,7 @@ keep in step with the first.
 - Making it stronger. That is training, which is 0009's.
 - Any promise about speed on phones or other machines, and any automatic adjustment for them.
 - Offering more than one trained player, or letting someone choose a milestone.
-- Measuring how strong it is at amounts other than the default.
+- A pass-or-fail match against "ruthless" before it ships, like the one 0006's player needed.
+  Training's milestones already show it is far stronger, and it keeps improving.
 - Explaining its moves, hints, or analysing a game with it. No opponent explains itself yet.
 - Any game but the two-player base game.
