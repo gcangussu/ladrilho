@@ -414,6 +414,12 @@ describe('the module [T12-6], [T12-12], [T12-13], [T12-28]', () => {
     expect(position.legalActions).toContain(choice.action);
     expect(choice.simulations).toBe(100);
     expect(Math.abs(choice.value)).toBeLessThanOrEqual(1);
+    // [T12-25]'s measure: the module's own memory, which a search grows and
+    // never gives back. Node's `arrayBuffers` read 0 here, so the lane uses this.
+    const held = master.memoryBytes();
+    expect(held).toBeGreaterThan(0);
+    master.choose(position, 5000);
+    expect(master.memoryBytes()).toBeGreaterThanOrEqual(held);
     for (const n of [99, 200_001, 1000.5]) expect(() => master.choose(position, n), String(n)).toThrow(RangeError);
     expect(() => master.choose(finished(), 100)).toThrow(/terminal/);
   });

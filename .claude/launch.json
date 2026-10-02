@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "ui",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["-F", "ui", "dev", "--port", "5173", "--strictPort"],
+      "port": 5173
+    }
+  ]
+}

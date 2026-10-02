@@ -40,11 +40,12 @@ const slowest = times.reduce((a, b) => (b.ms > a.ms ? b : a));
 const fresh = await createMaster();
 const t = performance.now();
 fresh.choose(positions[slowest.at], MASTER_SIMULATIONS.max);
-// The module's linear memory is an ArrayBuffer, and it never shrinks.
-const memory = process.memoryUsage().arrayBuffers;
+// The module's own linear memory, which only grows: its size after the search
+// is the most the search held. Node's `arrayBuffers` figure does not count it.
+const memory = fresh.memoryBytes();
 console.log(
   `${MASTER_SIMULATIONS.max} simulations on the slowest position: ${((performance.now() - t) / 1000).toFixed(1)} s, ` +
-    `array buffers ${(memory / 2 ** 20).toFixed(0)} MB (budget ${MAX_MEMORY_MB})`,
+    `module memory ${(memory / 2 ** 20).toFixed(0)} MB (budget ${MAX_MEMORY_MB})`,
 );
 const passed = max < MAX_MS && memory / 2 ** 20 < MAX_MEMORY_MB;
 console.log(passed ? 'passed' : 'FAILED');

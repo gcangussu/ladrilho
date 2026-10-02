@@ -155,6 +155,8 @@ export interface MasterChoice {
 }
 export interface Master {
   choose(position: AzulJSON, simulations: number): MasterChoice;
+  /** The module's linear memory in bytes, which only grows: [T12-25]'s measure. */
+  memoryBytes(): number;
 }
 /** `parity` defaults to the payload's; the suite passes a corrupted one ([T12-28]). */
 export function createMaster(parity?: Uint8Array): Promise<Master>;  // [T12-12]
@@ -403,7 +405,8 @@ These requirements were proposals for *0006*, in the manner of [0008 A8-33]. Eac
   machine otherwise idle, `max` MUST be under 1000 ms on the machine of record.
 
   It MUST also time one search at `MASTER_SIMULATIONS.max` on the corpus position slowest at the
-  default, and print the module's memory size after it. That size MUST be under 512 MB.
+  default, on a fresh `Master`, and print `memoryBytes()` after it. That size MUST be under 512 MB.
+  Node's own `arrayBuffers` figure does not count WebAssembly memory, and reads 0.
 
   *Intent 0010: on this laptop, every move at the default takes under a second. The figures it
   stands on: 11 300 simulations gave p95 626 ms and max 736 ms on the 200-position subset, so
