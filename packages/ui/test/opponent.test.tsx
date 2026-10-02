@@ -990,7 +990,7 @@ describe('the advanced control [W6-45]', () => {
 
 describe("the master worker's one player [W6-47]", () => {
   const fake = (choose: () => { action: number; value: number; simulations: number }) => () =>
-    Promise.resolve({ choose: () => choose() });
+    Promise.resolve({ choose: () => choose(), memoryBytes: () => 0 });
 
   // Seen red, on a copy, with `master === null` dropped from the guard: two
   // creations for two requests.
@@ -1014,7 +1014,14 @@ describe("the master worker's one player [W6-47]", () => {
   it('[W6-47] [W6-15] reports a refused load and a failed search, never rejecting', async () => {
     const refused = createMasterSeat(() => Promise.reject(new Error('parity: corpus entry 3')));
     expect(await refused.answer(masterRequest(4) as never)).toEqual({ generation: 4, ok: false, message: 'parity: corpus entry 3' });
-    const failing = createMasterSeat(() => Promise.resolve({ choose: () => { throw new RangeError('simulations must be…'); } }));
+    const failing = createMasterSeat(() =>
+      Promise.resolve({
+        choose: () => {
+          throw new RangeError('simulations must be…');
+        },
+        memoryBytes: () => 0,
+      }),
+    );
     expect(await failing.answer(masterRequest(5) as never)).toMatchObject({ generation: 5, ok: false });
   });
 

@@ -27,6 +27,8 @@ export interface MasterChoice {
 
 export interface Master {
   choose(position: AzulJSON, simulations: number): MasterChoice;
+  /** The module's linear memory, in bytes: it grows with a search and never shrinks ([T12-25]). */
+  memoryBytes(): number;
 }
 
 /** The milestone the payload carries ([T12-9]). */
@@ -108,5 +110,6 @@ export async function createMaster(parity: Uint8Array = decode(PARITY)): Promise
       if (action < 0) throw new Error(errorText(x));
       return { action, value: x.value(), simulations };
     },
+    memoryBytes: () => x.memory.buffer.byteLength,
   };
 }
