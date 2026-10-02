@@ -51,6 +51,17 @@ def optimiser(net: Net, config: dict):
                            weight_decay=config["weightDecay"])
 
 
+def restore(opt, state: dict, config: dict) -> None:
+    """[Z11-66]: the saved optimiser's momentum buffers, with the run's own
+    settings. `load_state_dict` restores the saved learning rate, momentum and
+    weight decay too, which would quietly undo a child run's `--set`."""
+    opt.load_state_dict(state)
+    for group in opt.param_groups:
+        group["lr"] = config["learningRate"]
+        group["momentum"] = config["momentum"]
+        group["weight_decay"] = config["weightDecay"]
+
+
 def evaluate(net: Net, samples: np.ndarray, boundary_weight: float, chunk: int = 4096):
     """Mean policy and value losses over a set of samples, no training."""
     total_p = total_v = 0.0
@@ -230,7 +241,7 @@ def train_generation(run: Path, g: int) -> None:
     if augment not in ("none", "displays"):
         raise ValueError(f"config: augment {augment!r} is neither none nor displays")
     opt = optimiser(net, config)
-    opt.load_state_dict(torch.load(p["optimiser"]))
+    restore(opt, torch.load(p["optimiser"]), config)
     steps, batch = config["stepsPerGeneration"], config["batch"]
     sum_p = sum_v = sum_m = sum_w = 0.0
     net.train()

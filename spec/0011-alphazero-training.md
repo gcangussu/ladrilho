@@ -625,7 +625,9 @@ The binary's commands, each loading one checkpoint and one run's settings:
   a positive number: the network, the searches the ladder and the gate measure, and the count the
   latency record stands behind stay the parent's. Checkpoint `0` MUST be
   the parent's checkpoint `g` with its generation relabelled `0` and a parity file of its own, and
-  generation `0`'s optimiser state the parent's at `g`. While the run has fewer than `window`
+  generation `0`'s optimiser state the parent's at `g`: its momentum buffers, for the body and the
+  aux heads alike. A restored optimiser MUST take `learningRate`, `momentum` and `weightDecay` from
+  the run's config, never from the saved state. While the run has fewer than `window`
   generations of its own, step 3 of [Z11-28] MUST fill the window with the parent's latest
   generations before `g`, linked into `runs/<name>/inherited/`, and the losses of [Z11-54] name
   them. `playSimulations` and `milestoneSimulations` come with the parent's config: the latency
@@ -634,9 +636,12 @@ The binary's commands, each loading one checkpoint and one run's settings:
 
   *A run is a fixed experiment ([Z11-25]), so a change to how training works is a new run; but a
   new run need not relearn what the last one learned. Starting from its weights, its optimiser
-  and its window changes one thing at a time, and the parent's log stays the baseline. The
-  architecture is the parent's, so the latency its record measured still holds, and a gate
-  measures latency again on the checkpoint it tests ([Z11-35]). The weights are still ours, so
+  and its window changes one thing at a time, and the parent's log stays the baseline. PyTorch's
+  `load_state_dict` restores the saved settings with the buffers, so without the last rule a
+  `--set learningRate` would be recorded in `from` and silently not used; `seventh` found it
+  before its first generation. The architecture is the parent's, so the latency its record
+  measured still holds, and a gate measures latency again on the checkpoint it tests ([Z11-35]).
+  The weights are still ours, so
   intent 0009's "from scratch" holds for the lineage; `from` is how the record says so.*
 
 - **[Z11-29]** Training MUST minimise, per batch, the policy cross-entropy against the root visits

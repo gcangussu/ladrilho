@@ -12,7 +12,8 @@ import torch
 from azt.formats import (SAMPLE, checkpoint_bytes, legal_bits, parity_bytes, read_checkpoint,
                          read_corpus, read_samples, write_checkpoint)
 from azt.model import Net
-from azt.train import batch_tensors, init_run, losses, optimiser, paths, train_generation
+from azt import auxiliary
+from azt.train import batch_tensors, init_run, losses, optimiser, paths, restore, train_generation
 
 PACKAGE = Path(__file__).resolve().parents[2]
 BINARY = PACKAGE / "target" / "debug" / "alphazero"
@@ -159,6 +160,32 @@ def test_weight_decay_is_applied_once():
     with torch.no_grad():
         l_a = sum(losses(*net2(obs), legal, visits, result, kind, 1.0))
     assert torch.isfinite(l_a)
+
+
+def test_a_restored_optimiser_takes_the_runs_settings(tmp_path):
+    """[Z11-66]: a child run's `--set learningRate`, `momentum` and
+    `weightDecay` hold over the optimiser state it inherits, for the body and
+    the aux heads alike, and the momentum buffers carry over. Mutation, seen
+    red: `load_state_dict` alone, the parent's settings coming back with it."""
+    torch.manual_seed(5)
+    net = Net(16, 1)
+    parent = optimiser(net, config())
+    obs, legal, visits, result, kind = batch_tensors(batch(seed=6))
+    pol, val = losses(*net(obs), legal, visits, result, kind, 1.0)
+    (pol + val).backward()
+    parent.step()
+    child_cfg = config(learningRate=0.002, momentum=0.5, weightDecay=3e-4)
+    child = optimiser(net, child_cfg)
+    restore(child, parent.state_dict(), child_cfg)
+    group = child.param_groups[0]
+    assert (group["lr"], group["momentum"], group["weight_decay"]) == (0.002, 0.5, 3e-4)
+    for p in net.parameters():
+        assert torch.equal(child.state[p]["momentum_buffer"], parent.state[p]["momentum_buffer"])
+
+    heads, opt = auxiliary.load(tmp_path / "none.pt", 16, config())
+    auxiliary.save(tmp_path / "0.pt", heads, opt)
+    _, loaded = auxiliary.load(tmp_path / "0.pt", 16, child_cfg)
+    assert loaded.param_groups[0]["lr"] == 0.002
 
 
 def test_one_generation_of_the_loop(tmp_path):
