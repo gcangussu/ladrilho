@@ -581,11 +581,11 @@ The binary's commands, each loading one checkpoint and one run's settings:
 
   | Field | Type | Content |
   | --- | --- | --- |
-  | kind | u8 | `0` move, `1` boundary |
+  | kind | u8 | `0` move, `1` boundary, `2` cheap ([Z11-75]) |
   | result | i8 | `+1`, `0`, `-1` |
   | observation | 182 × f32 | the observation or the pre-deal view |
-  | legal | 23 bytes | a 180-bit mask, action `a` at bit `a % 8` of byte `a / 8`; all zero for a boundary sample |
-  | visits | 180 × u16 | root visits; all zero for a boundary sample |
+  | legal | 23 bytes | a 180-bit mask, action `a` at bit `a % 8` of byte `a / 8`; all zero for a boundary or cheap sample |
+  | visits | 180 × u16 | root visits; all zero for a boundary or cheap sample |
 
   Beside it, `selfplay` MUST write the sample file's **aux file** of [Z11-67].
 
@@ -631,8 +631,8 @@ The binary's commands, each loading one checkpoint and one run's settings:
   latency record holds, and each changed setting with its parent's value and its own. `--set` MUST
   refuse every setting but those of how a run trains and self-plays — `gamesPerGeneration`,
   `window`, `stepsPerGeneration`, `batch`, `learningRate`, `momentum`, `weightDecay`,
-  `boundaryWeight`, `selfPlaySimulations`, `threads`, `torchThreads`, `auxMarginWeight` and
-  `auxWallsWeight` — and any value that is not
+  `boundaryWeight`, `selfPlaySimulations`, `cheapSimulations`, `fullSearchFraction`, `threads`,
+  `torchThreads`, `auxMarginWeight` and `auxWallsWeight` — and any value that is not
   a positive number: the network, the searches the ladder and the gate measure, and the count the
   latency record stands behind stay the parent's. Checkpoint `0` MUST be
   the parent's checkpoint `g` with its generation relabelled `0` and a parity file of its own, and
@@ -933,6 +933,27 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
   more games settles it without a second margin, because by then the challenger is close enough
   that either answer costs little.*
 
+- **[Z11-75]** A run's config MAY set `cheapSimulations` and `fullSearchFraction`, together or
+  not at all: playout-cap randomisation. Absent, every self-play move is searched as before, with
+  `selfPlaySimulations` and [Z11-20]'s noise. Set, before each self-play move's search the crate
+  MUST draw a uniform number from a third generator of its own, seeded from the triple of
+  [Z11-26] mixed with a constant apart from the noise's. Below `fullSearchFraction`, the move MUST
+  be searched with `selfPlaySimulations` and the noise and written as a move sample; otherwise
+  with `cheapSimulations` and no noise, and written as a **cheap** sample, kind `2` of [Z11-27]:
+  the observation, the result and its aux record ([Z11-67]), with neither legal mask nor visits.
+  Either way the move MUST be chosen from the root visits as [Z11-20] says. The trainer MUST give
+  a cheap sample the value loss at weight 1 and no policy loss. The crate MUST refuse a config
+  that sets one of the two without the other, a `cheapSimulations` outside
+  1..=`selfPlaySimulations`, and a `fullSearchFraction` outside (0, 1].
+
+  *KataGo's playout-cap randomisation: a policy target is only as good as the search that made
+  it, but most moves of a self-play game exist only to move it along. Searching a quarter of the
+  moves deeply gives sharper targets than searching every move at the average, for the same
+  time. KataGo discards the cheap positions; here they stay, as value samples, because the value
+  head memorised when there were few positions per result (run `first`, the journal). The third
+  generator keeps the cap's draws off the noise's: a run with `fullSearchFraction` 1 plays and
+  writes exactly what one without the cap does.*
+
 - **[Z11-56]** The simulation behind [Z11-33]'s table MUST be committed as
   `eval/stop-rule-simulation.ts`, runnable by `pnpm -F alphazero-bot stop-simulation`, and MUST
   call the two functions of [Z11-37] themselves rather than a copy of the rule, with the gate
@@ -1161,6 +1182,7 @@ not required: [Z11-25] makes the file the record, and a later run MAY change any
 | `augment` | absent, meaning `none` | [Z11-65] |
 | `playSimulations` | set by [Z11-57] | the shipped setting |
 | `selfPlaySimulations` | 200 | |
+| `cheapSimulations`, `fullSearchFraction` | absent, meaning off | [Z11-75] |
 | `milestoneSimulations` | 800 | [Z11-59]; lowered to `playSimulations` if that is smaller |
 | `cpuct`, `fpu` | 1.25, 0.25 | |
 | `alpha`, `epsilon` | 0.3, 0.25 | |

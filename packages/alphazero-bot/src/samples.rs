@@ -15,6 +15,9 @@ pub enum Kind {
     Move = 0,
     /// One per non-terminal boundary ply: the pre-deal view, value only.
     Boundary = 1,
+    /// [Z11-75]: a ply searched cheaply under the playout cap: the
+    /// observation, value only.
+    Cheap = 2,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -67,6 +70,7 @@ impl Sample {
         let kind = match record[0] {
             0 => Kind::Move,
             1 => Kind::Boundary,
+            2 => Kind::Cheap,
             k => return Err(format!("kind {k}")),
         };
         let result = record[1] as i8;

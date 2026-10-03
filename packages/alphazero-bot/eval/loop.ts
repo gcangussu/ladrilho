@@ -91,6 +91,8 @@ export const CHANGEABLE = [
   'weightDecay',
   'boundaryWeight',
   'selfPlaySimulations',
+  'cheapSimulations',
+  'fullSearchFraction',
   'threads',
   'torchThreads',
   'auxMarginWeight',
@@ -125,7 +127,7 @@ export function childConfig(
   const { from: _grandparent, augment: parentAugment, gate: parentGate, yardstick: parentYardstick, ...inherited } = pc;
   const changes: RunOrigin['changes'] = {};
   for (const [k, v] of Object.entries(set) as [Changeable, number][]) {
-    // An absent aux weight is 0, off ([Z11-67]).
+    // An absent aux weight is 0, off ([Z11-67]); so is an absent playout cap ([Z11-75]).
     const was = inherited[k] ?? 0;
     if (was !== v) changes[k] = { parent: was, run: v };
   }
