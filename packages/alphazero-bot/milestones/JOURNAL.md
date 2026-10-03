@@ -22,7 +22,8 @@ Add an entry when a run starts or ends, or when a decision changes the plan. Tim
 | `sixth` | 10-02 | `fifth`/250 | auxiliary targets ([Z11-67]) | pool | gen 80, stop rule | **+496** at gen 40, 32 above `fifth` |
 | `seventh` | 10-02 | `sixth`/40 | learning rate 0.02 → 0.002 | pool | gen 170, stop rule | **+643** at gen 150, 147 above `sixth` |
 | `eighth` | 10-02 | `seventh`/150 | self-play simulations 200 → 400 | pool | gen 180, stop rule | **+689** at gen 160, 46 above `seventh` |
-| `ninth` | 10-03 | `eighth`/160 | learning rate 0.002 → 0.0002 | pool | running | |
+| `ninth` | 10-03 | `eighth`/160 | learning rate 0.002 → 0.0002 | pool | gen 110, stop rule | **+750** at gen 90, 61 above `eighth` |
+| `tenth` | 10-03 | `ninth`/90 | playout-cap randomisation ([Z11-75]) | pool | running | |
 
 Progress on the ladder is the sum of four winrates (0 to 4). Pool ratings are Elo, with `third`/90,
 the checkpoint that passed the gate, at 0.
@@ -268,18 +269,42 @@ games. Then 641, 643, **656** (first above `seventh`), 628, 650, 665, 668, 622, 
   `sharp` 0.925 (92 wins, 7 losses, 1 draw; 0.98 first, 0.87 second); against `ai-bot`'s expert
   at its default 100 simulations 0.98 (98 wins, 2 losses), mean score 55.5 to 37.5.
 
-## `ninth`: a hundredth of the original learning rate (10-03 →)
+## `ninth`: a hundredth of the original learning rate (10-03)
 
 **Decision (the user):** if `eighth` plateaued, cut the learning rate again, 0.002 → 0.0002, from
 its best milestone, nothing else changed (400 self-play simulations, aux targets). The second
 step of the classic schedule; the first gave `seventh` +147. Throughput: 1.9 minutes a generation.
 
+Generation 10: **+713**, 24 above its parent at once, as `seventh`'s first cut had done. Then
+702, 716, 702, 736, 733, 733, 739, **+750 at 90**, 745, 739. The stop rule ended it at 110 (10-03
+15:20, `eed43f7`).
+
+- **The second cut gave +61**, against the first's +147: still the cheapest gain available, but
+  shrinking. The swings between milestones were the smallest yet, at most 14.
+- **Float32 sets a floor.** Measured between consecutive checkpoints, the median weight moves
+  about 32 ulps a training step at 0.0002, and the slowest 1% about a third of one on net. A
+  further 10× cut would start rounding updates away; about 2 × 10⁻⁵ is the lowest rate worth
+  trying without float64 master weights in the trainer.
+
+## `tenth`: playout-cap randomisation (10-03 →)
+
+**Decision (the user):** prepare playout-cap randomisation and start it when `ninth` stops.
+`eighth` showed that better policy targets help (+46 for 400 simulations instead of 200) but paid
+for them on every move. Under the cap ([Z11-75], `d22350a`, merged in `fc52024`) a quarter of
+the moves get a full search of 1000 simulations with the noise and become move samples; the rest
+get 200, no noise, and become value-only **cheap** samples. That averages 400 simulations a move,
+as before. KataGo drops the cheap positions; here they stay as value samples, since the value
+head memorised when positions per result were few. From `ninth`/90, the best; everything else
+unchanged. Measured beforehand on `ninth`/100: 10–15% slower per game than 400 throughout, exactly
+a quarter of moves searched fully, and the same number of samples. Throughput: 1.8 minutes a
+generation.
+
 ## Next
 
 - **Trainer code:** weight averaging (now mostly polish, the dips being small); blending the
   game's result with the search's value as the value target, against early-game noise.
-- **Self-play code:** playout-cap randomisation, then Gumbel search, for better policy targets
-  without paying for every move; restarts from saved round starts; reanalyse.
+- **Self-play code:** Gumbel search, for better policy targets at low simulation counts;
+  restarts from saved round starts; reanalyse.
 - **Capacity:** a bigger network once the cheaper ideas run out; it needs a new latency record.
 - **Shipping:** the latency record has room (p95 551 ms against 1.5 s), so a shipped move could
   use about twice the simulations. That is a new latency lane, and the user's call.
