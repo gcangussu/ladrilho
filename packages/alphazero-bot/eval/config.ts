@@ -54,6 +54,14 @@ export interface RunConfig {
    * tiers of [Z11-31]; or `pool`, the champions' pool.
    */
   yardstick?: 'ladder' | 'pool';
+  /**
+   * [Z11-75]: playout-cap randomisation. A share `fullSearchFraction` of
+   * self-play moves get `selfPlaySimulations` and the noise and become move
+   * samples; the rest get `cheapSimulations`, no noise, and become value-only
+   * cheap samples. Both absent is off; the crate refuses one without the other.
+   */
+  cheapSimulations?: number;
+  fullSearchFraction?: number;
   /** [Z11-66]: the run and generation this run's checkpoint 0 was taken from. */
   from?: RunOrigin;
 }

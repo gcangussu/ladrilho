@@ -16,6 +16,8 @@ use rand_xoshiro::Xoshiro256StarStar;
 
 /// Mixed into a game's seed to seed its noise generator ([Z11-20]).
 pub const NOISE_SALT: u64 = 0x6e6f_6973_655f_7a31; // "noise_z1"
+/// The playout cap's salt ([Z11-75]), apart from the noise's.
+pub const CAP_SALT: u64 = 0x6361_705f_7a31_3735; // "cap_z175"
 
 /// One step of `splitmix64`: a bijection with good avalanche, used to combine
 /// the elements of a seed triple.
@@ -38,6 +40,13 @@ pub fn game_seed(seed: u64, generation: u64, index: u64) -> u64 {
 /// constant ([Z11-20]).
 pub fn noise_seed(seed: u64, generation: u64, index: u64) -> u64 {
     splitmix64(game_seed(seed, generation, index) ^ NOISE_SALT)
+}
+
+/// The playout cap's generator's seed for the same game ([Z11-75]): the
+/// triple mixed with a constant of its own, so the cap's draws never move the
+/// noise's.
+pub fn cap_seed(seed: u64, generation: u64, index: u64) -> u64 {
+    splitmix64(game_seed(seed, generation, index) ^ CAP_SALT)
 }
 
 /// The crate's generator. Seeded explicitly, always: nothing here can reach

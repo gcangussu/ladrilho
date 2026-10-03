@@ -88,5 +88,13 @@ describe('a run started from another [Z11-66]', () => {
       auxMarginWeight: { parent: 0, run: 0.5 },
       auxWallsWeight: { parent: 0, run: 0.5 },
     });
+    // [Z11-75]: and so are the playout cap's two settings.
+    expect(parseSet('fullSearchFraction=0.25')).toEqual(['fullSearchFraction', 0.25]);
+    const cap = childConfig(parent, origin, 42, undefined, { cheapSimulations: 200, fullSearchFraction: 0.25 });
+    expect([cap.cheapSimulations, cap.fullSearchFraction]).toEqual([200, 0.25]);
+    expect(cap.from?.changes).toEqual({
+      cheapSimulations: { parent: 0, run: 200 },
+      fullSearchFraction: { parent: 0, run: 0.25 },
+    });
   });
 });

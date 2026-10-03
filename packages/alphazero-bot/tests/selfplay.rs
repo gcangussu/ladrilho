@@ -38,6 +38,12 @@ fn a_sample_round_trips() {
     let dir = crate_dir().join("target/test-scratch/python-samples");
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("samples.bin"), &bytes).unwrap();
+    // [Z11-75]: kind 2 is a cheap sample; nothing past it is a kind.
+    let mut record = bytes[RECORD_BYTES..2 * RECORD_BYTES].to_vec();
+    record[0] = 2;
+    assert_eq!(Sample::read(&record).unwrap().kind, Kind::Cheap);
+    record[0] = 3;
+    assert!(Sample::read(&record).is_err());
 }
 
 fn selfplay(dir: &std::path::Path, generation: u32, games: u32) -> Vec<Sample> {
@@ -90,7 +96,7 @@ fn self_play_deals_every_game_its_own_opening() {
                     boundaries += 1;
                     assert!(s.legal == [0; 23] && s.visits == [0; 180]);
                     assert_eq!(s.observation[OFF_TILES_LEFT], 0.0);
-                }
+                }                Kind::Cheap => panic!("a cheap sample without the playout cap ([Z11-75])"),
             }
         }
         // Every game has at least four non-terminal boundaries: a row takes
@@ -277,4 +283,135 @@ fn batched_self_play_is_each_game_alone() {
     assert!(batched == alone, "batched self-play wrote different samples");
     // [Z11-67]: and the aux file, record for record.
     assert!(batched_aux == alone_aux, "batched self-play wrote different aux records");
+}
+
+/// [Z11-75]: under the playout cap, a game's samples are what a reference
+/// replay gives that makes the cap's draws from a generator of its own: a full
+/// search with the noise, written as a move sample with its visits, below
+/// `fullSearchFraction`; a cheap search with `cheapSimulations` and no noise
+/// otherwise, written as a cheap sample with neither mask nor visits. The
+/// temperature is off, so the move played is the most visited either way.
+///
+/// Mutations, seen red ([Z11-48]), each in a copy with its anchor confirmed:
+/// the cheap search run with the full count; the cheap search given the
+/// noise; the cap's draw taken from the noise's generator; a cheap search's
+/// sample written as a move sample.
+#[test]
+fn the_playout_cap_searches_a_share_of_moves_fully() {
+    use azul_alphazero::config::{RunConfig, SearchKind, settings};
+    use azul_alphazero::rng::{Rng, cap_seed, game_seed, noise_seed};
+    use azul_alphazero::search::{SearchConfig, search};
+    use azul_alphazero::selfplay::play_game;
+    use azul_engine::{AzulState, Seeded};
+    use support::fixture;
+
+    let cfg = RunConfig::parse(
+        config_json(&[
+            ("selfPlaySimulations", "64"),
+            ("cheapSimulations", "8"),
+            ("fullSearchFraction", "0.25"),
+            ("tempPlies", "0"),
+        ])
+        .as_bytes(),
+    )
+    .unwrap();
+    let s = settings(&cfg, SearchKind::SelfPlay).unwrap();
+    let net = fixture();
+    let (mut full, mut cheap) = (0, 0);
+    for index in 0..3 {
+        let generation = 2;
+        let records = play_game(&net, &s, cfg.seed, generation, index);
+        let plies: Vec<Sample> = records.into_iter().map(|(x, _)| x).filter(|x| x.kind != Kind::Boundary).collect();
+        let mut state = AzulState::new_game(Seeded::new(game_seed(cfg.seed, generation, index)));
+        let mut noise_rng = Rng::new(noise_seed(cfg.seed, generation, index));
+        let mut cap_rng = Rng::new(cap_seed(cfg.seed, generation, index));
+        let cheap_config = SearchConfig { simulations: 8, ..s.search.clone() };
+        let mut ply = 0;
+        while !state.is_terminal() {
+            let is_full = cap_rng.uniform() < 0.25;
+            let (r, _) = if is_full {
+                search(&net, &state, &s.search, s.noise.as_ref().map(|n| (n, &mut noise_rng))).unwrap()
+            } else {
+                search(&net, &state, &cheap_config, None).unwrap()
+            };
+            let sample = &plies[ply];
+            assert_eq!(sample.observation, state.encode(), "game {index} ply {ply}: a different position");
+            if is_full {
+                full += 1;
+                assert_eq!(sample.kind, Kind::Move, "game {index} ply {ply}: a full search's sample");
+                let visits: Vec<u16> = r.visits.iter().map(|&n| n as u16).collect();
+                assert_eq!(sample.visits.to_vec(), visits, "game {index} ply {ply}: different visits");
+                assert_eq!(visits.iter().map(|&v| u32::from(v)).sum::<u32>(), 64);
+            } else {
+                cheap += 1;
+                assert_eq!(sample.kind, Kind::Cheap, "game {index} ply {ply}: a cheap search's sample");
+                assert!(sample.legal == [0; 23] && sample.visits == [0; 180]);
+            }
+            let mut best = 0;
+            for a in 0..180 {
+                if r.visits[a] > r.visits[best] {
+                    best = a;
+                }
+            }
+            state.apply(best as u8).unwrap();
+            ply += 1;
+        }
+        assert_eq!(plies.len(), ply, "game {index}: a different number of plies");
+    }
+    // About a quarter of the plies searched fully, and both kinds present.
+    assert!(full > 0 && cheap > full, "{full} full and {cheap} cheap searches");
+}
+
+/// [Z11-75]: with `fullSearchFraction` 1 every move is searched fully, and
+/// the cap's draws touch nothing else: the samples and aux records are byte
+/// for byte those of the same config without the cap.
+///
+/// Mutation, seen red ([Z11-48]): the cap's draw taken from the noise's
+/// generator.
+#[test]
+fn a_cap_that_always_searches_fully_changes_nothing() {
+    use azul_alphazero::config::{RunConfig, SearchKind, settings};
+    use azul_alphazero::selfplay::self_play;
+    use support::fixture;
+
+    let base = [("selfPlaySimulations", "24"), ("threads", "2")];
+    let plain = RunConfig::parse(config_json(&base).as_bytes()).unwrap();
+    let mut capped = base.to_vec();
+    capped.extend([("cheapSimulations", "4"), ("fullSearchFraction", "1")]);
+    let capped = RunConfig::parse(config_json(&capped).as_bytes()).unwrap();
+    assert!(capped.playout_cap.is_some());
+    let net = fixture();
+    let a = self_play(&net, &settings(&plain, SearchKind::SelfPlay).unwrap(), plain.seed, 1, 6);
+    let b = self_play(&net, &settings(&capped, SearchKind::SelfPlay).unwrap(), capped.seed, 1, 6);
+    assert!(a == b, "a cap at 1 changed what self-play wrote");
+}
+
+/// [Z11-75]: the two settings go together, inside their ranges, and only
+/// self-play reads them.
+#[test]
+fn the_playout_cap_settings_are_checked() {
+    use azul_alphazero::config::{PlayoutCap, RunConfig, SearchKind, settings};
+
+    let parse = |extra: &[(&str, &str)]| {
+        let mut f = vec![("selfPlaySimulations", "100")];
+        f.extend_from_slice(extra);
+        RunConfig::parse(config_json(&f).as_bytes())
+    };
+    assert_eq!(parse(&[]).unwrap().playout_cap, None);
+    let ok = parse(&[("cheapSimulations", "25"), ("fullSearchFraction", "0.25")]).unwrap();
+    assert_eq!(ok.playout_cap, Some(PlayoutCap { cheap_simulations: 25, full_search_fraction: 0.25 }));
+    assert_eq!(settings(&ok, SearchKind::SelfPlay).unwrap().playout_cap, ok.playout_cap);
+    assert_eq!(settings(&ok, SearchKind::Milestone).unwrap().playout_cap, None);
+    assert_eq!(settings(&ok, SearchKind::Play).unwrap().playout_cap, None);
+    for bad in [
+        vec![("cheapSimulations", "25")],
+        vec![("fullSearchFraction", "0.25")],
+        vec![("cheapSimulations", "0"), ("fullSearchFraction", "0.25")],
+        vec![("cheapSimulations", "101"), ("fullSearchFraction", "0.25")],
+        vec![("cheapSimulations", "25"), ("fullSearchFraction", "0")],
+        vec![("cheapSimulations", "25"), ("fullSearchFraction", "1.5")],
+    ] {
+        assert!(parse(&bad).is_err(), "{bad:?} was accepted");
+    }
+    assert!(parse(&[("cheapSimulations", "100"), ("fullSearchFraction", "1")]).is_ok());
 }

@@ -9,9 +9,9 @@ use azul_engine::{ACTION_SPACE, AzulState, Outcome, Player, Seeded, Shuffler};
 use crate::config::Settings;
 use crate::memo::Memo;
 use crate::network::{BATCH, Evaluation, Evaluator, Request};
-use crate::rng::{Rng, game_seed, noise_seed};
+use crate::rng::{Rng, cap_seed, game_seed, noise_seed};
 use crate::samples::{Aux, Kind, LEGAL_BYTES, Sample, legal_mask, wall_mask};
-use crate::search::Search;
+use crate::search::{Search, SearchConfig};
 use crate::view::{is_boundary, pre_deal_view};
 
 /// A game that has run this long has run away. Azul games are about 75 plies.
@@ -89,6 +89,10 @@ struct Game {
     index: u64,
     state: AzulState<Seeded>,
     rng: Rng,
+    /// The playout cap's draws ([Z11-75]), apart from the noise's.
+    cap_rng: Rng,
+    /// Whether the current move's search is a full one ([Z11-75]).
+    full: bool,
     samples: Vec<(Sample, Player)>,
     ply: usize,
     search: Option<Search<Seeded>>,
@@ -104,6 +108,8 @@ impl Game {
             index,
             state: AzulState::new_game(Seeded::new(game_seed(seed, generation, index))),
             rng: Rng::new(noise_seed(seed, generation, index)),
+            cap_rng: Rng::new(cap_seed(seed, generation, index)),
+            full: true,
             samples: Vec::new(),
             ply: 0,
             search: None,
@@ -123,8 +129,24 @@ impl Game {
                 if self.state.is_terminal() || self.ply >= MAX_PLIES {
                     return false;
                 }
-                let noise = settings.noise.as_ref().map(|n| (n, &mut self.rng));
-                match Search::new(&self.state, &settings.search, noise) {
+                // [Z11-75]: under the cap, a draw decides between the full
+                // search with its noise and a cheap one without.
+                let cheap = match settings.playout_cap {
+                    Some(cap) if self.cap_rng.uniform() >= cap.full_search_fraction => Some(cap.cheap_simulations),
+                    _ => None,
+                };
+                self.full = cheap.is_none();
+                let created = match cheap {
+                    None => {
+                        let noise = settings.noise.as_ref().map(|n| (n, &mut self.rng));
+                        Search::new(&self.state, &settings.search, noise)
+                    }
+                    Some(simulations) => {
+                        let config = SearchConfig { simulations, ..settings.search.clone() };
+                        Search::new(&self.state, &config, None)
+                    }
+                };
+                match created {
                     Some(s) => self.search = Some(s),
                     None => return false,
                 }
@@ -172,10 +194,14 @@ impl Game {
             *v = n.min(u32::from(u16::MAX)) as u16;
         }
         let seat = state.current_player();
-        self.samples.push((
-            Sample { kind: Kind::Move, result: 0, observation: state.encode(), legal: legal_mask(legal.as_slice()), visits },
-            seat,
-        ));
+        let sample = if self.full {
+            Sample { kind: Kind::Move, result: 0, observation: state.encode(), legal: legal_mask(legal.as_slice()), visits }
+        } else {
+            // [Z11-75]: a cheap search's visits are no target; its position
+            // still learns the game's result.
+            Sample { kind: Kind::Cheap, result: 0, observation: state.encode(), legal: [0; LEGAL_BYTES], visits: [0; ACTION_SPACE] }
+        };
+        self.samples.push((sample, seat));
         let action = pick(root_visits, self.ply, settings, &mut self.rng);
         let before = state.clone();
         if state.apply(action).is_err() {
