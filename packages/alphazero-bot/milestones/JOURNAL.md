@@ -20,7 +20,8 @@ Add an entry when a run starts or ends, or when a decision changes the plan. Tim
 | `fourth` | 10-01 | `third`/90 | the gate off ([Z11-68]) | ladder | gen 140, ended with its session | `sharp` 0.79–0.89; the ladder saturated |
 | `fifth` | 10-01 | `fourth`/140 | the pool as yardstick ([Z11-73]) | pool | gen 270, stop rule | **+464** at gen 250; `sharp` 0.91 at 200 simulations |
 | `sixth` | 10-02 | `fifth`/250 | auxiliary targets ([Z11-67]) | pool | gen 80, stop rule | **+496** at gen 40, 32 above `fifth` |
-| `seventh` | 10-02 | `sixth`/40 | learning rate 0.02 → 0.002 | pool | running | |
+| `seventh` | 10-02 | `sixth`/40 | learning rate 0.02 → 0.002 | pool | gen 170, stop rule | **+643** at gen 150, 147 above `sixth` |
+| `eighth` | 10-02 | `seventh`/150 | self-play simulations 200 → 400 | pool | running | |
 
 Progress on the ladder is the sum of four winrates (0 to 4). Pool ratings are Elo, with `third`/90,
 the checkpoint that passed the gate, at 0.
@@ -162,7 +163,7 @@ Measured, then seeded (`37dac7f`):
 - The round robin: `fourth`/50 **+156**, `fourth`/70 **+181**. While the ladder showed `sharp`
   barely moving, the player had gained 180 Elo over the checkpoint that passed the gate.
 
-## `fifth`: on the pool (10-01 →)
+## `fifth`: on the pool (10-01 → 10-02)
 
 **Decision (the user):** measure the baseline on the pool before trying anything new. `fifth`
 continues `fourth`/140 with only the yardstick changed (run detached, `--workers 8`).
@@ -190,7 +191,7 @@ within a few Elo of each other.
   score 48 to 38. `third`/90 passed the gate with 0.7875 at 11,300 simulations, 56 times the
   search. Most of the strength is now in the network.
 
-## `sixth`: auxiliary targets (10-02 →)
+## `sixth`: auxiliary targets (10-02)
 
 **Decision (the user, authorised in advance):** when `fifth` plateaued, start the most promising
 idea. `sixth` starts from `fifth`/250, the highest rated milestone, with one change: two
@@ -221,7 +222,7 @@ stop rule ended the run at 80 (10-02 13:33, `ea6d460`): 70 did not beat 60, and 
   is a noisy sample of where training is; the stop rule fired on a noisy sample. This is the
   strongest case yet for averaging the weights or decaying the rate.
 
-## `seventh`: a tenth of the learning rate (10-02 →)
+## `seventh`: a tenth of the learning rate (10-02)
 
 **Decision (the user):** start from `sixth`/40, the best checkpoint, with the learning rate cut
 from 0.02 to 0.002 and nothing else changed (aux targets on). A step decay once progress stalls
@@ -234,16 +235,39 @@ differ less, so the milestones measure the trend rather than the noise.
   No earlier run changed them. A restored optimiser now takes them from the run's config
   (`25a1f36`, [Z11-66]), and generation 0's saved optimisers, body and aux, show 0.002.
 
+Generation 10: **+555**, 59 above its parent in ten generations. Then a slow, steady climb with
+small dips: 550, 574, 595, 592, 606, 593, 608, 606, 610, 623, 606, 626, 618, **+643 at 150**, 622,
+616. The stop rule ended it at 170 (10-02 22:20, `9a807ca`).
+
+- **The lower rate was the biggest single gain on the pool.** +147 over `sixth`'s best, and the
+  dips shrank: the largest drop between neighbouring milestones was 21, against `sixth`'s 59.
+- **The browser ships the best milestone.** Spec 0012 (merged from `main` at milestone 70) added
+  the "master" opponent and `web/shipped.json`, which must name the highest-rated logged
+  milestone; it moved with each new best and now names `seventh`/150.
+- **A procedure slip.** Milestone 80 was committed before its suite was green: the shipped-milestone
+  test reads `git ls-files`, so the files must be staged before the suite runs, and a `grep` in the
+  command chain hid the failure. The suite passed on the committed state; since then a script
+  stages, tests with `pipefail`, commits and fast-forwards `main`, stopping on any failure.
+
+## `eighth`: twice the self-play simulations (10-02 →)
+
+**Decision (the user):** if `seventh` plateaued, start from its best milestone with 400 self-play
+simulations instead of 200, nothing else changed. A move's visit counts are its policy target and
+the games' results its value target; at 200 simulations both come from shallow searches. Pool
+milestones still play at 200, so ratings stay comparable. Throughput: 1.8 minutes a generation
+(was 1.2).
+
 ## Next
 
-- **Weight averaging** (an exponential moving average of the weights, trainer-only), if the lower
-  rate does not calm the dips or stalls early.
-- After those, in the report's order and as the evidence points: gating new networks (AlphaGo
-  Zero style); better policy targets at low simulation counts (playout-cap randomisation, then
-  Gumbel search); blending the result with the search's value; restarting self-play from saved
-  round starts; reanalyse; a bigger network, which needs a new latency record.
-- The latency record has room (p95 551 ms against 1.5 s), so a shipped move could use about twice
-  the simulations. That is a new latency lane, and the user's call.
+- **Another learning-rate step, 0.002 → 0.0002**, the classic second step of the schedule; smaller
+  and slower gains likely.
+- **Trainer code:** weight averaging (now mostly polish, the dips being small); blending the
+  game's result with the search's value as the value target, against early-game noise.
+- **Self-play code:** playout-cap randomisation, then Gumbel search, for better policy targets
+  without paying for every move; restarts from saved round starts; reanalyse.
+- **Capacity:** a bigger network once the cheaper ideas run out; it needs a new latency record.
+- **Shipping:** the latency record has room (p95 551 ms against 1.5 s), so a shipped move could
+  use about twice the simulations. That is a new latency lane, and the user's call.
 
 ## Ways of working that this run settled
 
