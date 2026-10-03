@@ -136,6 +136,29 @@ def test_the_loss_ignores_illegal_logits():
     assert torch.equal(p1, p3) and v3 > v1  # boundary samples weighted by boundaryWeight
 
 
+def test_a_cheap_sample_enters_the_value_term_only():
+    """[Z11-75]: a cheap sample, kind 2, carries no policy loss — the policy
+    term is the move samples' alone — and its value loss is weighted 1, not
+    `boundaryWeight`. Mutations, seen red: the policy taken over every sample
+    but boundaries (`kind != 1`); cheap samples weighted as boundaries
+    (`kind >= 1`)."""
+    s = batch(n=40, seed=8)
+    cheap = np.flatnonzero(s["kind"] == 0)[::3]
+    s["kind"][cheap] = 2
+    s["legal"][cheap] = 0
+    s["visits"][cheap] = 0
+    obs, legal, visits, result, kind = batch_tensors(s)
+    logits = torch.randn(len(kind), 180)
+    value = torch.tanh(torch.randn(len(kind)))
+    p, v = losses(logits, value, legal, visits, result, kind, 3.0)
+    moves = kind == 0
+    p_moves, _ = losses(logits[moves], value[moves], legal[moves], visits[moves], result[moves], kind[moves], 3.0)
+    assert torch.isfinite(p) and torch.allclose(p, p_moves)
+    weight = torch.where(kind == 1, torch.full_like(result, 3.0), torch.ones_like(result))
+    assert torch.allclose(v, (weight * (value - result) ** 2).mean())
+    assert int((kind == 2).sum()) == len(cheap) > 0
+
+
 def test_weight_decay_is_applied_once():
     """[Z11-29], [Z11-46]: the optimiser applies weight decay, and the loss
     carries no weight term: one SGD step moves each weight by exactly
