@@ -25,6 +25,16 @@ pub struct RunConfig {
     pub threads: u32,
     pub games_per_generation: u32,
     pub max_generation_minutes: f64,
+    /// [Z11-75]: playout-cap randomisation, or `None` for every move searched
+    /// fully.
+    pub playout_cap: Option<PlayoutCap>,
+}
+
+/// [Z11-75]: a cheap search's count, and the share of moves searched fully.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PlayoutCap {
+    pub cheap_simulations: u32,
+    pub full_search_fraction: f64,
 }
 
 /// The file as written, before its ranges are checked.
@@ -47,6 +57,10 @@ struct Raw {
     threads: u64,
     games_per_generation: u64,
     max_generation_minutes: f64,
+    #[serde(default)]
+    cheap_simulations: Option<u64>,
+    #[serde(default)]
+    full_search_fraction: Option<f64>,
 }
 
 fn whole(key: &str, n: u64, min: u64, max: u64) -> Result<u32, String> {
@@ -75,6 +89,22 @@ impl RunConfig {
         if r.seed > 1 << 53 {
             return Err("config: \"seed\" must be at most 2^53, which every language reads exactly".into());
         }
+        let self_play_simulations = whole("selfPlaySimulations", r.self_play_simulations, 1, MAX_SIMULATIONS)?;
+        let playout_cap = match (r.cheap_simulations, r.full_search_fraction) {
+            (None, None) => None,
+            (Some(n), Some(f)) => {
+                if !(f > 0.0 && f <= 1.0) {
+                    return Err("config: \"fullSearchFraction\" must be in (0, 1]".into());
+                }
+                Some(PlayoutCap {
+                    cheap_simulations: whole("cheapSimulations", n, 1, u64::from(self_play_simulations))?,
+                    full_search_fraction: f,
+                })
+            }
+            _ => {
+                return Err("config: \"cheapSimulations\" and \"fullSearchFraction\" go together ([Z11-75])".into());
+            }
+        };
         Ok(RunConfig {
             width: whole("width", r.width, 1, u64::from(crate::network::MAX_WIDTH))?,
             blocks: whole("blocks", r.blocks, 0, 64)?,
@@ -84,7 +114,7 @@ impl RunConfig {
                 Some(n) => Some(whole("playSimulations", n, 1, MAX_SIMULATIONS)?),
             },
             milestone_simulations: whole("milestoneSimulations", r.milestone_simulations, 1, MAX_SIMULATIONS)?,
-            self_play_simulations: whole("selfPlaySimulations", r.self_play_simulations, 1, MAX_SIMULATIONS)?,
+            self_play_simulations,
             cpuct: positive("cpuct", r.cpuct)?,
             fpu: within("fpu", r.fpu, 0.0, 2.0)?,
             alpha: positive("alpha", r.alpha)?,
@@ -94,6 +124,7 @@ impl RunConfig {
             threads: whole("threads", r.threads, 1, 256)?,
             games_per_generation: whole("gamesPerGeneration", r.games_per_generation, 1, 1_000_000)?,
             max_generation_minutes: f64::from(positive("maxGenerationMinutes", r.max_generation_minutes)?),
+            playout_cap,
         })
     }
 }
@@ -120,6 +151,8 @@ pub struct Settings {
     pub temp_plies: u32,
     pub tau: f32,
     pub threads: u32,
+    /// Self-play only ([Z11-75]).
+    pub playout_cap: Option<PlayoutCap>,
 }
 
 /// The only place in the crate that reads search settings ([Z11-60]).
@@ -148,5 +181,6 @@ pub fn settings(config: &RunConfig, kind: SearchKind) -> Result<Settings, String
         temp_plies: config.temp_plies,
         tau: config.tau,
         threads: config.threads,
+        playout_cap: if kind == SearchKind::SelfPlay { config.playout_cap } else { None },
     })
 }
