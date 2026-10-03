@@ -21,7 +21,8 @@ Add an entry when a run starts or ends, or when a decision changes the plan. Tim
 | `fifth` | 10-01 | `fourth`/140 | the pool as yardstick ([Z11-73]) | pool | gen 270, stop rule | **+464** at gen 250; `sharp` 0.91 at 200 simulations |
 | `sixth` | 10-02 | `fifth`/250 | auxiliary targets ([Z11-67]) | pool | gen 80, stop rule | **+496** at gen 40, 32 above `fifth` |
 | `seventh` | 10-02 | `sixth`/40 | learning rate 0.02 → 0.002 | pool | gen 170, stop rule | **+643** at gen 150, 147 above `sixth` |
-| `eighth` | 10-02 | `seventh`/150 | self-play simulations 200 → 400 | pool | running | |
+| `eighth` | 10-02 | `seventh`/150 | self-play simulations 200 → 400 | pool | gen 180, stop rule | **+689** at gen 160, 46 above `seventh` |
+| `ninth` | 10-03 | `eighth`/160 | learning rate 0.002 → 0.0002 | pool | running | |
 
 Progress on the ladder is the sum of four winrates (0 to 4). Pool ratings are Elo, with `third`/90,
 the checkpoint that passed the gate, at 0.
@@ -249,7 +250,7 @@ small dips: 550, 574, 595, 592, 606, 593, 608, 606, 610, 623, 606, 626, 618, **+
   command chain hid the failure. The suite passed on the committed state; since then a script
   stages, tests with `pipefail`, commits and fast-forwards `main`, stopping on any failure.
 
-## `eighth`: twice the self-play simulations (10-02 →)
+## `eighth`: twice the self-play simulations (10-02 → 10-03)
 
 **Decision (the user):** if `seventh` plateaued, start from its best milestone with 400 self-play
 simulations instead of 200, nothing else changed. A move's visit counts are its policy target and
@@ -257,10 +258,24 @@ the games' results its value target; at 200 simulations both come from shallow s
 milestones still play at 200, so ratings stay comparable. Throughput: 1.8 minutes a generation
 (was 1.2).
 
+Generation 10: +623, below its parent while the window still held `seventh`'s 200-simulation
+games. Then 641, 643, **656** (first above `seventh`), 628, 650, 665, 668, 622, 656, 672, 663,
+672, 653, 676, **+689 at 160**, 667, 657. The stop rule ended it at 180 (10-03 09:00, `f3a7e21`).
+
+- **Twice the simulations helped, modestly:** +46 over `seventh`'s best in 160 generations, at
+  1.5× the time a generation. The dips came back somewhat larger than `seventh`'s (up to 46).
+- **Side checks of `eighth`/160 at 100 simulations** (100 games each, not committed): against
+  `sharp` 0.925 (92 wins, 7 losses, 1 draw; 0.98 first, 0.87 second); against `ai-bot`'s expert
+  at its default 100 simulations 0.98 (98 wins, 2 losses), mean score 55.5 to 37.5.
+
+## `ninth`: a hundredth of the original learning rate (10-03 →)
+
+**Decision (the user):** if `eighth` plateaued, cut the learning rate again, 0.002 → 0.0002, from
+its best milestone, nothing else changed (400 self-play simulations, aux targets). The second
+step of the classic schedule; the first gave `seventh` +147. Throughput: 1.9 minutes a generation.
+
 ## Next
 
-- **Another learning-rate step, 0.002 → 0.0002**, the classic second step of the schedule; smaller
-  and slower gains likely.
 - **Trainer code:** weight averaging (now mostly polish, the dips being small); blending the
   game's result with the search's value as the value target, against early-game noise.
 - **Self-play code:** playout-cap randomisation, then Gumbel search, for better policy targets
