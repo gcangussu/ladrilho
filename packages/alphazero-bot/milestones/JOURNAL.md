@@ -24,7 +24,7 @@ Add an entry when a run starts or ends, or when a decision changes the plan. Tim
 | `eighth` | 10-02 | `seventh`/150 | self-play simulations 200 → 400 | pool | gen 180, stop rule | **+689** at gen 160, 46 above `seventh` |
 | `ninth` | 10-03 | `eighth`/160 | learning rate 0.002 → 0.0002 | pool | gen 110, stop rule | **+750** at gen 90, 61 above `eighth` |
 | `tenth` | 10-03 | `ninth`/90 | playout-cap randomisation ([Z11-75]) | pool | gen 120, stop rule | **+776** at gen 100, 26 above `ninth` |
-| `eleventh` | 10-03 | `tenth`/100 | learning rate 0.0002 → 0.0001 | pool | running | |
+| `eleventh` | 10-03 | `tenth`/100 | learning rate 0.0002 → 0.0001 | pool | gen 150, stop rule | **+812** at gen 130, 36 above `tenth` |
 
 Progress on the ladder is the sum of four winrates (0 to 4). Pool ratings are Elo, with `third`/90,
 the checkpoint that passed the gate, at 0.
@@ -310,12 +310,21 @@ Generation 10: +741, below its parent while the window still held `ninth`'s unca
   `ai-bot`'s expert at its default 100 (98 wins, 1 loss, 1 draw), the same as `eighth`/160's
   0.98. The expert can no longer tell our checkpoints apart; the pool can.
 
-## `eleventh`: half the learning rate (10-03 →)
+## `eleventh`: half the learning rate (10-03 → 10-04)
 
 **Decision (the user):** halve the learning rate for the next run, 0.0002 → 0.0001, and halve it
 again for the one after (`twelfth`, 0.00005). Both stay above the float32 floor of about 2 × 10⁻⁵.
 From `tenth`/100, the best; the playout cap and everything else unchanged. Throughput: 2.1 minutes
 a generation.
+
+Generation 10: +762, below its parent, unlike the bigger cuts' immediate jumps. Then 781, 772,
+781, 769, 774, 776, 779, **797**, 797, 802, 800, **+812 at 130**, 808, 804. The stop rule ended it at
+150 (10-04 07:52, `2281238`), the same milestone at which the user had asked for a pause.
+
+- **Half the rate gave +36, late.** For 60 generations it sat at 769–781, level with `tenth`; the
+  gain came from generation 90 on. A lower rate learns slowly, so a run at one needs patience
+  the stop rule, comparing each milestone with the one before, only sometimes gives it.
+- `twelfth` (0.00005, approved) is held until the user resumes training.
 
 ## Next
 
