@@ -1,6 +1,6 @@
 {
-  "run": "tenth",
-  "generation": 100,
-  "checkpointSha256": "598cfd9c93342eae78d603a01e60561c79818685c9f256c439c674d71c7b52d8",
-  "paritySha256": "6cbd88b14197a3643987779d7339d7a2de342a03bc7c33814caa14e0c72586b9"
+  "run": "eleventh",
+  "generation": 20,
+  "checkpointSha256": "9720da1f7fc1d5141b8b76795179b7ec088a80679dfacb9ac0b22705ef074381",
+  "paritySha256": "b0a89b8e5afdb3136af4a610b49c3a7aab410363d025434f6c1c4f7ae8e0301a"
 }
