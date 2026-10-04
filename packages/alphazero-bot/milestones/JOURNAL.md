@@ -25,6 +25,7 @@ Add an entry when a run starts or ends, or when a decision changes the plan. Tim
 | `ninth` | 10-03 | `eighth`/160 | learning rate 0.002 → 0.0002 | pool | gen 110, stop rule | **+750** at gen 90, 61 above `eighth` |
 | `tenth` | 10-03 | `ninth`/90 | playout-cap randomisation ([Z11-75]) | pool | gen 120, stop rule | **+776** at gen 100, 26 above `ninth` |
 | `eleventh` | 10-03 | `tenth`/100 | learning rate 0.0002 → 0.0001 | pool | gen 150, stop rule | **+812** at gen 130, 36 above `tenth` |
+| `twelfth` | 10-04 | `eleventh`/130 | learning rate 0.0001 → 0.00005 | pool | running | |
 
 Progress on the ladder is the sum of four winrates (0 to 4). Pool ratings are Elo, with `third`/90,
 the checkpoint that passed the gate, at 0.
@@ -324,7 +325,13 @@ Generation 10: +762, below its parent, unlike the bigger cuts' immediate jumps. 
 - **Half the rate gave +36, late.** For 60 generations it sat at 769–781, level with `tenth`; the
   gain came from generation 90 on. A lower rate learns slowly, so a run at one needs patience
   the stop rule, comparing each milestone with the one before, only sometimes gives it.
-- `twelfth` (0.00005, approved) is held until the user resumes training.
+
+## `twelfth`: half again (10-04 →)
+
+**Decision (the user):** the second halving, 0.0001 → 0.00005, started when the user resumed
+training. From `eleventh`/130, the best; nothing else changed. 0.00005 is about 2.5× the float32
+floor, so the slowest weights' updates may start rounding away. Throughput: 1.9 minutes a
+generation.
 
 ## Next
 
