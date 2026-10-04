@@ -23,7 +23,8 @@ Add an entry when a run starts or ends, or when a decision changes the plan. Tim
 | `seventh` | 10-02 | `sixth`/40 | learning rate 0.02 → 0.002 | pool | gen 170, stop rule | **+643** at gen 150, 147 above `sixth` |
 | `eighth` | 10-02 | `seventh`/150 | self-play simulations 200 → 400 | pool | gen 180, stop rule | **+689** at gen 160, 46 above `seventh` |
 | `ninth` | 10-03 | `eighth`/160 | learning rate 0.002 → 0.0002 | pool | gen 110, stop rule | **+750** at gen 90, 61 above `eighth` |
-| `tenth` | 10-03 | `ninth`/90 | playout-cap randomisation ([Z11-75]) | pool | running | |
+| `tenth` | 10-03 | `ninth`/90 | playout-cap randomisation ([Z11-75]) | pool | gen 120, stop rule | **+776** at gen 100, 26 above `ninth` |
+| `eleventh` | 10-03 | `tenth`/100 | learning rate 0.0002 → 0.0001 | pool | running | |
 
 Progress on the ladder is the sum of four winrates (0 to 4). Pool ratings are Elo, with `third`/90,
 the checkpoint that passed the gate, at 0.
@@ -286,7 +287,7 @@ Generation 10: **+713**, 24 above its parent at once, as `seventh`'s first cut h
   further 10× cut would start rounding updates away; about 2 × 10⁻⁵ is the lowest rate worth
   trying without float64 master weights in the trainer.
 
-## `tenth`: playout-cap randomisation (10-03 →)
+## `tenth`: playout-cap randomisation (10-03)
 
 **Decision (the user):** prepare playout-cap randomisation and start it when `ninth` stops.
 `eighth` showed that better policy targets help (+46 for 400 simulations instead of 200) but paid
@@ -298,6 +299,23 @@ head memorised when positions per result were few. From `ninth`/90, the best; ev
 unchanged. Measured beforehand on `ninth`/100: 10–15% slower per game than 400 throughout, exactly
 a quarter of moves searched fully, and the same number of samples. Throughput: 1.8 minutes a
 generation.
+
+Generation 10: +741, below its parent while the window still held `ninth`'s uncapped games. Then
+**764**, 750, 758, 759, 761, 758, 762, 770, **+776 at 100**, 763, 763. The stop rule ended it at 120
+(10-03 22:36, `f9744b6`).
+
+- **The cap helped, modestly:** +26 over `ninth`'s best, at about the same cost a generation. It
+  sat at 758–764 for 60 generations, then climbed to 776, so the gain came late.
+- **A side check of `tenth`/20 at 100 simulations** (100 games, not committed): 0.985 against
+  `ai-bot`'s expert at its default 100 (98 wins, 1 loss, 1 draw), the same as `eighth`/160's
+  0.98. The expert can no longer tell our checkpoints apart; the pool can.
+
+## `eleventh`: half the learning rate (10-03 →)
+
+**Decision (the user):** halve the learning rate for the next run, 0.0002 → 0.0001, and halve it
+again for the one after (`twelfth`, 0.00005). Both stay above the float32 floor of about 2 × 10⁻⁵.
+From `tenth`/100, the best; the playout cap and everything else unchanged. Throughput: 2.1 minutes
+a generation.
 
 ## Next
 
