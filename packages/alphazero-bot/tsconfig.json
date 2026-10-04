@@ -24,6 +24,7 @@
     "test",
     "eval",
     "tools",
+    "tile",
     "web",
     "vitest.config.ts"
   ]

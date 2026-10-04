@@ -206,6 +206,11 @@ pnpm -F alphazero-bot pool init --members third:90,fourth:50,fourth:70 --games <
                                                # [Z11-73]: seed the champions' pool; once, then commit
 pnpm -F alphazero-bot web                      # [T12-7]: the master's payload, from web/shipped.json
 pnpm -F alphazero-bot web-latency              # [T12-25]: master's moves at the default; idle machine
+pnpm -F alphazero-bot tile play --us 800 --them nnue-ms:1000@8   # master vs danluu.com/game/tile's AI:
+                                               # tile/README.md. Their files are cached in
+                                               # ~/.cache/azul-tile, never committed
+pnpm -F alphazero-bot tile verify              # the position translation, against their engine
+pnpm -F alphazero-bot tile check-updates       # has their page changed since it was cached
 
 pnpm -F bot test                 # the move chooser: evaluation, search, tiers
 pnpm -F bot bench                # the [B4-47]..[B4-50] budgets, non-gating, bundled
