@@ -25,7 +25,7 @@ Add an entry when a run starts or ends, or when a decision changes the plan. Tim
 | `ninth` | 10-03 | `eighth`/160 | learning rate 0.002 → 0.0002 | pool | gen 110, stop rule | **+750** at gen 90, 61 above `eighth` |
 | `tenth` | 10-03 | `ninth`/90 | playout-cap randomisation ([Z11-75]) | pool | gen 120, stop rule | **+776** at gen 100, 26 above `ninth` |
 | `eleventh` | 10-03 | `tenth`/100 | learning rate 0.0002 → 0.0001 | pool | gen 150, stop rule | **+812** at gen 130, 36 above `tenth` |
-| `twelfth` | 10-04 | `eleventh`/130 | learning rate 0.0001 → 0.00005 | pool | running | |
+| `twelfth` | 10-04 | `eleventh`/130 | learning rate 0.0001 → 0.00005 | pool | gen 170, stop rule | **+856** at gen 120, 44 above `eleventh` |
 
 Progress on the ladder is the sum of four winrates (0 to 4). Pool ratings are Elo, with `third`/90,
 the checkpoint that passed the gate, at 0.
@@ -326,12 +326,26 @@ Generation 10: +762, below its parent, unlike the bigger cuts' immediate jumps. 
   gain came from generation 90 on. A lower rate learns slowly, so a run at one needs patience
   the stop rule, comparing each milestone with the one before, only sometimes gives it.
 
-## `twelfth`: half again (10-04 →)
+## `twelfth`: half again (10-04 → 10-05)
 
 **Decision (the user):** the second halving, 0.0001 → 0.00005, started when the user resumed
 training. From `eleventh`/130, the best; nothing else changed. 0.00005 is about 2.5× the float32
 floor, so the slowest weights' updates may start rounding away. Throughput: 1.9 minutes a
 generation.
+
+Generation 10: +808, level with its parent. Then 806, 810, 808, **828**, 845, 843, 844, 845, 852,
+847, **+856 at 120**, 846, 851, 854, 850, 849. The stop rule ended it at 170 (10-05 05:53,
+`06ebf35`).
+
+- **The second halving gave +44**, more than the first's +36, and sooner: the climb began at
+  generation 50 rather than 90. From generation 60 on it held 843–856 for 110 generations,
+  alternating up and down, which kept resetting the stop rule.
+- **The learning-rate steps, all told:** 0.02 → 0.002 (+147), → 0.0002 (+61), → 0.0001 (+36),
+  → 0.00005 (+44). The rate is now 2.5× the float32 floor; a further halving is still possible
+  but near the limit, and gains a run have been shrinking to the size of the noise over many
+  generations.
+- **Mid-run, `main` moved** (`d886879`, the danluu.com tile match); `twelfth`'s milestone commits
+  were rebased onto it, without conflicts, and `main` fast-forwarded again.
 
 ## Next
 
