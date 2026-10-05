@@ -407,6 +407,23 @@ proof natively and about 6% in V8, with every verdict the same: of the 20.9M mov
 on the corpus, 72% stay within the round, 26% end the game (scored, never dealt) and only 1.7%
 deal. About 7 ms on the slowest moves, for a second way to end a round in the engine.
 
+**Not worth doing: speculative batches in the search.** Evaluating likely next leaves beside the
+pending one, memo-only and so exact, pays only if a batch is cheap and its guesses are used. In V8
+neither holds: four inputs through the batched pass cost exactly four single passes (the single
+pass is bound by arithmetic there, not memory), and a pair kernel sharing column reads over the
+union of two inputs' non-zeros cost 2.19 singles (1.76 natively). Replaying the corpus searches,
+3 siblings by prior were used 37% of the time and the top sibling alone 62%, so a pair must cost
+under 1.54 singles to break even.
+
+**Not worth doing: move ordering in the proof.** On the 407 positions where it runs, at 300,000
+nodes, the transposition table's move first left the node count unchanged (30 out of nodes,
+1.053M nodes on the 332 every variant finished); a history heuristic (76 out of nodes) and a
+static Azul order, fewest tiles to the floor first (31), did worse. Proving a move is not a forced
+win means refuting every reply, which no order shortens. And the cap costs little: given 20M
+nodes, all 30 finished (0.31M to 14.7M, most under 1.7M), and only one changed its move.
+
+The optimisation effort stops here (10-05); the headroom it bought is the user's to spend.
+
 ## Next
 
 - **Trainer code:** weight averaging (now mostly polish, the dips being small); blending the
