@@ -42,18 +42,27 @@ pub extern "C" fn alloc(len: usize) -> *mut u8 {
 }
 
 /// The checkpoint and parity file JavaScript wrote at two `alloc`ed buffers,
-/// and the milestone's search settings. `0`, or `-1` with the error set.
+/// the milestone's search settings, and the shipped endgame node cap
+/// ([T12-33]). `0`, or `-1` with the error set.
 ///
 /// # Safety
 ///
 /// `ck` and `par` must each be a buffer `alloc` returned for at least
 /// `ck_len` and `par_len` bytes respectively.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn load(ck: *const u8, ck_len: usize, par: *const u8, par_len: usize, cpuct: f32, fpu: f32) -> i32 {
+pub unsafe extern "C" fn load(
+    ck: *const u8,
+    ck_len: usize,
+    par: *const u8,
+    par_len: usize,
+    cpuct: f32,
+    fpu: f32,
+    endgame_nodes: u32,
+) -> i32 {
     // SAFETY: the caller's contract above: each pointer is an `alloc`ed
     // buffer of at least that many bytes, never freed.
     let (checkpoint, parity) = unsafe { (std::slice::from_raw_parts(ck, ck_len), std::slice::from_raw_parts(par, par_len)) };
-    let loaded = Player::load(checkpoint, parity, cpuct, fpu);
+    let loaded = Player::load(checkpoint, parity, cpuct, fpu, endgame_nodes);
     with(|s| match loaded {
         Ok(p) => {
             s.player = Some(p);

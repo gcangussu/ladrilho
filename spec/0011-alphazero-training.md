@@ -454,8 +454,8 @@ network value `V` from when it was expanded.
   average, and averaging is what the search does. Their minimax made none in 332. A proven win
   replacing a move can never make a result worse, whatever the opponent does; a proven draw
   replacing a proven loss gives up only the chance that the opponent errs into losing it. What the
-  proof costs is time, which the node cap bounds. The browser leaves it off
-  until spec 0012 ships it.*
+  proof costs is time, which the node cap bounds. The browser plays it at the
+  cap [0012 T12-33] ships.*
 
 ## Interfaces
 
@@ -525,7 +525,8 @@ The binary's commands, each loading one checkpoint and one run's settings:
 - **[Z11-77]** A run's config MAY set `playEndgameNodes`, a whole number up to 10⁹; absent means 0.
   It is [Z11-76]'s `endgame_nodes` for `--search play` and for `latency`, so a latency record
   measures the proof with the search it follows, and it is 0 for `--search milestone`, `selfplay`
-  and `throughput`: milestones and the pool measure, and self-play trains, the search alone.
+  and `throughput`: milestones and the pool measure, and self-play trains, the search alone. The
+  browser does not read it: its cap is the one `shipped.json` records ([0012 T12-33]).
 
   *Off by default, and outside the milestones, so that turning it on changes what is shipped and
   nothing a run compares itself by. Measured on the latency corpus at 800 simulations on the

@@ -32,7 +32,8 @@ Covers three things:
 
 Does not cover training, the network, the search or the checkpoint format. Those are
 *0011 — AlphaZero training*'s, and nothing here changes them: the web build calls the crate's
-library as it is. It does not cover `bot` (*0004*, *0005*) or `ai-bot` (*0008*) either. `expert`
+library as it is. The endgame proof that follows the search ([0011 Z11-76]) is 0011's too; what
+this spec decides is the node cap the browser plays it at ([T12-33]). It does not cover `bot` (*0004*, *0005*) or `ai-bot` (*0008*) either. `expert`
 stays exactly as [0008 A8-33] leaves it.
 
 It **amends** four specs, in the manner of *0006* and *0008*. The edits are enumerated in
@@ -113,6 +114,7 @@ milestone, pool rating) keep their meaning.
 | **Payload** | The generated module holding the compiled web crate, the shipped checkpoint and its parity file as bytes ([T12-7]). |
 | **Master worker** | The second module worker, which hosts `master` and nothing else ([T12-20]). |
 | **Simulations setting** | A seat's number of simulations when it is `master`, one per seat, each in `[min, max]` ([T12-16]). |
+| **Endgame cap** | The node cap of [0011 Z11-76]'s endgame proof that the shipped player plays at, recorded in `shipped.json` ([T12-33]). |
 
 | Constant | Value |
 | --- | --- |
@@ -134,6 +136,7 @@ interface Shipped {
   generation: number;        // a logged milestone of that run
   checkpointSha256: string;  // of milestones/<run>/<generation>/checkpoint.bin
   paritySha256: string;      // of milestones/<run>/<generation>/checkpoint.parity
+  endgameNodes: number;      // the endgame cap, a whole number in 0..=10^9 [T12-33]
 }
 ```
 
@@ -158,8 +161,9 @@ export interface Master {
   /** The module's linear memory in bytes, which only grows: [T12-25]'s measure. */
   memoryBytes(): number;
 }
-/** `parity` defaults to the payload's; the suite passes a corrupted one ([T12-28]). */
-export function createMaster(parity?: Uint8Array): Promise<Master>;  // [T12-12]
+/** `parity` defaults to the payload's; the suite passes a corrupted one ([T12-28]).
+ *  `endgameNodes` defaults to the payload's cap; the latency lane passes others ([T12-25]). */
+export function createMaster(parity?: Uint8Array, endgameNodes?: number): Promise<Master>;  // [T12-12], [T12-33]
 export function moduleBytes(): Uint8Array;  // the compiled module, for [T12-6]'s check
 export const SHIPPED: Readonly<Shipped>;
 ```
@@ -172,7 +176,7 @@ all on `wasm32` linear memory:
 | Export | Signature | Does |
 | --- | --- | --- |
 | `alloc` | `(len: usize) -> *mut u8` | A buffer of `len` bytes that JavaScript fills. Never freed. |
-| `load` | `unsafe (ck, ck_len, par, par_len, cpuct: f32, fpu: f32) -> i32` | `Network::load` with the parity check ([0011 Z11-13]). Returns `0`, or `-1` with the error text set. |
+| `load` | `unsafe (ck, ck_len, par, par_len, cpuct: f32, fpu: f32, endgame_nodes: u32) -> i32` | `Network::load` with the parity check ([0011 Z11-13]), keeping the settings and the endgame cap every `choose` plays at ([T12-33]). Returns `0`, or `-1` with the error text set. |
 | `words_ptr` | `() -> *mut u32` | A buffer of at least 512 words for one canonical block ([0010 C10-8]). |
 | `choose` | `(n_words: usize, simulations: u32) -> i32` | The action, or `-1` for a terminal position, or `-2` for a refused block, with the error text set. |
 | `value` | `() -> f32` | The value of the last `choose`. |
@@ -220,7 +224,9 @@ interface Seating {
 
 - **[T12-3]** The web crate MUST contain no player code. Every move MUST come from one call to
   `azul_alphazero::memo::choose_memoised`, with a fresh `Memo` per `choose`, a `SearchConfig` of
-  `{ simulations, cpuct, fpu }`, and the `Network` that `load` accepted. A source check MUST fail
+  `{ simulations, cpuct, fpu, endgame_nodes }` whose `endgame_nodes` is the cap `load` was given
+  ([T12-33]), and the `Network` that `load` accepted. The endgame proof is the crate's, run inside
+  `choose_memoised` ([0011 Z11-76]), not code of the web crate. A source check MUST fail
   on:
   - `impl Evaluator`;
   - a call to `forward`, `forward_batch` or `masked_softmax`;
@@ -253,12 +259,12 @@ interface Seating {
   1. build the web crate with
      `cargo build --locked --release --lib --target wasm32-unknown-unknown`;
   2. read `web/shipped.json`, and refuse unless both files of the shipped milestone exist and
-     match the recorded sha256s;
+     match the recorded sha256s, and its `endgameNodes` is a whole number in `0..=10⁹`;
   3. read `cpuct` and `fpu` from the shipped milestone's logged config ([0011 Z11-34]);
   4. write `packages/alphazero-bot/web/dist/payload.ts`, which is git-ignored.
 
   The payload exports the module, the checkpoint and the parity file as base64 strings, and
-  `SHIPPED`, `CPUCT` and `FPU`.
+  `SHIPPED`, `CPUCT`, `FPU` and `ENDGAME_NODES`, the last being `shipped.json`'s `endgameNodes`.
 - **[T12-8]** `rust-toolchain.toml` MUST name `targets = ["wasm32-unknown-unknown"]`, so the
   pinned toolchain installs the target on first use. This applies to every byte-identical copy of
   the file: `engine-rs`, the cross-check's checker and `alphazero-bot` ([0009 R9-1]).
@@ -267,7 +273,7 @@ interface Seating {
 
 - **[T12-9]** `packages/alphazero-bot/web/shipped.json` MUST be committed and MUST name a
   **logged** milestone ([0011 Z11-4]) whose checkpoint and parity file are committed and match
-  its two sha256s.
+  its two sha256s, and MUST carry the endgame cap ([T12-33]).
 - **[T12-10]** The shipped milestone MUST be the logged `milestone` entry with the highest
   `pool.rating`, ties to the earlier entry. Entries without a pool rating, which ran on the
   ladder yardstick, are not candidates. A test MUST assert it.
@@ -281,13 +287,44 @@ interface Seating {
 - **[T12-11]** The web crate, `shipped.json` and `web/dist/` are not source paths of
   [0011 Z11-63]. Building or swapping the shipped player never marks a training build dirty and
   never changes the ladder hash.
+- **[T12-33]** The shipped player MUST play with [0011 Z11-76]'s endgame proof at the cap
+  `shipped.json`'s `endgameNodes` records, 300 000 nodes, a whole number in `0..=10⁹`
+  ([0011 Z11-77]'s range). The cap reaches the module one way: the payload's `ENDGAME_NODES`
+  ([T12-7]), passed by `createMaster` to `load` ([T12-12]), kept by the web crate's player, and used
+  as `endgame_nodes` in every move's `SearchConfig` ([T12-3]). It is the same for both seats and
+  every simulations setting. No request, URL parameter or storage carries it, and the interface
+  never passes one: `createMaster`'s second argument is for the latency lane alone, which measures
+  a cap before it is shipped. A cap MUST be chosen by [T12-25]'s lane, as the largest it measured
+  that keeps both of that lane's budgets, and recorded with its figures here.
+
+  *Why the proof at all: on the champions' pool's 3,201 games at 200 simulations, `twelfth`/120
+  rated +905 with a 2,000,000-node proof against +856 without, and 262 of the 264 games it changed
+  improved (`milestones/JOURNAL.md`, 10-05). Why this cap: measured with `twelfth`/120 on the
+  machine of record, idle. At 300 000 nodes the lane measured p50 40 ms, p95 491 ms, p99 641 ms
+  and max 831 ms, on a position where the proof runs; 51 MB after the corpus; and 434 MB after the
+  search at the maximum. It failed at 500 000 (max 1134 ms) and at 2 000 000 (max 1694 ms, and
+  221 MB after the corpus), and passed at 200 000 (max 891 ms). Timed twice at each cap, the
+  faster kept, on the 408 corpus positions where the proof runs, it added at most 80, 183, 214
+  and 333 ms at 100 000, 200 000, 300 000 and 500 000 nodes (p95 52, 101, 146 and 233 ms), the
+  slowest of those moves taking 748, 798, 852 and 951 ms against 668 ms without it. A search at
+  the maximum on the three of them with the heaviest searches left 347 to 350 MB at 200 000 and
+  300 000 nodes: the table fits in what the finished search gave back. Single timings vary by
+  about a tenth between passes, which is why 500 000, with 50 ms to spare on its own worst move,
+  is not shipped. What the shipped cap buys, played natively (the moves are the module's,
+  [T12-27]): `twelfth`/120 at the default with the proof at 300 000 against itself without, over
+  the 200 wide seeds from both seats, split 187 deals as before and came out ahead in all 13 the
+  proof changed (5 won both games, 8 won one and drew the other): +9 points in 400 games, for 3.4%
+  more thinking time in all. The cap is a property of what ships, like the
+  milestone, so it lives beside the milestone in `shipped.json`. It is the browser's only: the
+  native `play` takes its cap from `playEndgameNodes` ([0011 Z11-77]).*
 
 ### The browser entry point
 
 - **[T12-12]** `createMaster()` MUST decode the payload's base64 into bytes, instantiate the module
   with `WebAssembly.instantiate(bytes, {})`, copy the checkpoint and parity file into buffers from
-  `alloc`, and call `load` with `CPUCT` and `FPU`. It MUST reject with the error text when `load`
-  fails. It MUST NOT use `fetch`, `WebAssembly.instantiateStreaming` or
+  `alloc`, and call `load` with `CPUCT`, `FPU` and the endgame cap: `ENDGAME_NODES` unless a caller
+  passes another ([T12-33]). It MUST reject with the error text when `load` fails, and with a
+  `RangeError` for a cap that is not a whole number in `0..=10⁹`. It MUST NOT use `fetch`, `WebAssembly.instantiateStreaming` or
   `WebAssembly.compileStreaming`, which take a network response.
 - **[T12-13]** `Master.choose(position, simulations)` MUST throw unless
   `validSimulations(simulations)` holds, and it MUST throw on a terminal position or a refused
@@ -400,31 +437,47 @@ These requirements were proposals for *0006*, in the manner of [0008 A8-33]. Eac
 ### Performance
 
 - **[T12-25]** An on-demand lane, `pnpm -F alphazero-bot web-latency`, MUST time
-  `Master.choose` in Node on every non-terminal latency-corpus position, at the default setting,
-  single-threaded, from the call to its return. It prints `p50`, `p95` and `max`. With the
-  machine otherwise idle, `max` MUST be under 1000 ms on the machine of record.
+  `Master.choose` in Node on every non-terminal latency-corpus position, at the default setting
+  and the shipped endgame cap ([T12-33]), single-threaded, from the call to its return. It prints
+  `p50`, `p95`, `p99`, `max`, which position was slowest, and `memoryBytes()` after the corpus.
+  With the machine otherwise idle, `max` MUST be under 1000 ms on the machine of record.
 
   It MUST also time one search at `MASTER_SIMULATIONS.max` on the corpus position slowest at the
-  default, on a fresh `Master`, and print `memoryBytes()` after it. That size MUST be under 512 MB.
-  Node's own `arrayBuffers` figure does not count WebAssembly memory, and reads 0.
+  default, on a fresh `Master`, and print `memoryBytes()` after it. That size, and the size after
+  the corpus, MUST each be under 512 MB. Node's own `arrayBuffers` figure does not count
+  WebAssembly memory, and reads 0. `--endgame <nodes>` runs the lane at another cap, which is how
+  [T12-33]'s is chosen.
 
   *Intent 0010: on this laptop, every move at the default takes under a second. The figures it
   stands on: 11 300 simulations gave p95 626 ms and max 736 ms on the 200-position subset, so
   10 000 projects to about 650 ms at worst. The lane is rerun when the shipped milestone changes
-  architecture. A new checkpoint of the same architecture moves the figures only through where its
-  trees go ([0011 Z11-39]).*
+  architecture, or the endgame cap. A new checkpoint of the same architecture moves the figures
+  only through where its trees go ([0011 Z11-39]). With `twelfth`/120 and no proof it measured
+  p95 574 ms, max 927 ms, 48 MB after the corpus, and 485 MB after the search at the maximum.
+  The proof keeps a table of about 86 bytes a node beside the search's memo, so its cap is bounded
+  by memory as well as by time ([T12-33]).*
 
 ## Verification
 
 - **[T12-26]** The web crate's `cargo test` MUST call its exports, natively, on at least 50
-  latency-corpus positions at 800 simulations, with the package's fixture network. It MUST assert action and value bit for bit equal
-  to `azul_alphazero::search::choose` on the same network and settings. That covers the decoding
-  of [T12-4], the settings of [T12-3] and the memo's transparency together.
+  latency-corpus positions at 800 simulations, with the package's fixture network and an endgame
+  cap given to `load`. It MUST assert action and value bit for bit equal to
+  `azul_alphazero::search::choose` on the same network and settings, the cap included. That covers
+  the decoding of [T12-4], the settings of [T12-3] and the memo's transparency together. It MUST
+  also compare, on late positions where a wall row holds four tiles, loaded at that cap and at 0,
+  and assert that the proof changed the crate's move on at least five of them, so that a cap lost
+  between `load` and the search fails it ([T12-33]).
 - **[T12-27]** The package's vitest suite MUST build the payload, call `createMaster()` and
-  `choose` in Node on the same positions at 800 simulations, and assert two things:
-  - the **same action** as `alphazero play --search milestone` on a config carrying the shipped
-    milestone's `cpuct`, `fpu` and `milestoneSimulations: 800`;
+  `choose` in Node on the same positions at 800 simulations, and on late positions where a wall row
+  holds four tiles, and assert two things:
+  - the **same action** as `alphazero play --search play` on a config carrying the shipped
+    milestone's `cpuct` and `fpu`, `playSimulations: 800` and `playEndgameNodes` equal to the
+    shipped endgame cap ([T12-33]): `--search play`, because the proof follows no other
+    ([0011 Z11-77]);
   - a **value within 1e-5** of `play`'s value.
+
+  It MUST also assert that, on at least three of the late positions, `play` with the proof off
+  chooses differently, so the comparison is made where the cap decides the move.
 
   *Bit equality is asserted where it is promised, in [T12-26] on one build. Across native macOS and
   wasm, `exp` and `tanh` come from different libms, so the value is compared to a tolerance and the
@@ -434,6 +487,8 @@ These requirements were proposals for *0006*, in the manner of [0008 A8-33]. Eac
   - [T12-6], on the built module;
   - a parity file with one byte flipped makes `createMaster` reject;
   - `choose` throws at 99 and 200 001 simulations, and on a terminal position;
+  - `createMaster` rejects an endgame cap of -1, 1.5 or 10⁹ + 1, and `pnpm -F alphazero-bot web`'s
+    check refuses a `shipped.json` without a cap or with one out of range ([T12-33]);
   - [T12-15]'s graph, by walking the imports of `web/settings.ts`.
 - **[T12-29]** Each mutation below MUST have been seen to turn the named assertion red before
   that assertion is kept, made in a copy with its landing confirmed, and recorded beside the
@@ -447,6 +502,11 @@ These requirements were proposals for *0006*, in the manner of [0008 A8-33]. Eac
   | The web crate calling `choose` instead of `choose_memoised` | [T12-3]'s source check |
   | `shipped.json` naming `third/90` | [T12-10] |
   | The first worker's module importing `alphazero-bot/web` | [T12-21]'s graph check |
+  | The web crate's player building its `SearchConfig` with `endgame_nodes: 0` | [T12-26]'s late-position case, and [T12-27] |
+  | `load` passing a fixed cap to the player instead of its argument | [T12-26]'s late-position case |
+  | `createMaster` passing 0 to `load` in place of the payload's cap | [T12-27] |
+  | `pnpm -F alphazero-bot web` writing `ENDGAME_NODES = 0` into the payload | [T12-7]'s payload case, and [T12-27] |
+  | `shippedMilestone` accepting a cap out of range | [T12-28]'s refusal case |
 
   *The second row records a check that cannot fail, on purpose. A reader who wonders whether the
   shuffler's seed matters finds the answer here, rather than a test that pretends to catch it.*
@@ -526,12 +586,15 @@ next free number.
 | [0011 Z11-3] | Extend: the source check also covers `web/`. |
 | [0011 Z11-4] | Add the scripts `web` ([T12-7]) and `web-latency` ([T12-25]). The root `pnpm test` runs the web crate's `cargo test` and [T12-27]. |
 | [0011 Z11-47] | Unchanged in scope. Its config-file clause holds the package root's `.cargo/config.toml`, and [T12-2] holds the web crate's. |
+| [0011 Z11-77] | Amend its browser clause: the browser plays the proof at [T12-33]'s cap, from `shipped.json`, not from `playEndgameNodes`. Milestones, the pool and self-play stay search-only, unchanged. |
 
 ## Invariants
 
 - `choose(position, n).action ∈ position.legalActions` for every non-terminal position and valid
   `n`.
 - `choose(position, n).simulations === n` ([0011 Z11-18]).
+- `choose(position, n)` is the same move every time for one payload: the endgame cap is fixed by
+  it ([T12-33]), and neither the search nor the proof reads a clock ([0011 Z11-18]).
 - A seating with no `master` seat constructs no master worker, and so loads no payload.
 - At most one request is outstanding across both workers ([0006 W6-32]).
 
