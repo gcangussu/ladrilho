@@ -380,6 +380,27 @@ suites green (105 and `ui`'s 201). The same 3,201 pool games at the shipped cap:
 against 856 without and 905 at 2M. 223 games changed, 222 for the better; only 47 differ from
 the 2M replay. So the shipped cap keeps about 85% of the proof's gain.
 
+## The shipped player, profiled (10-05)
+
+The master's moves, profiled in V8 and natively on the latency corpus at the default with the
+shipped proof: about 90% of a move is the forward pass, 1–4% the proof on average — but the proof
+is most of the slowest moves' excess, the 30 positions where it spends its whole 300,000-node cap
+for nothing. Two changes, neither changing a move, a value, a verdict or an evaluator call on any of
+the 1978 positions, and self-play's samples byte-identical:
+
+- **The forward pass skips zero inputs** ([Z11-10], amended): the stem and blocks read the weights
+  by columns, 32 outputs at a time, each lane still summing in the order the spec fixes. Three
+  quarters of the observation and about half of each hidden input are zero after the ReLU. Moves
+  1.36× faster in V8; natively the search 1.49×.
+- **The proof's nodes got cheaper:** no `Vec` or sort per node, the key hashed eight bytes at a
+  time instead of one, walls and scores (constant within a round) left out of it, and no SipHash
+  over a key that is already a digest. 2× natively, 1.5× in V8; what remains is half the engine's
+  `apply`.
+
+The lane at the default now reads p50 30, p95 368, p99 468 ms against 50, 614, 819 before
+([0012 T12-25]), so a higher default or a larger proof cap now fits; either is a new latency
+record and the user's call.
+
 ## Next
 
 - **Trainer code:** weight averaging (now mostly polish, the dips being small); blending the

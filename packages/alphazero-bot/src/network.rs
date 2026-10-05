@@ -142,6 +142,9 @@ impl Layout {
 pub struct Network {
     layout: Layout,
     weights: Vec<f32>,
+    /// The stem's and every block's two matrices again, transposed (`[in][out]`),
+    /// for `linear_columns`: the stem first, then each block's `B1`, `B2`.
+    columns: Vec<f32>,
     generation: u32,
 }
 
@@ -318,6 +321,115 @@ fn linear_x4_rows(w: &[f32], b: &[f32], x: [&[f32]; BATCH], out: [&mut [f32]; BA
     }
 }
 
+/// Outputs per block of the column form: their accumulators fill eight of the
+/// sixteen 128-bit registers wasm has, two of AVX2's. Sixteen measured slower
+/// in V8, from more passes over the input list; sixty-four, from spills.
+const BLOCK: usize = 32;
+
+/// The inputs `linear_columns` reads, lane by lane: `(j, x[j])` for each
+/// non-zero `x[j]` of a whole chunk, lane `l`'s at `list[starts[l]..starts[l + 1]]`
+/// in ascending `j`, and the tail's non-zero ones last, from `starts[LANES]`.
+struct NonZero<'a> {
+    list: &'a [(u32, f32)],
+    starts: [usize; LANES + 1],
+}
+
+impl<'a> NonZero<'a> {
+    fn of(x: &[f32], buf: &'a mut [(u32, f32)]) -> NonZero<'a> {
+        let whole = x.len() / LANES * LANES;
+        let mut starts = [0; LANES + 1];
+        let mut len = 0;
+        for l in 0..LANES {
+            starts[l] = len;
+            for j in (l..whole).step_by(LANES) {
+                buf[len] = (j as u32, x[j]);
+                len += usize::from(x[j] != 0.0);
+            }
+        }
+        starts[LANES] = len;
+        for j in whole..x.len() {
+            buf[len] = (j as u32, x[j]);
+            len += usize::from(x[j] != 0.0);
+        }
+        NonZero { list: &buf[..len], starts }
+    }
+}
+
+/// One lane's sum for `B` outputs: `cols[j][k] · v` added in the list's order.
+#[inline(always)]
+fn column_sum<const B: usize>(cols: &[[f32; B]], list: &[(u32, f32)]) -> [f32; B] {
+    let mut acc = [0f32; B];
+    for &(j, v) in list {
+        let w = &cols[j as usize];
+        for k in 0..B {
+            acc[k] += w[k] * v;
+        }
+    }
+    acc
+}
+
+/// Every lane's sum for `B` outputs, and the tail's. `cols[j]` holds input
+/// `j`'s weights for those outputs.
+#[inline(never)]
+fn column_lanes<const B: usize>(cols: &[[f32; B]], nz: &NonZero<'_>) -> ([[f32; B]; LANES], [f32; B]) {
+    let lanes = std::array::from_fn(|l| column_sum(cols, &nz.list[nz.starts[l]..nz.starts[l + 1]]));
+    (lanes, column_sum(cols, &nz.list[nz.starts[LANES]..]))
+}
+
+/// The fold, the tail and the bias of `finish` and `linear`, for `B` outputs at once.
+fn column_finish<const B: usize>((mut acc, tail): ([[f32; B]; LANES], [f32; B]), b: &[f32], out: &mut [f32]) {
+    let mut n = LANES;
+    while n > 1 {
+        n /= 2;
+        for i in 0..n {
+            for k in 0..B {
+                acc[i][k] += acc[i + n][k];
+            }
+        }
+    }
+    for k in 0..B {
+        out[k] = (acc[0][k] + tail[k]) + b[k];
+    }
+}
+
+/// `linear`, from the matrix's columns, reading only the inputs that are not
+/// zero: the same bits. Each lane of each output sums its products in the
+/// ascending order [Z11-10] gives them, the tail likewise, then the same fold,
+/// tail and bias. What it skips adds nothing: a lane starts at `+0` and,
+/// rounding to nearest, a sum is `-0` only when both its terms are, so no lane
+/// is ever `-0`, and adding the `±0` a zero input makes leaves it exactly as
+/// it was. Finite weights are assumed, which the parity check of every load
+/// holds them to ([Z11-13]).
+///
+/// `wt` is `columns_of` the matrix. At width 256 about half the inputs of a
+/// hidden layer are zero after the ReLU, and three quarters of the
+/// observation's.
+fn linear_columns(wt: &[f32], b: &[f32], nz: &NonZero<'_>, n: usize, out: &mut [f32]) {
+    let m = out.len();
+    let whole = m / BLOCK * BLOCK;
+    for o in (0..whole).step_by(BLOCK) {
+        let cols = wt[o * n..(o + BLOCK) * n].as_chunks::<BLOCK>().0;
+        column_finish(column_lanes(cols, nz), &b[o..o + BLOCK], &mut out[o..o + BLOCK]);
+    }
+    for o in whole..m {
+        let cols = wt[o * n..(o + 1) * n].as_chunks::<1>().0;
+        column_finish(column_lanes(cols, nz), &b[o..o + 1], &mut out[o..o + 1]);
+    }
+}
+
+/// An `rows × cols` row-major matrix as `linear_columns` reads it: each whole
+/// block of `BLOCK` rows as `[cols][BLOCK]`, then each row past the last whole
+/// block as its own `[cols]`.
+fn columns_of(w: &[f32], rows: usize, cols: usize, out: &mut Vec<f32>) {
+    let whole = rows / BLOCK * BLOCK;
+    for o0 in (0..whole).step_by(BLOCK) {
+        for j in 0..cols {
+            out.extend((o0..o0 + BLOCK).map(|o| w[o * cols + j]));
+        }
+    }
+    out.extend_from_slice(&w[whole * cols..rows * cols]);
+}
+
 fn relu(x: &mut [f32]) {
     for v in x {
         *v = v.max(0.0);
@@ -332,6 +444,18 @@ fn read_u32(bytes: &[u8], at: usize) -> u32 {
 
 fn read_f32s(bytes: &[u8]) -> Vec<f32> {
     bytes.as_chunks::<4>().0.iter().map(|w| f32::from_le_bytes(*w)).collect()
+}
+
+/// `Network::columns`: the stem's and every block's matrices, `columns_of` each.
+fn transposed(l: &Layout, w: &[f32]) -> Vec<f32> {
+    let n = l.width;
+    let mut out = Vec::with_capacity(n * ENCODED_SIZE + 2 * l.blocks * n * n);
+    columns_of(&w[l.stem_w..l.stem_b], n, ENCODED_SIZE, &mut out);
+    for &[b1w, b1b, b2w, b2b] in &l.block {
+        columns_of(&w[b1w..b1b], n, n, &mut out);
+        columns_of(&w[b2w..b2b], n, n, &mut out);
+    }
+    out
 }
 
 fn bad(field: &'static str, detail: impl Into<String>) -> LoadError {
@@ -388,7 +512,8 @@ impl Network {
             return Err(bad("length", format!("{} bytes, but the header implies {want}", bytes.len())));
         }
         let weights = read_f32s(&bytes[HEADER..]);
-        Ok(Network { layout, weights, generation })
+        let columns = transposed(&layout, &weights);
+        Ok(Network { layout, weights, columns, generation })
     }
 
     /// `(W, B)`.
@@ -413,17 +538,25 @@ impl Network {
         let l = &self.layout;
         let w = &self.weights;
         let n = l.width;
+        let c = &self.columns;
         let mut h = [0f32; MAX_WIDTH as usize];
         let mut t = [0f32; MAX_WIDTH as usize];
         let mut u = [0f32; MAX_WIDTH as usize];
+        let mut buf = [(0u32, 0f32); MAX_WIDTH as usize];
         let (h, t, u) = (&mut h[..n], &mut t[..n], &mut u[..n]);
 
-        linear(&w[l.stem_w..l.stem_b], &w[l.stem_b..l.stem_b + n], x, h);
+        // The stem and the blocks read the matrices' columns ([`linear_columns`]).
+        let mut at = 0;
+        let mut col = |len: usize| {
+            at += len;
+            &c[at - len..at]
+        };
+        linear_columns(col(n * ENCODED_SIZE), &w[l.stem_b..l.stem_b + n], &NonZero::of(x, &mut buf), ENCODED_SIZE, h);
         relu(h);
-        for &[b1w, b1b, b2w, b2b] in &l.block {
-            linear(&w[b1w..b1b], &w[b1b..b1b + n], h, t);
+        for &[_, b1b, _, b2b] in &l.block {
+            linear_columns(col(n * n), &w[b1b..b1b + n], &NonZero::of(h, &mut buf), n, t);
             relu(t);
-            linear(&w[b2w..b2b], &w[b2b..b2b + n], t, u);
+            linear_columns(col(n * n), &w[b2b..b2b + n], &NonZero::of(t, &mut buf), n, u);
             for i in 0..n {
                 h[i] = (h[i] + u[i]).max(0.0);
             }

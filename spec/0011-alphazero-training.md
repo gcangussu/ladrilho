@@ -303,7 +303,12 @@ result, winrate) keep their meaning.
   whole chunk are summed on their own, from zero, in ascending order; the lanes fold in halves,
   `acc[i] += acc[i + n]` for `n = 8, 4, 2, 1`; the tail is added to `acc[0]`, then the bias. A
   layer MAY compute two rows at once, or one row against four inputs at once ([Z11-70]), each
-  row's lanes for each input in exactly that order. The accumulation
+  row's lanes for each input in exactly that order. A layer MAY also compute from the matrix's
+  columns, reading only the inputs that are not zero, provided each lane of each output still sums
+  its products in that ascending order and the fold, the tail and the bias follow as above: what it
+  skips adds nothing, since a lane starts at `+0` and, rounding to nearest, a sum is `-0` only when
+  both its terms are, so no lane is ever `-0` and adding the `±0` of a zero input leaves it exactly
+  as it was (finite weights assumed, which [Z11-13] holds every load to). The accumulation
   loops MUST live in functions of their own, marked `#[inline(never)]`, apart from the fold.
 
   *Inlined beside the fold, LLVM vectorised the sixteen lanes as eight pairs — two floats to an
@@ -314,6 +319,14 @@ result, winrate) keep their meaning.
 
   *A single sequential accumulator also satisfies "fixed", and measured 7–12× slower than 16
   lanes on the machine of record. [Z11-53] is what keeps that from happening quietly.*
+
+  *The single-input pass reads the stem and the blocks by columns: at width 256 three quarters of
+  the observation and about half of each hidden layer's input are zero after the ReLU. Measured
+  with `twelfth`/120 on the latency corpus, at 10,000 simulations with the shipped endgame cap:
+  the master's moves 1.36× faster in V8 and the crate's search 1.49× natively, with every action,
+  value, proof verdict and evaluator call the same on all 1978 positions, and self-play's sample
+  and aux files byte-identical. The batched pass of [Z11-70] still reads rows: four inputs share
+  each row's reads, and their zeros do not line up.*
 
 ### Checkpoints
 

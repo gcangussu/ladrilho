@@ -278,6 +278,15 @@ fn synthetic(width: u32, blocks: u32, seed: u64) -> (Vec<u8>, Vec<u8>) {
 /// place off, which [Z11-13]'s parity check tolerates — and the other two fail
 /// the parity check this test's own loads run: the second on the fixture,
 /// the third on the synthetic width 17, which no committed network exercises.
+///
+/// The column form the single pass reads the stem and blocks by, likewise:
+/// `column_finish` summing the lanes in sequence, and `NonZero::of` listing a
+/// lane's inputs in descending order (`.step_by(LANES).rev()`), each fail the
+/// bit comparison on the fixture's logit 4, one unit in the last place off;
+/// `column_lanes` dropping the tail (`(lanes, [0f32; B])`), and the rows past
+/// the last whole block all reading the first one's column
+/// (`wt[whole * n..(whole + 1) * n]`), each fail the parity check of the
+/// synthetic widths' loads.
 #[test]
 fn the_forward_pass_is_the_reference_order_bit_for_bit() {
     let positions: Vec<[f32; 182]> = support::game_positions(5).iter().map(|s| s.encode()).collect();
