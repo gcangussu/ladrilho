@@ -28,6 +28,8 @@ pub struct RunConfig {
     /// [Z11-75]: playout-cap randomisation, or `None` for every move searched
     /// fully.
     pub playout_cap: Option<PlayoutCap>,
+    /// [Z11-77]: the endgame proof's node cap in play; 0, the default, is off.
+    pub play_endgame_nodes: u32,
 }
 
 /// [Z11-75]: a cheap search's count, and the share of moves searched fully.
@@ -61,6 +63,8 @@ struct Raw {
     cheap_simulations: Option<u64>,
     #[serde(default)]
     full_search_fraction: Option<f64>,
+    #[serde(default)]
+    play_endgame_nodes: Option<u64>,
 }
 
 fn whole(key: &str, n: u64, min: u64, max: u64) -> Result<u32, String> {
@@ -82,6 +86,10 @@ fn within(key: &str, n: f64, lo: f64, hi: f64) -> Result<f32, String> {
 /// The most simulations a search may run: a sample stores root visits as
 /// `u16` ([Z11-27]).
 pub const MAX_SIMULATIONS: u64 = 65_535;
+
+/// The largest endgame node cap a config may set ([Z11-77]): far past what a
+/// move can spend, and within `u32`.
+pub const MAX_ENDGAME_NODES: u64 = 1_000_000_000;
 
 impl RunConfig {
     pub fn parse(bytes: &[u8]) -> Result<RunConfig, String> {
@@ -125,6 +133,10 @@ impl RunConfig {
             games_per_generation: whole("gamesPerGeneration", r.games_per_generation, 1, 1_000_000)?,
             max_generation_minutes: f64::from(positive("maxGenerationMinutes", r.max_generation_minutes)?),
             playout_cap,
+            play_endgame_nodes: match r.play_endgame_nodes {
+                None => 0,
+                Some(n) => whole("playEndgameNodes", n, 0, MAX_ENDGAME_NODES)?,
+            },
         })
     }
 }
@@ -175,8 +187,14 @@ pub fn settings(config: &RunConfig, kind: SearchKind) -> Result<Settings, String
     };
     let noise = (kind == SearchKind::SelfPlay)
         .then_some(SelfPlayNoise { alpha: config.alpha, epsilon: config.epsilon });
+    // [Z11-77]: the endgame proof is part of play only; milestones and
+    // self-play measure and train the search alone.
+    let endgame_nodes = match kind {
+        SearchKind::Play | SearchKind::Latency(_) => config.play_endgame_nodes,
+        SearchKind::Milestone | SearchKind::SelfPlay => 0,
+    };
     Ok(Settings {
-        search: SearchConfig { simulations, cpuct: config.cpuct, fpu: config.fpu },
+        search: SearchConfig { simulations, cpuct: config.cpuct, fpu: config.fpu, endgame_nodes },
         noise,
         temp_plies: config.temp_plies,
         tau: config.tau,

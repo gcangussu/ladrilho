@@ -109,8 +109,8 @@ impl Hasher for KeyHasher {
 }
 
 /// `choose` ([Z11-19]) with the memo answering what it has seen: an empty
-/// tree, no noise, the most-visited action, and the same result `choose`
-/// gives, bit for bit ([Z11-72]). `None` for a terminal root ([Z11-62]).
+/// tree, no noise, the most-visited action, [Z11-76]'s endgame proof, and the
+/// same result `choose` gives, bit for bit ([Z11-72]). `None` for a terminal root ([Z11-62]).
 pub fn choose_memoised<S: Shuffler, E: Evaluator>(
     net: &E,
     root: &AzulState<S>,
@@ -130,5 +130,5 @@ pub fn choose_memoised<S: Shuffler, E: Evaluator>(
             }
         }
     }
-    Some(search.finish().0)
+    Some(crate::endgame::refine(root, search.finish().0, config.endgame_nodes).0)
 }

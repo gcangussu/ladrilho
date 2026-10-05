@@ -425,6 +425,38 @@ network value `V` from when it was expanded.
   the order after a recycle. The eval lanes also hand the player only what `toJSON` shows
   ([0005 M5-2]); self-play has no such seam, so this is what keeps it honest.*
 
+- **[Z11-76]** When `endgame_nodes` is not 0, `choose` (and `choose_memoised`, [Z11-72]) MUST
+  follow the search with an **endgame proof**, which may replace the search's action and nothing
+  else: the visits and the value stay the search's. The proof runs only when some wall row of
+  either player holds exactly four tiles, the one way the game can end at this round's end, since a
+  row gains at most one tile a round. It is an alpha-beta search of the rest of the round from the
+  root mover's side, over values loss, draw and win by `outcome` ([0001 E1-39]), that stops at
+  every terminal state and at the first state of a new round; a line that reaches a new round is
+  scored worse than a loss when proving a move good and better than a win when proving one bad, so
+  a proof holds whatever is dealt, and the new round's state is never read ([Z11-15]). The search's
+  move stays unless:
+  - it is not a proven win and another move is: the first such move in the search's order (most
+    root visits, ties to the lowest action) replaces it; or
+  - no move is a proven win, the search's move is a proven loss, and another move is proven at
+    least to draw: the first such, in the same order, replaces it.
+
+  Interior nodes are counted, across everything one proof searches, and when the count would pass
+  `endgame_nodes` the proof stops and the search's move stays. No clock is read ([Z11-18]), so the
+  move is as repeatable as the search's ([Z11-24]). The search itself never reads `endgame_nodes`,
+  and self-play never sets it.
+
+  *Measured before it was written, by grading every move from round 5 on with an exact search
+  (`packages/alphazero-bot/tile`, `solver-check`'s method): in 42 games against danluu.com/game/tile's
+  minimax, the master at 800 simulations chose a move of worse result in 2 of 168 positions that
+  could be graded exactly, each time a proven win thrown away, and lost both games; twelfth/120 at
+  11,300 simulations did it in 2 of 169, each a win thrown into a draw. Fourteen times the
+  simulations did not change the count: a narrow forced win loses to a move that wins more often on
+  average, and averaging is what the search does. Their minimax made none in 332. A proven win
+  replacing a move can never make a result worse, whatever the opponent does; a proven draw
+  replacing a proven loss gives up only the chance that the opponent errs into losing it. What the
+  proof costs is time, which the node cap bounds. The browser leaves it off
+  until spec 0012 ships it.*
+
 ## Interfaces
 
 ```rust
@@ -450,7 +482,8 @@ pub struct Evaluation { pub policy: [f32; 180], pub value: f32 }
 pub fn pre_deal_view<S: Shuffler>(before: &AzulState<S>, after: &AzulState<S>)
     -> [f32; ENCODED_SIZE];                                                       // [Z11-9]
 
-pub struct SearchConfig { pub simulations: u32, pub cpuct: f32, pub fpu: f32 }
+pub struct SearchConfig { pub simulations: u32, pub cpuct: f32, pub fpu: f32,
+                         pub endgame_nodes: u32 }                                 // [Z11-76], [Z11-77]
 pub struct SelfPlayNoise { pub alpha: f32, pub epsilon: f32 }
 pub struct SearchResult { pub action: Action, pub visits: [u32; 180], pub value: f32 }
 /// The finished tree by kind: expanded nodes (the root included), non-terminal boundaries,
@@ -458,7 +491,7 @@ pub struct SearchResult { pub action: Action, pub visits: [u32; 180], pub value:
 pub struct TreeStats { pub expanded: u32, pub boundaries: u32, pub terminals: u32 }
 
 pub fn choose<S: Shuffler, E: Evaluator>(net: &E, root: &AzulState<S>, config: &SearchConfig)
-    -> Option<SearchResult>;                                                      // [Z11-19], [Z11-62]
+    -> Option<SearchResult>;                                                      // [Z11-19], [Z11-62], [Z11-76]
 /// `choose` with self-play's noise, and the tree's shape. `choose` is this with no noise.
 pub fn search<S: Shuffler, E: Evaluator>(net: &E, root: &AzulState<S>, config: &SearchConfig,
     noise: Option<(&SelfPlayNoise, &mut Rng)>) -> Option<(SearchResult, TreeStats)>;
@@ -489,6 +522,15 @@ The binary's commands, each loading one checkpoint and one run's settings:
   and `throughput` use `selfPlaySimulations`, the noise settings and `threads`. `--simulations`
   overrides the count for `latency` alone, which is how [Z11-57] steps it; every other command
   refuses it.
+- **[Z11-77]** A run's config MAY set `playEndgameNodes`, a whole number up to 10⁹; absent means 0.
+  It is [Z11-76]'s `endgame_nodes` for `--search play` and for `latency`, so a latency record
+  measures the proof with the search it follows, and it is 0 for `--search milestone`, `selfplay`
+  and `throughput`: milestones and the pool measure, and self-play trains, the search alone.
+
+  *Off by default, and outside the milestones, so that turning it on changes what is shipped and
+  nothing a run compares itself by. Measured on the latency corpus at 800 simulations on the
+  machine of record: the median move unchanged at about 14.5 ms, p99 from 47 ms to 139 ms at a cap
+  of 200,000 and to 281 ms at 2,000,000, whose longest move, its cap spent, took about a second.*
 
 - **[Z11-22]** No public function and no command may panic on any input. A malformed position,
   checkpoint or corpus is an error exit with a message. The one exception is a debug build's
@@ -1386,6 +1428,13 @@ this package, and MUST be corrected in the same change.
   | `choose_memoised` never remembering the network's answer | [Z11-72]'s `choose_memoised` case |
   | The chooser's worker not reporting its process's exit, or its failure to start | [Z11-72]'s chooser failure case |
   | The check that `.cargo/config.toml`'s section holds exactly the AVX2 line, or holds no other section, weakened | [Z11-47]'s build-flag case |
+  | The endgame proof never replacing a move with a proven win | [Z11-76]'s rule case |
+  | A proven loss replaced only by a proven win, not by a proven draw | [Z11-76]'s rule case |
+  | The proof's table storing every result as exact | [Z11-76]'s rule case |
+  | The proof's gate always open | [Z11-76]'s gate case |
+  | The proof searching on past the round's end | [Z11-76]'s rule case |
+  | `choose_memoised` leaving the proof out | [Z11-72]'s case with the proof on |
+  | `playEndgameNodes` reaching `--search milestone` | [Z11-77]'s case |
 
 - **[Z11-49]** Every requirement in this document MUST be either cited by at least one test — Rust,
   TypeScript or Python — by identifier, or listed with a reason in *Traceability exemptions*,

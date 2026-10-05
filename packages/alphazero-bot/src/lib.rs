@@ -12,6 +12,7 @@
 #![allow(clippy::needless_range_loop)]
 
 pub mod config;
+pub mod endgame;
 pub mod memo;
 pub mod network;
 pub mod parity;

@@ -16,6 +16,9 @@ pub struct SearchConfig {
     pub simulations: u32,
     pub cpuct: f32,
     pub fpu: f32,
+    /// [Z11-76]: the endgame proof's node cap, applied by `choose` after the
+    /// search; 0 is off. The search itself never reads it.
+    pub endgame_nodes: u32,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -351,7 +354,9 @@ pub fn search<S: Shuffler, E: Evaluator>(
 }
 
 /// The player's move ([Z11-19]): an empty tree, no noise, the most-visited
-/// action. `None` for a terminal root, which has no legal action ([Z11-62]).
+/// action, then [Z11-76]'s endgame proof when `endgame_nodes` is set. `None`
+/// for a terminal root, which has no legal action ([Z11-62]).
 pub fn choose<S: Shuffler, E: Evaluator>(net: &E, root: &AzulState<S>, config: &SearchConfig) -> Option<SearchResult> {
-    search(net, root, config, None).map(|(r, _)| r)
+    let (r, _) = search(net, root, config, None)?;
+    Some(crate::endgame::refine(root, r, config.endgame_nodes).0)
 }

@@ -42,6 +42,7 @@ play options
   --games <n>           games per (us, them) pair, rounded up to even: each deal from both seats (default 100)
   --seed <n>            first deal's seed                     (default 1)
   --workers <n>         games at once         (default: cores - 1, or cores / their threads)
+  --endgame <nodes>     our endgame proof's node cap, [0011 Z11-76] (default 0: off)
   --checkpoint <c>      run/generation, or a checkpoint path   (default: web/shipped.json)
   --config <path>       the run config, when the checkpoint is not a logged milestone
   --out <path>          results prefix: <path>.jsonl per game, <path>.json summary (default runs/tile/<time>)
@@ -128,6 +129,7 @@ async function main(): Promise<void> {
       nodes: { type: 'string', default: '1000000' },
       threads: { type: 'string' },
       'max-nodes': { type: 'string', default: '3000000' },
+      endgame: { type: 'string', default: '0' },
       'no-build': { type: 'boolean', default: false },
       help: { type: 'boolean', default: false },
     },
@@ -244,11 +246,12 @@ async function main(): Promise<void> {
         v.workers !== undefined ? int(v.workers, 'workers') : threads > 1 ? Math.max(1, Math.floor(cores / threads)) : Math.max(1, cores - 1);
       const bin = v['no-build'] ? binary('release') : buildRelease();
       if (!existsSync(bin)) throw new Error(`no binary at ${bin}: drop --no-build`);
+      const endgame = int(v.endgame, 'endgame');
       const dir = mkdtempSync(join(tmpdir(), 'azul-tile-'));
       const configs: Record<number, string> = {};
       for (const n of us) {
         configs[n] = configPath(dir, n);
-        writeFileSync(configs[n], JSON.stringify({ ...m.config, playSimulations: n }));
+        writeFileSync(configs[n], JSON.stringify({ ...m.config, playSimulations: n, playEndgameNodes: endgame }));
       }
       const stamp = new Date().toISOString().replace(/[:.]/g, '-');
       const out = resolve(v.out ?? join(RUNS, 'tile', stamp));
@@ -256,7 +259,7 @@ async function main(): Promise<void> {
       const header = {
         date: new Date().toISOString(),
         commit: gitCommit(),
-        ours: { checkpoint: m.label, checkpointSha256: sha256File(m.checkpoint), simulations: us },
+        ours: { checkpoint: m.label, checkpointSha256: sha256File(m.checkpoint), simulations: us, endgameNodes: endgame },
         theirs: {
           source: manifest.source,
           fetchedAt: manifest.fetchedAt,
@@ -274,7 +277,7 @@ async function main(): Promise<void> {
         seed: int(v.seed, 'seed'),
         workers,
       };
-      log(`ours ${m.label} at ${us.join(', ')} simulations; theirs ${them.map(specLabel).join(', ')}; ${games} games each, ${workers} at once`);
+      log(`ours ${m.label} at ${us.join(', ')} simulations${endgame > 0 ? `, endgame proof ${endgame} nodes` : ''}; theirs ${them.map(specLabel).join(', ')}; ${games} games each, ${workers} at once`);
       log(`writing ${out}.jsonl`);
       const cells = await runMatch(
         { games, seed: header.seed, us, them, workers, out, header, cacheDir, build, binary: bin, checkpoint: m.checkpoint, configs, threads, options },
