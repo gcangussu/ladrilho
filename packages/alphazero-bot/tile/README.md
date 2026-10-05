@@ -191,5 +191,7 @@ Their minimax made none in any run. Fourteen times the simulations did not fix i
 the search's averaging rather than its budget. With the proof on, twelfth/120 played itself
 without it over the 200 wide seeds, each from both seats: 184 deals split, and in the 16 the proof
 changed it came out ahead every time (7 won both games, 9 won one and drew one), +11.5 points in
-400 games (sign test p ≈ 3 × 10⁻⁵), for about 16% more thinking time.
+400 games (sign test p ≈ 3 × 10⁻⁵), for about 16% more thinking time in that match, which ran
+on a loaded machine. On the idle latency corpus at 11,300 simulations the proof added 11 ms to the
+mean move (174 to 185 ms) and 476 ms to the longest (1.4 to 1.9 s).
 
