@@ -401,6 +401,12 @@ The lane at the default now reads p50 30, p95 368, p99 468 ms against 50, 614, 8
 ([0012 T12-25]), so a higher default or a larger proof cap now fits; either is a new latency
 record and the user's call.
 
+**Not worth doing: an engine call that skips the deal at a round's end.** Measured as an upper
+bound — the deal skipped while the proof runs, exhaustion still decided — it saves 4.7% of the
+proof natively and about 6% in V8, with every verdict the same: of the 20.9M moves the proof tries
+on the corpus, 72% stay within the round, 26% end the game (scored, never dealt) and only 1.7%
+deal. About 7 ms on the slowest moves, for a second way to end a round in the engine.
+
 ## Next
 
 - **Trainer code:** weight averaging (now mostly polish, the dips being small); blending the
