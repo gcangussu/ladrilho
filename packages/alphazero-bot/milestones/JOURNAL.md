@@ -347,6 +347,33 @@ Generation 10: +808, level with its parent. Then 806, 810, 808, **828**, 845, 84
 - **Mid-run, `main` moved** (`d886879`, the danluu.com tile match); `twelfth`'s milestone commits
   were rebased onto it, without conflicts, and `main` fast-forwarded again.
 
+## The endgame proof, validated (10-05)
+
+On `main` (`ab38db0`, `d804a47`, [Z11-76], [Z11-77]): once a wall row holds four tiles, so the
+game can end this round, `play` follows the search with a node-capped alpha-beta over the rest of
+the round. Lines that run into the next round count as the worst case for the claim, so no proof
+reads the deal. The search's move gives way only to a proven win, or, when it is a proven loss,
+to a move proven to draw at least. Milestones, the pool and self-play keep the search alone.
+Pulled into the training branch as a fast-forward and checked independently:
+
+- **Training is untouched.** For 40 games of `twelfth`/120 under `twelfth`'s config, the binary
+  from before the pull and the new one wrote byte-identical samples and aux records, with
+  `playEndgameNodes` set or not.
+- **The pool is untouched.** `twelfth`/120's logged milestone (3,201 games) replayed with the
+  new binary: rating 855.577447437 again, to nine decimals, with identical wins, losses and draws
+  against all three champions.
+- **The tests are real.** The suites pass (104 + the crate's + 19); on a scratch copy four
+  mutations each turned a named test red, three from the commit's record and one more (a draw
+  "saved" on optimistic evidence).
+- **What the proof is worth in the pool's games.** `twelfth`/120 replayed the same 3,201 games
+  with a 2M-node proof at 200 simulations, the champions without it: **+905 ±6, against 856**.
+  264 games changed: 190 losses became wins, 27 became draws, 45 draws became wins, and 2 wins
+  became draws, where the search's move was a proven loss against best play that the opponent
+  would have let it win. Not checked: the latency figures, which need an idle machine.
+
+This is a gain for the player that ships, not for the network: the pool still rates the search
+alone, as [Z11-77] intends.
+
 ## Next
 
 - **Trainer code:** weight averaging (now mostly polish, the dips being small); blending the
