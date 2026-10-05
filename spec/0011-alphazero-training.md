@@ -530,7 +530,10 @@ The binary's commands, each loading one checkpoint and one run's settings:
   *Off by default, and outside the milestones, so that turning it on changes what is shipped and
   nothing a run compares itself by. Measured on the latency corpus at 800 simulations on the
   machine of record: the median move unchanged at about 14.5 ms, p99 from 47 ms to 139 ms at a cap
-  of 200,000 and to 281 ms at 2,000,000, whose longest move, its cap spent, took about a second.*
+  of 200,000 and to 281 ms at 2,000,000, whose longest move, its cap spent, took about a second.
+  At 11,300 simulations with twelfth/120 and a cap of 2,000,000: the mean move from 174 ms to
+  185 ms, the median 44 to 45, p95 678 to 732, p99 815 to 924, and the longest 1,434 to 1,910; the
+  proof ran on about a fifth of the corpus, adding 50 ms at the median there.*
 
 - **[Z11-22]** No public function and no command may panic on any input. A malformed position,
   checkpoint or corpus is an error exit with a message. The one exception is a debug build's
