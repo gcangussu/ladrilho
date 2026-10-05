@@ -374,6 +374,12 @@ Pulled into the training branch as a fast-forward and checked independently:
 This is a gain for the player that ships, not for the network: the pool still rates the search
 alone, as [Z11-77] intends.
 
+**Shipped (10-05).** `main` (`b38495b`, [0012 T12-33]) puts the proof in the browser master at
+300,000 nodes, the largest cap inside the browser's latency and memory budgets. Pulled, both
+suites green (105 and `ui`'s 201). The same 3,201 pool games at the shipped cap: **+897 ±6**,
+against 856 without and 905 at 2M. 223 games changed, 222 for the better; only 47 differ from
+the 2M replay. So the shipped cap keeps about 85% of the proof's gain.
+
 ## Next
 
 - **Trainer code:** weight averaging (now mostly polish, the dips being small); blending the
