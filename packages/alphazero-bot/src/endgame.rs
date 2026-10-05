@@ -17,8 +17,9 @@
 //! changes nothing. No clock is read ([Z11-18]).
 
 use std::collections::HashMap;
+use std::hash::{BuildHasherDefault, Hasher};
 
-use azul_engine::{Action, AzulState, Outcome, Player, Shuffler};
+use azul_engine::{ACTION_SPACE, Action, AzulState, Outcome, Player, Shuffler};
 
 use crate::search::SearchResult;
 
@@ -42,11 +43,13 @@ pub fn can_end_this_round<S: Shuffler>(s: &AzulState<S>) -> bool {
 }
 
 /// A 128-bit digest of everything that can change within a round. The bag and
-/// the lid cannot (a round only draws at its end), nor can the round, so they
-/// are left out.
+/// the lid cannot (a round only draws at its end), nor can the walls and the
+/// scores (a round tiles and scores only at its end), nor can the round, so
+/// they are left out: every position a prover's table holds is in its root's
+/// round.
 fn key<S: Shuffler>(s: &AzulState<S>) -> u128 {
     let c = s.to_canonical();
-    let mut bytes = [0u8; 96];
+    let mut bytes = [0u8; 72];
     let mut n = 0;
     let mut put = |b: u8| {
         bytes[n] = b;
@@ -57,25 +60,54 @@ fn key<S: Shuffler>(s: &AzulState<S>) -> u128 {
     }
     c.center.iter().for_each(|&x| put(x));
     put(u8::from(c.marker_in_center));
-    for w in &c.walls {
-        for chunk in w.chunks(8) {
-            put(chunk.iter().enumerate().fold(0u8, |acc, (i, &x)| acc | (x << i)));
-        }
-    }
     for p in 0..2 {
         c.pl_color[p].iter().for_each(|&x| put(x as u8));
         c.pl_count[p].iter().for_each(|&x| put(x));
         c.floor[p].iter().for_each(|&x| put(x));
         put(u8::from(c.floor_marker[p]));
-        c.scores[p].to_le_bytes().iter().for_each(|&x| put(x));
     }
     put(u8::from(c.current_player == Player::P1));
-    // Two FNV-1a passes from different offsets: a collision would make a proof
-    // wrong, and at 128 bits none is expected in any search this can run.
-    let fnv = |offset: u64| {
-        bytes[..n].iter().fold(offset, |h, &b| (h ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3))
+    // Two independent multiply-and-rotate chains over eight bytes at a time,
+    // each finished by murmur3's mixer: a collision would make a proof wrong,
+    // and at 128 bits none is expected in any search this can run. Byte at a
+    // time, this was the costliest step of a node.
+    let (words, _) = bytes.as_chunks::<8>();
+    let (mut a, mut b) = (0x243f_6a88_85a3_08d3u64, 0x1319_8a2e_0370_7344u64);
+    for w in &words[..n.div_ceil(8)] {
+        let w = u64::from_le_bytes(*w);
+        a = (a ^ w).wrapping_mul(0x9e37_79b9_7f4a_7c15).rotate_left(29);
+        b = (b ^ w).wrapping_mul(0xc2b2_ae3d_27d4_eb4f).rotate_left(31);
+    }
+    let mix = |mut h: u64| {
+        h ^= h >> 33;
+        h = h.wrapping_mul(0xff51_afd7_ed55_8ccd);
+        h ^= h >> 33;
+        h = h.wrapping_mul(0xc4ce_b9fe_1a85_ec53);
+        h ^ (h >> 33)
     };
-    (u128::from(fnv(0xcbf2_9ce4_8422_2325)) << 64) | u128::from(fnv(0x6c62_272e_07bb_0142))
+    (u128::from(mix(a)) << 64) | u128::from(mix(b))
+}
+
+/// The table's hasher. Its keys are already 128-bit digests (`key`), so
+/// SipHash over them again buys nothing: the two halves are folded. Fixed, so
+/// nothing is seeded from the system.
+#[derive(Default)]
+struct DigestHasher(u64);
+
+impl Hasher for DigestHasher {
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.0 = self.0.rotate_left(8) ^ u64::from(b);
+        }
+    }
+
+    fn write_u128(&mut self, k: u128) {
+        self.0 = (k as u64) ^ ((k >> 64) as u64);
+    }
+
+    fn finish(&self) -> u64 {
+        self.0
+    }
 }
 
 /// One kind of proof: every continuing line scored `cont`.
@@ -84,12 +116,12 @@ struct Prover {
     round: u32,
     cont: i8,
     /// Lower and upper bounds on a position's value, from earlier searches.
-    table: HashMap<u128, (i8, i8)>,
+    table: HashMap<u128, (i8, i8), BuildHasherDefault<DigestHasher>>,
 }
 
 impl Prover {
     fn new<S: Shuffler>(root: &AzulState<S>, cont: i8) -> Prover {
-        Prover { me: root.current_player(), round: root.round_index(), cont, table: HashMap::new() }
+        Prover { me: root.current_player(), round: root.round_index(), cont, table: HashMap::default() }
     }
 
     fn outcome(&self, outcome: Option<Outcome>) -> i8 {
@@ -129,7 +161,8 @@ impl Prover {
         let (mut a, mut b) = (a0, b0);
         let max = s.current_player() == self.me;
         let mut best = if max { BELOW_LOSS - 1 } else { ABOVE_WIN + 1 };
-        for action in ordered(s) {
+        let (moves, len) = ordered(s);
+        for &action in &moves[..len] {
             let mut c = s.clone();
             if c.apply(action).is_err() {
                 continue; // unreachable: `ordered` lists legal actions only
@@ -178,10 +211,25 @@ impl Prover {
 
 /// Legal actions, pattern-line moves before floor moves: the floor is rarely
 /// the move, and alpha-beta lives on trying the good ones first.
-fn ordered<S: Shuffler>(s: &AzulState<S>) -> Vec<Action> {
-    let mut moves: Vec<Action> = s.legal_actions().as_slice().to_vec();
-    moves.sort_by_key(|&a| a % 6 == 5);
-    moves
+/// Ascending within each kind, as the legal set lists them, and built on the
+/// stack: this runs at every node.
+fn ordered<S: Shuffler>(s: &AzulState<S>) -> ([Action; ACTION_SPACE], usize) {
+    let legal = s.legal_actions();
+    let mut moves = [0; ACTION_SPACE];
+    // At most one floor move per source and colour.
+    let mut floor = [0; 30];
+    let (mut len, mut floors) = (0, 0);
+    for &a in legal.as_slice() {
+        if a % 6 == 5 {
+            floor[floors] = a;
+            floors += 1;
+        } else {
+            moves[len] = a;
+            len += 1;
+        }
+    }
+    moves[len..len + floors].copy_from_slice(&floor[..floors]);
+    (moves, len + floors)
 }
 
 /// What the proof decided, for the record and the suite.

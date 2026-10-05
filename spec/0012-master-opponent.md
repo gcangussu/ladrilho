@@ -455,7 +455,16 @@ These requirements were proposals for *0006*, in the manner of [0008 A8-33]. Eac
   only through where its trees go ([0011 Z11-39]). With `twelfth`/120 and no proof it measured
   p95 574 ms, max 927 ms, 48 MB after the corpus, and 485 MB after the search at the maximum.
   The proof keeps a table of about 86 bytes a node beside the search's memo, so its cap is bounded
-  by memory as well as by time ([T12-33]).*
+  by memory as well as by time ([T12-33]).
+
+  *Remeasured on 10-05 after the forward pass learned to skip zero inputs ([0011 Z11-10]) and the
+  endgame proof's nodes got cheaper (no allocation or sort per node, the key hashed a word at a
+  time), with every move and value the same: p50 30 ms, p95 368 ms, p99 468 ms, max 616 ms, 53 MB
+  after the corpus and 436 MB after the search at the maximum, against p50 50, p95 614, p99 819
+  for the build before on the same day. The machine was in use for both, so their maxima are not
+  compared; interleaved A/B runs on fixed position sets, minimum of three, gave 1.36× on moves at
+  the default and 1.5× on the proof alone. A cap or a default that spends the room is a new
+  latency record ([T12-33]), not part of this change.*
 
 ## Verification
 
