@@ -11,7 +11,7 @@ use azul_engine::{AzulState, Player, Seeded, encode_action};
 use support::{Counting, Zero, blank, fixture, game_positions, pose};
 
 fn config(simulations: u32, fpu: f32) -> SearchConfig {
-    SearchConfig { simulations, cpuct: 1.25, fpu }
+    SearchConfig { simulations, cpuct: 1.25, fpu, endgame_nodes: 0 }
 }
 
 /// [Z11-18]: the root's visits sum to exactly the configured count, and the
@@ -276,7 +276,7 @@ fn noise_is_drawn_apart_from_the_shuffle() {
 #[test]
 fn a_memoised_choice_is_the_choice() {
     use azul_alphazero::memo::{Memo, choose_memoised};
-    let config = SearchConfig { simulations: 64, cpuct: 1.25, fpu: 0.25 };
+    let config = SearchConfig { simulations: 64, cpuct: 1.25, fpu: 0.25, endgame_nodes: 0 };
     let memoised = Counting::new(fixture());
     let plain = Counting::new(fixture());
     let mut memo = Memo::new();

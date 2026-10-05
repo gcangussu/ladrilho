@@ -53,7 +53,7 @@ fn the_exports_choose_what_the_crate_chooses_bit_for_bit() {
     let (checkpoint, parity) = (read("test/fixtures/checkpoint.bin"), read("test/fixtures/checkpoint.parity"));
     assert_eq!(load(&checkpoint, &parity), 0, "{}", error());
     let net = Network::load(&checkpoint, &parity).unwrap();
-    let config = SearchConfig { simulations: SIMULATIONS, cpuct: CPUCT, fpu: FPU };
+    let config = SearchConfig { simulations: SIMULATIONS, cpuct: CPUCT, fpu: FPU, endgame_nodes: 0 };
     let mut compared = 0;
     for block in read_messages(&read("latency/corpus.bin")).unwrap().iter().step_by(37) {
         let state = AzulState::from_canonical(&read_canonical(block).unwrap(), Seeded::new(0)).unwrap();

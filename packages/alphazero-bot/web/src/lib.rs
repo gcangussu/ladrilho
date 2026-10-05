@@ -47,7 +47,8 @@ impl Player {
         let canonical = read_canonical(block).map_err(Refusal::Block)?;
         let state = AzulState::from_canonical(&canonical, Seeded::new(0))
             .map_err(|e| Refusal::Block(format!("the position was refused: {e:?}")))?;
-        let config = SearchConfig { simulations, cpuct: self.cpuct, fpu: self.fpu };
+        // The endgame proof stays off in the browser until 0012 ships it ([0011 Z11-76]).
+        let config = SearchConfig { simulations, cpuct: self.cpuct, fpu: self.fpu, endgame_nodes: 0 };
         let mut memo = Memo::new();
         let result = choose_memoised(&self.net, &state, &config, &mut memo).ok_or(Refusal::Terminal)?;
         Ok((result.action, result.value))

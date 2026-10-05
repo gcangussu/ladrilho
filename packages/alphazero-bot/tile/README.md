@@ -67,6 +67,7 @@ worker, not copied into this code, so an update upstream is followed. `info` sho
 `alphazero serve` (the native release binary, built first unless `--no-build`) with the logged
 config of the milestone it plays, `playSimulations` replaced by each `--us` value. The default
 checkpoint is the one `web/shipped.json` names; `--checkpoint tenth/70` picks another milestone.
+`--endgame <nodes>` turns on our endgame proof ([0011 Z11-76]) with that node cap.
 
 ## How a match is played and judged
 
@@ -175,3 +176,20 @@ helped them on a node budget and hurt them on a clock, neither significantly (pa
 p ≈ 0.35 and 0.19); pooled, our score was 68.3% with it and 66.7% without. It did cut our average
 margin, from about +17 to about +2. Single-threaded, our shipped 11,300 simulations beat
 `nnue:600000` 18–2 in 20 games.
+
+**Our endgame mistakes, and the proof that fixes them** ([0011 Z11-76]). Every round-5+ move of
+ours was graded exactly in 42 games against their single-threaded `nnue:600000`, the same deals
+each time:
+
+| our master | positions graded exactly | moves with a worse result | games by score (W–T–L) |
+| --- | --- | --- | --- |
+| eleventh/130, 800 simulations | 168 | 2 (wins thrown into losses) | 33–0–9 |
+| twelfth/120, 11,300 simulations | 169 | 2 (wins thrown into draws) | 28–5–9 |
+| twelfth/120, 11,300 simulations, `--endgame 2000000` | 168 | **0** | 30–3–9 |
+
+Their minimax made none in any run. Fourteen times the simulations did not fix it, which points at
+the search's averaging rather than its budget. With the proof on, twelfth/120 played itself
+without it over the 200 wide seeds, each from both seats: 184 deals split, and in the 16 the proof
+changed it came out ahead every time (7 won both games, 9 won one and drew one), +11.5 points in
+400 games (sign test p ≈ 3 × 10⁻⁵), for about 16% more thinking time.
+

@@ -159,7 +159,7 @@ fn short(seed: u64, k: usize) -> AzulState<Seeded> {
 fn searches_check_the_census_at_every_expansion() {
     const { assert!(cfg!(debug_assertions), "the census check needs debug assertions ([Z11-64])") };
     let net = fixture();
-    let config = SearchConfig { simulations: 60, cpuct: 1.25, fpu: 0.25 };
+    let config = SearchConfig { simulations: 60, cpuct: 1.25, fpu: 0.25, endgame_nodes: 0 };
     let late = late_in_round(0..6);
     assert!(late.iter().any(|s| s.to_canonical().bag.len() < 20), "some of them recycle");
     for s in &late {
@@ -175,7 +175,7 @@ fn searches_check_the_census_at_every_expansion() {
             if s.is_terminal() {
                 break;
             }
-            let r = search(&Zero, &s, &SearchConfig { simulations: 30, cpuct: 1.25, fpu: 0.0 }, None).unwrap();
+            let r = search(&Zero, &s, &SearchConfig { simulations: 30, cpuct: 1.25, fpu: 0.0, endgame_nodes: 0 }, None).unwrap();
             s.apply(r.0.action).unwrap();
         }
     }
@@ -203,7 +203,7 @@ fn the_network_sees_the_observation_and_nothing_past_the_boundary() {
     let mut views = 0;
     for root in late_in_round(10..13).iter().step_by(3) {
         let rec = Recording(Mutex::new(Vec::new()));
-        search(&rec, root, &SearchConfig { simulations: 200, cpuct: 1.25, fpu: 0.0 }, None).unwrap();
+        search(&rec, root, &SearchConfig { simulations: 200, cpuct: 1.25, fpu: 0.0, endgame_nodes: 0 }, None).unwrap();
         let calls = rec.0.into_inner().unwrap();
         assert_eq!(calls[0].0, root.encode());
         let round = root.encode()[azul_engine::OFF_ROUND];
