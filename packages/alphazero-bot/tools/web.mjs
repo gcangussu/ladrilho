@@ -6,7 +6,8 @@
  *
  * Refuses unless the shipped milestone's files match the sha256s
  * `web/shipped.json` records ([T12-9]); its `cpuct` and `fpu` come from the
- * config logged with that milestone ([0011 Z11-34]). The output is git-ignored
+ * config logged with that milestone ([0011 Z11-34]), and the endgame proof's
+ * node cap from `shipped.json` itself ([T12-33]). The output is git-ignored
  * and written only when it changes, so a dev server is not reloaded for
  * nothing.
  */
@@ -22,11 +23,19 @@ const OUT = join(WEB, 'dist', 'payload.ts');
 
 const sha256 = (b) => createHash('sha256').update(b).digest('hex');
 
+/** [T12-33]: [0011 Z11-77]'s range for a node cap. */
+const MAX_ENDGAME_NODES = 1_000_000_000;
+
 /**
- * The shipped milestone's checkpoint, parity file, `cpuct` and `fpu`, or a
- * throw naming what does not match. `shipped` is `web/shipped.json`'s content.
+ * The shipped milestone's checkpoint, parity file, `cpuct`, `fpu` and endgame
+ * node cap, or a throw naming what does not match. `shipped` is
+ * `web/shipped.json`'s content.
  */
 export function shippedMilestone(shipped, packageDir = PACKAGE) {
+  const n = shipped.endgameNodes;
+  if (!Number.isInteger(n) || n < 0 || n > MAX_ENDGAME_NODES) {
+    throw new Error(`shipped.json's endgameNodes must be a whole number in 0..=${MAX_ENDGAME_NODES}, not ${JSON.stringify(n)}`);
+  }
   const dir = join(packageDir, 'milestones', shipped.run, String(shipped.generation));
   const files = {};
   for (const [name, key] of [['checkpoint.bin', 'checkpointSha256'], ['checkpoint.parity', 'paritySha256']]) {
@@ -38,7 +47,13 @@ export function shippedMilestone(shipped, packageDir = PACKAGE) {
   const log = JSON.parse(readFileSync(join(packageDir, 'milestones', 'log.json'), 'utf8'));
   const entry = log.find((e) => e.kind === 'milestone' && e.run === shipped.run && e.generation === shipped.generation);
   if (entry === undefined) throw new Error(`${shipped.run}/${shipped.generation} is not a logged milestone`);
-  return { checkpoint: files['checkpoint.bin'], parity: files['checkpoint.parity'], cpuct: entry.config.cpuct, fpu: entry.config.fpu };
+  return {
+    checkpoint: files['checkpoint.bin'],
+    parity: files['checkpoint.parity'],
+    cpuct: entry.config.cpuct,
+    fpu: entry.config.fpu,
+    endgameNodes: n,
+  };
 }
 
 function main() {
@@ -54,6 +69,7 @@ function main() {
 export const SHIPPED = ${JSON.stringify(shipped)} as const;
 export const CPUCT = ${JSON.stringify(m.cpuct)};
 export const FPU = ${JSON.stringify(m.fpu)};
+export const ENDGAME_NODES = ${JSON.stringify(m.endgameNodes)};
 export const MODULE = '${module.toString('base64')}';
 export const CHECKPOINT = '${m.checkpoint.toString('base64')}';
 export const PARITY = '${m.parity.toString('base64')}';

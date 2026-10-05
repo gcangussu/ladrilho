@@ -14,7 +14,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
-import { apply, fromCanonical, legalActions, newGame, toJSON } from 'engine';
+import { apply, fromCanonical, fromJSON, legalActions, newGame, Rng, toCanonical, toJSON, type AzulJSON } from 'engine';
 import { describe, expect, it } from 'vitest';
 import { canonicalWords as laneWords, frame, readAnswer } from '../eval/chooser.js';
 import { alphazero } from '../eval/crate.js';
@@ -23,7 +23,7 @@ import { LOG, PACKAGE, REPO, binary } from '../eval/paths.js';
 import { SOURCE_PATHS, ladderPaths } from '../eval/provenance.js';
 import { shippedMilestone } from '../tools/web.mjs';
 import { canonicalWords as webWords } from '../web/canonical.js';
-import { CPUCT, FPU, SHIPPED as PAYLOAD_SHIPPED } from '../web/dist/payload.js';
+import { CPUCT, ENDGAME_NODES, FPU, SHIPPED as PAYLOAD_SHIPPED } from '../web/dist/payload.js';
 import { MASTER_SIMULATIONS, SHIPPED, createMaster, moduleBytes, validSimulations } from '../web/index.js';
 
 interface Source {
@@ -345,12 +345,27 @@ describe('the shipped milestone [T12-9], [T12-10], [T12-11]', () => {
     expect(() => shippedMilestone({ ...shipped, generation: 999_999 })).toThrow(/no checkpoint/);
   });
 
-  it('is what the payload carries, with the logged search settings [T12-7]', () => {
+  // Mutation, seen red ([T12-29]), in a copy with its anchor confirmed:
+  // `shippedMilestone` with its range check removed fails this case.
+  it('ships a node cap for the endgame proof, and refuses one out of range [T12-33], [T12-28]', () => {
+    expect(shippedMilestone(shipped).endgameNodes).toBe(shipped.endgameNodes);
+    expect(shipped.endgameNodes).toBeGreaterThan(0);
+    const { endgameNodes: _, ...without } = shipped;
+    for (const bad of [without, ...[-1, 1.5, 1_000_000_001, '200000', null].map((n) => ({ ...shipped, endgameNodes: n }))]) {
+      expect(() => shippedMilestone(bad as never), JSON.stringify(bad.endgameNodes)).toThrow(/endgameNodes/);
+    }
+    for (const n of [0, 1_000_000_000]) expect(() => shippedMilestone({ ...shipped, endgameNodes: n })).not.toThrow();
+  });
+
+  // Mutation, seen red ([T12-29]), in a copy with its anchor confirmed:
+  // `web.mjs` writing `ENDGAME_NODES = 0` into the payload fails this case.
+  it('is what the payload carries, with the logged search settings and the shipped cap [T12-7], [T12-33]', () => {
     expect(PAYLOAD_SHIPPED).toEqual(shipped);
     expect(SHIPPED).toEqual(shipped);
     const log = JSON.parse(readFileSync(LOG, 'utf8'));
     const entry = log.find((e: LogEntry) => e.kind === 'milestone' && e.run === shipped.run && e.generation === shipped.generation);
     expect([CPUCT, FPU]).toEqual([entry.config.cpuct, entry.config.fpu]);
+    expect(ENDGAME_NODES).toBe(shipped.endgameNodes);
   });
 
   it('is no source path of training [T12-11]', () => {
@@ -422,35 +437,98 @@ describe('the module [T12-6], [T12-12], [T12-13], [T12-28]', () => {
     expect(master.memoryBytes()).toBeGreaterThanOrEqual(held);
     for (const n of [99, 200_001, 1000.5]) expect(() => master.choose(position, n), String(n)).toThrow(RangeError);
     expect(() => master.choose(finished(), 100)).toThrow(/terminal/);
+    // [T12-33]: a cap the lane may pass is a node count like the shipped one.
+    for (const n of [-1, 1.5, 1_000_000_001]) await expect(createMaster(undefined, n), String(n)).rejects.toThrow(RangeError);
   });
 });
+
+/** Does a wall row of either player hold four tiles: can the game end this round ([0011 Z11-76])? */
+function canEndThisRound(p: AzulJSON): boolean {
+  return p.players.some((pl) => pl.wall.some((row) => row.reduce((a, b) => a + b, 0) === 4));
+}
+
+/**
+ * Late positions where the endgame proof runs, one after another: games that
+ * mostly fill pattern lines, each stopped once a wall row holds four tiles and
+ * few enough tiles are left for a proof to finish within the shipped cap.
+ */
+function* latePositions(): Generator<AzulJSON> {
+  const rng = new Rng(33);
+  for (let seed = 1; ; seed++) {
+    const s = newGame(seed);
+    while (legalActions(s).length > 0) {
+      const p = toJSON(s);
+      if (canEndThisRound(p) && s.tilesLeft <= 10 && p.legalActions.length > 1) {
+        yield p;
+        break;
+      }
+      const legal = legalActions(s);
+      const lines = legal.filter((a) => a % 6 !== 5);
+      const pool = lines.length > 0 && rng.below(10) < 8 ? lines : legal;
+      apply(s, pool[rng.below(pool.length)]);
+    }
+  }
+}
+
+/** How many late positions [T12-27] may walk before giving up on finding three the proof decides. */
+const LATE_BOUND = 600;
 
 describe('the same moves as the crate [T12-27]', () => {
   // Mutations ([T12-29]), each in a copy with its anchor confirmed: the web
   // crate's `load` storing cpuct and fpu swapped turns this red at the first
   // position; `Seeded::new(1)` in its `choose` leaves it green, as the spec's
-  // table records it must. Every one of the 50 positions is compared, so a
-  // single drifted move fails this case.
-  it('chooses what `alphazero play` chooses, on 50 corpus positions at 800 simulations', { timeout: 600_000 }, async () => {
-    const shipped = JSON.parse(read('web/shipped.json'));
-    const log = JSON.parse(readFileSync(LOG, 'utf8'));
-    const entry = log.find((e: LogEntry) => e.kind === 'milestone' && e.run === shipped.run && e.generation === shipped.generation);
-    const dir = mkdtempSync(join(tmpdir(), 'az-web-'));
-    const config = join(dir, 'config.json');
-    writeFileSync(config, JSON.stringify({ ...entry.config, milestoneSimulations: 800 }));
-    const checkpoint = join(PACKAGE, 'milestones', shipped.run, String(shipped.generation), 'checkpoint.bin');
-    const master = await createMaster();
-    let compared = 0;
-    for (const w of corpusBlocks().filter((_, i) => i % 40 === 0)) {
-      const position = toJSON(fromCanonical(parseBlock(w), 0));
-      if (position.legalActions.length === 0) continue;
-      const native = readAnswer(alphazero(binary('debug'), ['play', checkpoint, '--config', config, '--search', 'milestone'], frame(Array.from(w))));
-      const mine = master.choose(position, 800);
-      expect(mine.action, `corpus position ${compared}`).toBe(native.action);
-      expect(Math.abs(mine.value - native.value)).toBeLessThanOrEqual(1e-5);
-      compared++;
-    }
-    expect(compared).toBeGreaterThanOrEqual(50);
-  });
+  // table records it must; `createMaster` passing 0 to `load` in place of the
+  // payload's cap, `web.mjs` writing `ENDGAME_NODES = 0` into the payload, and
+  // the web crate's player building its `SearchConfig` with `endgame_nodes: 0`
+  // (the module rebuilt) each turn it red on the late positions. Every
+  // position is compared, so a single drifted move fails this case.
+  it(
+    'chooses what `alphazero play` chooses at the shipped cap, on 50 corpus positions and late ones where the proof changes the move',
+    { timeout: 900_000 },
+    async () => {
+      const shipped = JSON.parse(read('web/shipped.json'));
+      const log = JSON.parse(readFileSync(LOG, 'utf8'));
+      const entry = log.find((e: LogEntry) => e.kind === 'milestone' && e.run === shipped.run && e.generation === shipped.generation);
+      const dir = mkdtempSync(join(tmpdir(), 'az-web-'));
+      // `--search play`, the one search the proof follows ([0011 Z11-77]), at 800 simulations.
+      const on = join(dir, 'on.json');
+      const off = join(dir, 'off.json');
+      writeFileSync(on, JSON.stringify({ ...entry.config, playSimulations: 800, playEndgameNodes: shipped.endgameNodes }));
+      writeFileSync(off, JSON.stringify({ ...entry.config, playSimulations: 800, playEndgameNodes: 0 }));
+      const checkpoint = join(PACKAGE, 'milestones', shipped.run, String(shipped.generation), 'checkpoint.bin');
+      const play = (config: string, words: number[]) =>
+        readAnswer(alphazero(binary('debug'), ['play', checkpoint, '--config', config, '--search', 'play'], frame(words)));
+      const master = await createMaster();
+      const compare = (position: AzulJSON, words: number[], label: string) => {
+        const native = play(on, words);
+        const mine = master.choose(position, 800);
+        expect(mine.action, label).toBe(native.action);
+        expect(Math.abs(mine.value - native.value), label).toBeLessThanOrEqual(1e-5);
+        return native.action;
+      };
+      let compared = 0;
+      for (const w of corpusBlocks().filter((_, i) => i % 40 === 0)) {
+        const position = toJSON(fromCanonical(parseBlock(w), 0));
+        if (position.legalActions.length === 0) continue;
+        compare(position, Array.from(w), `corpus position ${compared}`);
+        compared++;
+      }
+      expect(compared).toBeGreaterThanOrEqual(50);
+      // The new configuration ([T12-33]): positions where the proof runs, each
+      // compared, walked until three where it changes the native move — which
+      // a cap lost on the way to the module would play differently. The
+      // shipped player rarely errs at 800 simulations: `twelfth`/120's third
+      // such position is the 202nd. A shipped milestone that errs less needs a
+      // bound raised here, and fails saying so rather than passing vacuously.
+      let changed = 0;
+      let walked = 0;
+      for (const position of latePositions()) {
+        if (changed >= 3 || walked >= LATE_BOUND) break;
+        const words = webWords(toCanonical(fromJSON(position, 0)));
+        if (compare(position, words, `late position ${walked}`) !== play(off, words).action) changed++;
+        walked++;
+      }
+      expect(changed, `late positions where the proof changed the move, in the first ${walked}`).toBeGreaterThanOrEqual(3);
+    },
+  );
 });
-

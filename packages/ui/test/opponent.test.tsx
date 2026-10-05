@@ -23,7 +23,8 @@
 import { render } from '@solidjs/testing-library';
 import { flush } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CENTER, apply, decodeAction, legalActions, newGame, toJSON, type AzulJSON } from 'engine';
+import { CENTER, Rng, apply, decodeAction, legalActions, newGame, toJSON, type AzulJSON } from 'engine';
+import { SHIPPED, createMaster } from 'alphazero-bot/web';
 import { pickName, picksIn } from '../src/components/Displays.jsx';
 import { floorLineName } from '../src/components/FloorLine.jsx';
 import { patternLineName } from '../src/components/PatternLines.jsx';
@@ -1035,7 +1036,61 @@ describe("the master worker's one player [W6-47]", () => {
       expect(reply.choice).toMatchObject({ simulations: 100 });
     }
   });
+
+  // The seat in a configuration it gained with [0012 T12-33]: late positions,
+  // where a wall row holds four tiles and the endgame proof runs. The seat
+  // creates its `Master` as the worker does, with no cap of its own, so it
+  // must play the module's shipped proof — the move a `Master` at the shipped
+  // cap plays, and not the one a `Master` with the proof off plays, on the
+  // positions where those two differ.
+  //
+  // Seen red, on a `git archive` copy with its anchor confirmed:
+  // `createMasterSeat` creating its `Master` with the proof off
+  // (`createMaster(undefined, 0)`).
+  it('[W6-47] plays the endgame proof at the shipped cap, on late positions where it changes the move', { timeout: 180_000 }, async () => {
+    const seat = createMasterSeat();
+    const off = await createMaster(undefined, 0);
+    const shipped = await createMaster(undefined, SHIPPED.endgameNodes);
+    // Walked until two positions where the proof changes the move: it rarely
+    // does, the shipped player being strong, so a fixed handful would test
+    // nothing. Bounded, so a player that never errs fails rather than loops.
+    let differ = 0;
+    let walked = 0;
+    for (const position of latePositions()) {
+      if (differ >= 2 || walked >= 400) break;
+      walked++;
+      const want = shipped.choose(position, 100).action;
+      if (want === off.choose(position, 100).action) continue;
+      differ++;
+      const reply = await seat.answer({ generation: walked, position, tier: 'master', simulations: 100 });
+      expect(reply.ok && reply.choice.action, `late position ${walked}`).toBe(want);
+    }
+    expect(differ, `late positions where the proof changed the move, in the first ${walked}`).toBeGreaterThanOrEqual(2);
+  });
 });
+
+/**
+ * Late positions where the game can end this round, so the master's endgame
+ * proof runs ([0011 Z11-76]): games that mostly fill pattern lines, stopped
+ * once a wall row holds four tiles and few tiles are left.
+ */
+function* latePositions(): Generator<AzulJSON> {
+  const rng = new Rng(47);
+  for (let seed = 1; ; seed++) {
+    const s = newGame(seed);
+    while (legalActions(s).length > 0) {
+      const p = toJSON(s);
+      if (p.players.some((pl) => pl.wall.some((row) => row.reduce((a, b) => a + b, 0) === 4)) && s.tilesLeft <= 10 && p.legalActions.length > 1) {
+        yield p;
+        break;
+      }
+      const legal = legalActions(s);
+      const lines = legal.filter((a) => a % 6 !== 5);
+      const pool = lines.length > 0 && rng.below(10) < 8 ? lines : legal;
+      apply(s, pool[rng.below(pool.length)]);
+    }
+  }
+}
 
 describe('two workers behind the real seam [W6-48]', () => {
   afterEach(() => {
