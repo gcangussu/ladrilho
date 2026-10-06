@@ -661,14 +661,17 @@ next to the tiles that earned them.
   | Arrangement | Width | What goes where |
   | --- | --- | --- |
   | `wide` | ≥ 77 | both boards full size, one either side of the table; each board's workings under it |
-  | `side` | ≥ 50 | the docked board, the table, and the small board, side by side |
-  | `stack` | < 50 | the small board above the table, the docked board below it |
+  | `side` | ≥ 50, on a screen at least as wide as it is tall | the docked board, the table, and the small board, side by side |
+  | `stack` | otherwise | the small board above the table, the docked board below it |
 
   The table is the five factory displays and the centre: in a ring about the centre in `wide`, and
   as three displays over two with the centre beneath in the others. With nothing expanded — no
   disclosure open and no sheet raised — the document MUST NOT scroll vertically at 1280 × 800,
   844 × 390 and 390 × 844 at the default root font-size, in addition to [U3-58]'s horizontal rule.
   Where nothing can be measured the arrangement is `wide`.
+
+  *Side by side only in landscape: on an upright screen wide enough for `side` — a tablet, a tall
+  window — the three columns strand the height and squeeze the table, where stacking uses it.*
 
   *Root ems and not a media query, for the reason [U3-89] gives: a `rem` in a media query resolves
   against the initial font-size and never against a declaration. 390 × 844 is not one of
