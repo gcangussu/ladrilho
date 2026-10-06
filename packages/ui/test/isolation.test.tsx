@@ -13,6 +13,7 @@ import { render } from '@solidjs/testing-library';
 import { CENTER, FLOOR, Rng, apply, decodeAction, encodeAction, newGame, toJSON } from 'engine';
 import type { AzulState } from 'engine';
 import { flush } from 'solid-js';
+import { deal, openSheet } from './sheet-helpers.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { pickName } from '../src/components/Displays.jsx';
 import { floorLineName } from '../src/components/FloorLine.jsx';
@@ -158,9 +159,9 @@ describe('[U3-72] a game played with every door stubbed to throw', () => {
 
     expect(state.isTerminal, 'the game never ended').toBe(true);
 
-    // And a new game too, which is the other moment something might be saved.
-    named('New game').click();
-    flush();
+    // And a new game too, which is the other moment something might be saved —
+    // dealt through the sheet, as every new game is [0006 W6-49].
+    deal(openSheet(screen));
 
     expect(opened, 'the interface reached for something it must never touch').toEqual([]);
   });

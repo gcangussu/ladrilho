@@ -29,6 +29,12 @@ export function GameOver(props: {
   names: string[];
   /** `scoring.bonuses`, by seat [U3-46], [0007 S7-19]. */
   bonuses: readonly [PlayerBonuses, PlayerBonuses] | null;
+  /** [0006 W6-52]: the same seats and a fresh deal, at once. */
+  onRematch?: () => void;
+  /** [0006 W6-52], [U3-104]: the same seats and this deal, at once. */
+  onReplay?: () => void;
+  /** [0006 W6-52]: the new-game sheet. */
+  onChangeSeats?: (event: MouseEvent) => void;
 }): JSX.Element {
   const verdict = (): string => {
     if (props.game.outcome === 0) return 'A draw.';
@@ -77,6 +83,19 @@ export function GameOver(props: {
           )}
         </For>
       </ul>
+      <Show when={props.onRematch}>
+        <div class="game-over-actions">
+          <button type="button" class="deal" onClick={() => props.onRematch?.()}>
+            Rematch
+          </button>
+          <button type="button" class="tool outline" onClick={() => props.onReplay?.()}>
+            Replay this deal
+          </button>
+          <button type="button" class="tool outline" onClick={(event) => props.onChangeSeats?.(event)}>
+            Change seats
+          </button>
+        </div>
+      </Show>
     </section>
   );
 }

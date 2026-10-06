@@ -381,7 +381,7 @@ These requirements were proposals for *0006*, in the manner of [0008 A8-33]. Eac
   make an uneven `master`-against-`master` game possible, which is the cheapest way to watch what
   extra search buys.*
 
-- **[T12-20]** *(Landed as [0006 W6-45].)* The advanced control MUST be rendered only while at
+- **[T12-20]** *(Landed as [0006 W6-45], and since moved into the new-game sheet of [0006 W6-49]: a slider beside the number input, inside the sheet rather than an `Advanced` disclosure.)* The advanced control MUST be rendered only while at
   least one seat is `master`. It sits inside a closed-by-default `<details>` whose summary reads
   `Advanced`.
   - It holds one number input for each `master` seat, and none for any other seat. Each is

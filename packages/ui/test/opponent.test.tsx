@@ -20,7 +20,7 @@
  * [0003 U3-68], through the same helpers the components label them with.
  */
 
-import { render } from '@solidjs/testing-library';
+import { render, within } from '@solidjs/testing-library';
 import { flush } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CENTER, Rng, apply, decodeAction, legalActions, newGame, toJSON, type AzulJSON } from 'engine';
@@ -30,6 +30,7 @@ import { floorLineName } from '../src/components/FloorLine.jsx';
 import { patternLineName } from '../src/components/PatternLines.jsx';
 import { createMasterSeat } from '../src/masters.js';
 import { simulationsLabel } from '../src/components/Seating.jsx';
+import { choiceNames, choices, commit, deal, editSeat, openSheet } from './sheet-helpers.js';
 import {
   EXPERT_AVAILABLE,
   LEVELS,
@@ -886,9 +887,10 @@ describe('the master is offered, and seated [W6-43], [W6-44]', () => {
   it('[W6-43] offers master last, by name, whatever the gate says', async () => {
     expect(LEVELS.at(-1)).toBe('master');
     const { screen } = await mount('?seed=42');
-    for (const select of screen.getAllByRole('combobox') as HTMLSelectElement[]) {
-      const last = [...select.options].at(-1)!;
-      expect([last.value, last.textContent]).toEqual(['master', 'Computer — master']);
+    const sheet = openSheet(screen);
+    for (const seat of [0, 1] as const) {
+      editSeat(sheet, seat);
+      expect([choices(sheet).at(-1)!.value, choiceNames(sheet).at(-1)]).toEqual(['master', 'Master']);
     }
   });
 
@@ -940,53 +942,61 @@ describe('the master is offered, and seated [W6-43], [W6-44]', () => {
   });
 });
 
-describe('the advanced control [W6-45]', () => {
-  const spinbuttons = (screen: Screen): HTMLInputElement[] => screen.queryAllByRole('spinbutton') as HTMLInputElement[];
-  const commit = (input: HTMLInputElement, value: string): void => {
-    input.value = value;
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-    flush();
-  };
+describe("the master's setting in the sheet [W6-45]", () => {
+  const spinbuttons = (sheet: HTMLElement): HTMLInputElement[] =>
+    within(sheet).queryAllByRole('spinbutton') as HTMLInputElement[];
 
-  it('[W6-45] is not there without a master seat', async () => {
+  it('[W6-45] is not there for a seat that is not master', async () => {
     const { screen } = await mount('?seed=42&seating=human-sharp');
-    expect(screen.queryByText('Advanced')).toBeNull();
-    expect(spinbuttons(screen)).toEqual([]);
+    const sheet = openSheet(screen);
+    for (const seat of [0, 1] as const) {
+      editSeat(sheet, seat);
+      expect(spinbuttons(sheet), `Player ${seat + 1}`).toEqual([]);
+      expect(within(sheet).queryByRole('slider'), `Player ${seat + 1}`).toBeNull();
+    }
   });
 
-  it("[W6-45] holds one closed input per master seat, labelled by the seat's name", async () => {
+  it("[W6-45] holds one input beside its master seat, labelled by the seat's name", async () => {
     const { screen } = await mount('?seed=42&seating=human-master');
-    const details = screen.getByText('Advanced').closest('details')!;
-    expect(details.open).toBe(false);
-    const inputs = spinbuttons(screen);
+    const sheet = openSheet(screen);
+    editSeat(sheet, 0);
+    expect(spinbuttons(sheet)).toEqual([]);
+    editSeat(sheet, 1);
+    const inputs = spinbuttons(sheet);
     expect(inputs).toHaveLength(1);
-    expect(screen.getByLabelText(simulationsLabel(1))).toBe(inputs[0]);
+    expect(within(sheet).getByLabelText(simulationsLabel(1))).toBe(inputs[0]);
     expect([inputs[0].value, inputs[0].min, inputs[0].max]).toEqual(['10000', '100', '200000']);
-    expect(details.textContent).toContain('Default 10,000; from 100 to 200,000.');
+    expect(within(sheet).getByRole('slider')).toHaveAttribute('aria-valuetext', '10,000 simulations');
+    expect(sheet.textContent).toContain('Default 10,000; from 100 to 200,000.');
   });
 
   // Seen red, on a copy, with the refusal branch's `return` deleted: the
-  // value 50 reached the seating.
-  it('[W6-45] [W6-44] applies a valid number to its seat alone and deals, and refuses the rest', async () => {
-    const { screen, state } = await mount('?seed=42&seating=master-master&p2Simulations=700');
-    const [first] = spinbuttons(screen);
-    expect(first).toBe(screen.getByLabelText(simulationsLabel(0)));
+  // value 50 reached the staged setting.
+  it('[W6-45] [W6-44] [W6-49] stages a valid number for its seat alone, refuses the rest, and deals on Deal',
+    async () => {
+      const { screen, state } = await mount('?seed=42&seating=master-master&p2Simulations=700');
+      const sheet = openSheet(screen);
+      editSeat(sheet, 0);
+      const [first] = spinbuttons(sheet);
+      expect(first).toBe(within(sheet).getByLabelText(simulationsLabel(0)));
 
-    const before = state.view().seed;
-    commit(first, '2500');
-    expect(state.view().seating.simulations).toEqual([2500, 700]);
-    expect(state.view().seed).not.toBe(before);
+      const before = state.view().seed;
+      commit(first, '2500');
+      // Staged, not dealt [W6-49].
+      expect(state.view().seed).toBe(before);
+      expect(state.view().seating.simulations).toEqual([10_000, 700]);
 
-    const dealt = state.view().seed;
-    for (const bad of ['50', '200001', '12.5', '']) {
-      commit(spinbuttons(screen)[0], bad);
-      expect(state.view().seating.simulations, bad).toEqual([2500, 700]);
-      expect(state.view().seed, bad).toBe(dealt);
-      expect(spinbuttons(screen)[0].value, bad).toBe('2500');
-      const said = [...screen.container.querySelectorAll('.advanced [role="status"]')].map((n) => n.textContent).join('');
-      expect(said, bad).toContain('100 to 200,000');
-    }
-  });
+      for (const bad of ['50', '200001', '12.5', '']) {
+        commit(spinbuttons(sheet)[0], bad);
+        expect(spinbuttons(sheet)[0].value, bad).toBe('2500');
+        expect(within(sheet).getByRole('status').textContent, bad).toContain('100 to 200,000');
+      }
+      expect(state.view().seed).toBe(before);
+
+      deal(sheet);
+      expect(state.view().seating.simulations).toEqual([2500, 700]);
+      expect(state.view().seed).not.toBe(before);
+    });
 });
 
 describe("the master worker's one player [W6-47]", () => {
