@@ -40,6 +40,11 @@ const LABELS: Readonly<Record<Level, string>> = {
   master: 'Computer — master',
 };
 
+/** Who sits at a seat, in words — for the board that seat plays [W6-1]. */
+export function seatLabel(level: Level | null): string {
+  return level === null ? 'Person' : LABELS[level];
+}
+
 /** A seat's simulations input, by the name the seat is shown under [W6-45]. */
 export function simulationsLabel(seat: 0 | 1): string {
   return `Player ${seat + 1}: simulations per move`;

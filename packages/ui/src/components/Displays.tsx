@@ -1,7 +1,7 @@
 import type { JSX } from '@solidjs/web';
 import type { AzulJSON } from 'engine';
 import { CENTER, NUM_COLORS } from 'engine';
-import { For, Repeat, Show, createMemo } from 'solid-js';
+import { For, Show, createMemo } from 'solid-js';
 import { RovingGroup } from './RovingGroup.jsx';
 import { Tile } from './Tile.jsx';
 
@@ -100,9 +100,14 @@ function PickButton(props: {
       tabindex={props.tabIndex}
       onClick={() => props.onChoose(props.pick)}
     >
-      <Repeat count={props.pick.count}>
-        {() => <Tile color={props.pick.color} names={props.names} />}
-      </Repeat>
+      {/* One tile and a count rather than a row of identical tiles [U3-97]: a
+          pick is always every tile of its colour, so it is drawn as one stack. */}
+      <Tile color={props.pick.color} names={props.names} />
+      <Show when={props.pick.count > 1}>
+        <span class="count" aria-hidden="true">
+          {props.pick.count}
+        </span>
+      </Show>
     </button>
   );
 }
@@ -155,6 +160,8 @@ function Picks(props: {
  */
 function Display(props: {
   name: string;
+  /** What the plate shows on screen, where it is shorter than its name [U3-81]. */
+  caption?: string;
   group?: boolean;
   picks: Pick[];
   names: string[];
@@ -162,6 +169,7 @@ function Display(props: {
   selected: (pick: Pick) => boolean;
   tabIndex: (index: number) => number;
   onChoose: (pick: Pick) => void;
+  children?: JSX.Element;
 }): JSX.Element {
   return (
     <div
@@ -170,7 +178,7 @@ function Display(props: {
       aria-label={props.group ? props.name : undefined}
     >
       <span class="display-name" aria-hidden="true">
-        {props.name}
+        {props.caption ?? props.name}
       </span>
       <div class="display-tiles">
         <Picks
@@ -184,6 +192,7 @@ function Display(props: {
         <Show when={props.picks.length === 0}>
           <span class="display-empty">empty</span>
         </Show>
+        {props.children}
       </div>
     </div>
   );
@@ -221,6 +230,7 @@ export function Displays(props: {
             {(factory) => (
               <Display
                 name={factoryName(factory().source)}
+                caption={String(factory().source + 1)}
                 group
                 picks={factory().picks}
                 names={props.names}
@@ -245,19 +255,20 @@ export function Displays(props: {
               selected={isSelected}
               tabIndex={tabIndex}
               onChoose={props.onChoose}
-            />
+            >
+              <Show when={props.game.markerInCenter}>
+                <span class="centre-marker">
+                  <span class="tile marker">
+                    <span class="glyph" aria-hidden="true">
+                      1
+                    </span>
+                  </span>
+                  <span class="sr-only">The first-player marker is in the centre.</span>
+                </span>
+              </Show>
+            </Display>
           )}
         </RovingGroup>
-        <Show when={props.game.markerInCenter}>
-          <p class="centre-marker">
-            <span class="tile marker">
-              <span class="glyph" aria-hidden="true">
-                1
-              </span>
-            </span>{' '}
-            The first-player marker is in the centre.
-          </p>
-        </Show>
       </div>
     </div>
   );

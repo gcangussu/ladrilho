@@ -1,14 +1,33 @@
 import type { JSX } from '@solidjs/web';
-import { decodeAction, encodeAction } from 'engine';
-import { Show, createEffect, createSignal } from 'solid-js';
+import { FLOOR, NUM_ROWS, decodeAction, encodeAction } from 'engine';
+import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import { computerSeat, startNewGame, startWithSeating, submit, view } from '../game.js';
 import { Announcer, announcement } from './Announcer.jsx';
 import { Displays, type Pick } from './Displays.jsx';
 import { GameOver } from './GameOver.jsx';
 import { PlayerBoard } from './PlayerBoard.jsx';
 import { Scoring } from './Scoring.jsx';
-import { Seating } from './Seating.jsx';
+import { Seating, seatLabel } from './Seating.jsx';
 import { Status } from './Status.jsx';
+
+/**
+ * How the table is arranged [U3-95]: both boards full size beside the table,
+ * or one board docked full size and the other shown small — beside the table
+ * where the width allows (`side`), above it where it does not (`stack`).
+ */
+export type Layout = 'wide' | 'side' | 'stack';
+
+/**
+ * The widths, in root ems, at which the arrangement changes [U3-95].
+ *
+ * In root ems and measured against a probe one root em wide, so a larger root
+ * font-size asks for more room exactly as the boards' own `rem` sizes do —
+ * which is the distinction [U3-89] draws between the room a board is given and
+ * the viewport. A media query cannot make it: a `rem` there resolves against the
+ * initial font-size and never against a declaration.
+ */
+const WIDE_FROM = 77;
+const SIDE_FROM = 50;
 
 /**
  * The whole interface, and the only component that reads the published view
@@ -28,8 +47,100 @@ export function App(): JSX.Element {
 
   const [selection, setSelection] = createSignal<Pick | null>(null);
   let root!: HTMLElement;
+  let probe!: HTMLDivElement;
   /** The group that last held focus, so [U3-57] can find its way back. */
   let lastGroup = 'factories';
+
+  /**
+   * The arrangement, decided from the width the interface has against the
+   * root font-size [U3-95]. Where nothing can be measured — jsdom has no
+   * `ResizeObserver` and no layout — it is the arrangement that docks nothing.
+   */
+  const [layout, setLayout] = createSignal<Layout>('wide');
+  let observer: ResizeObserver | null = null;
+  const measure = (): void => {
+    const em = probe.getBoundingClientRect().width;
+    if (em === 0) return;
+    const width = root.clientWidth / em;
+    setLayout(width >= WIDE_FROM ? 'wide' : width >= SIDE_FROM ? 'side' : 'stack');
+  };
+  /**
+   * Started from the root's `ref` rather than from `onSettled`, whose returned
+   * cleanup ran before the first resize arrived and left the arrangement
+   * frozen at whatever the first measurement said.
+   */
+  const observe = (el: HTMLElement): void => {
+    root = el;
+    if (typeof ResizeObserver === 'undefined') return;
+    queueMicrotask(() => {
+      // The probe as well as the root: a change of root font-size resizes the
+      // probe and nothing else, and it changes the answer all the same.
+      observer = new ResizeObserver(measure);
+      observer.observe(root);
+      observer.observe(probe);
+      measure();
+    });
+    // Belt and braces: a resize observer delivers on the rendering steps, and a
+    // page that is not being painted gets none. A window resize still arrives.
+    window.addEventListener('resize', measure);
+  };
+  onCleanup(() => {
+    observer?.disconnect();
+    window.removeEventListener('resize', measure);
+  });
+
+  /** The people at the table, by seat. */
+  const people = (): number[] => [0, 1].filter((seat) => view().seating.players[seat] === null);
+  const hotSeat = (): boolean => people().length === 2;
+
+  /**
+   * Hot-seat on a docked arrangement [U3-103]: the seat whose board is docked,
+   * and the seat the curtain is waiting on, if it is up.
+   *
+   * The docked board follows the player to move, but only through the
+   * curtain: when a ply passes the turn the curtain names the next player and
+   * covers the table, and the boards change places when that player lifts it —
+   * never under the finger of the player who just moved.
+   */
+  const [shown, setShown] = createSignal(0);
+  const [curtain, setCurtain] = createSignal<number | null>(null);
+  createEffect(
+    () => ({
+      mover: game().currentPlayer,
+      over: game().isTerminal,
+      docks: layout() !== 'wide' && hotSeat(),
+    }),
+    ({ mover, over, docks }) => {
+      if (!docks || over) {
+        setShown(mover);
+        setCurtain(null);
+      } else if (mover !== shown()) {
+        setCurtain(mover);
+      }
+    },
+  );
+  const lift = (): void => {
+    const next = curtain();
+    if (next === null) return;
+    setShown(next);
+    setCurtain(null);
+  };
+
+  /** Which board is docked, or `null` where both are full size [U3-103]. */
+  const docked = (): number | null => {
+    if (layout() === 'wide') return null;
+    const seats = people();
+    if (seats.length === 1) return seats[0];
+    return seats.length === 2 ? shown() : 0;
+  };
+  const roleOf = (seat: number): 'dock' | 'mini' | null => {
+    const dock = docked();
+    return dock === null ? null : dock === seat ? 'dock' : 'mini';
+  };
+  const curtainUp = (): boolean => curtain() !== null && layout() !== 'wide';
+
+  /** The last round's workings, as a sheet, where the boards leave no room [U3-102]. */
+  const [sheet, setSheet] = createSignal(false);
 
   const legal = (): Set<number> => new Set(game().legalActions);
 
@@ -94,6 +205,29 @@ export function App(): JSX.Element {
       ? { available: destAvailable, onChoose: chooseDest }
       : null;
 
+  /** The selection, on the board it will be placed on [U3-99]. */
+  const holding = (player: number): Pick | null =>
+    humanToMove() && game().currentPlayer === player ? selection() : null;
+
+  /**
+   * A row by its number, the floor by F [U3-100] — the same choice a click on
+   * that row makes, under the same rule: a key for an unavailable row does
+   * nothing [U3-29]. Not while typing into the seat settings.
+   */
+  const onShortcut = (event: KeyboardEvent): void => {
+    if (selection() === null) return;
+    if ((event.target as HTMLElement).closest('input, select, textarea')) return;
+    if (event.key === 'f' || event.key === 'F') {
+      event.preventDefault();
+      chooseDest(FLOOR);
+      return;
+    }
+    if (/^[1-9]$/.test(event.key) && Number(event.key) <= NUM_ROWS) {
+      event.preventDefault();
+      chooseDest(Number(event.key) - 1);
+    }
+  };
+
   /**
    * A selection never survives a ply [U3-28], [U3-64], and focus is never lost
    * across one [U3-57].
@@ -113,83 +247,166 @@ export function App(): JSX.Element {
     },
   );
 
+  const board = (seat: 0 | 1): JSX.Element => (
+    <PlayerBoard
+      name={`Player ${seat + 1}`}
+      seat={seat}
+      seatLabel={seatLabel(view().seating.players[seat])}
+      player={game().players[seat]}
+      floorOccupied={view().floorOccupied[seat]}
+      placed={view().transition?.newlyPlaced[seat] ?? null}
+      scoreDelta={view().transition?.scoreDelta[seat] ?? null}
+      toMove={!game().isTerminal && game().currentPlayer === seat}
+      thinking={view().thinking?.seat === seat}
+      names={names()}
+      destinations={destinations(seat)}
+      holding={holding(seat)}
+      onPutBack={() => setSelection(null)}
+      lastMove={view().lastMoves[seat]}
+      placements={view().scoring?.players[seat].placements ?? null}
+      role={roleOf(seat)}
+    />
+  );
+
   return (
     <main
       class="app"
       aria-label="Azul"
-      ref={root}
+      data-layout={layout()}
+      data-sheet={sheet() && layout() !== 'wide' ? 'workings' : undefined}
+      ref={observe}
       // Escape clears a selection wherever focus happens to be [U3-26].
       onKeyDown={(event) => {
-        if (event.key === 'Escape') setSelection(null);
+        if (event.key === 'Escape') {
+          setSelection(null);
+          setSheet(false);
+        } else onShortcut(event);
       }}
       onFocusIn={(event) => {
         const group = (event.target as HTMLElement).closest<HTMLElement>('[data-group]');
         if (group) lastGroup = group.dataset['group'] ?? lastGroup;
       }}
     >
-      <h1>Azul</h1>
+      <div class="layout-probe" aria-hidden="true" ref={probe} />
       <Announcer message={announcement(view())} />
-      <Status
-        game={game()}
-        seed={view().seed}
-        names={names()}
-        thinking={view().thinking}
-      />
-      <Seating seating={view().seating} onChoose={(next) => startWithSeating(next)} />
 
-      <Show when={game().isTerminal}>
-        <GameOver game={game()} names={names()} bonuses={view().scoring?.bonuses ?? null} />
-      </Show>
+      {/* Everything under the curtain is out of reach while it is up [U3-103]. */}
+      <div class="stage" inert={curtainUp() || undefined}>
+        <header class="topbar">
+          <h1 class="logo">
+            <span class="logo-mark" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+              <i />
+            </span>
+            azul
+          </h1>
+          <Status
+            game={game()}
+            seed={view().seed}
+            names={names()}
+            thinking={view().thinking}
+          />
+          <div class="top-actions">
+            <Show when={layout() !== 'wide' && view().scoring !== null}>
+              <button
+                type="button"
+                class="tool"
+                aria-expanded={sheet() ? 'true' : 'false'}
+                onClick={() => setSheet(!sheet())}
+              >
+                Workings
+              </button>
+            </Show>
+            {/* Who sits where is a setting, and changing it deals a new game
+                [W6-3], so it lives behind its own disclosure and out of the
+                play area [U3-96]. */}
+            <details class="seats-panel">
+              <summary>Seats</summary>
+              <div class="seats-pop">
+                <Seating seating={view().seating} onChoose={(next) => startWithSeating(next)} />
+              </div>
+            </details>
+            {/* A fresh seed, never the one in the URL [U3-47]. */}
+            <button type="button" class="new-game" onClick={() => startNewGame()}>
+              New game
+            </button>
+          </div>
+        </header>
 
-      <Displays
-        game={game()}
-        names={names()}
-        selection={selection()}
-        available={pickAvailable}
-        onChoose={choosePick}
-      />
+        <div class="table">
+          <Displays
+            game={game()}
+            names={names()}
+            selection={selection()}
+            available={pickAvailable}
+            onChoose={choosePick}
+          />
+          <Show when={layout() === 'wide'}>
+            <p class="keys" aria-hidden="true">
+              <span>
+                <kbd>Tab</kbd> factories
+              </span>
+              <span>
+                <kbd>← →</kbd> colours
+              </span>
+              <span>
+                <kbd>Enter</kbd> pick
+              </span>
+              <span>
+                <kbd>1–5</kbd> row
+              </span>
+              <span>
+                <kbd>F</kbd> floor
+              </span>
+              <span>
+                <kbd>Esc</kbd> put back
+              </span>
+            </p>
+          </Show>
+        </div>
 
-      <div class="boards">
-        <PlayerBoard
-          name="Player 1"
-          player={game().players[0]}
-          floorOccupied={view().floorOccupied[0]}
-          placed={view().transition?.newlyPlaced[0] ?? null}
-          scoreDelta={view().transition?.scoreDelta[0] ?? null}
-          toMove={!game().isTerminal && game().currentPlayer === 0}
-          names={names()}
-          destinations={destinations(0)}
-        />
-        <PlayerBoard
-          name="Player 2"
-          player={game().players[1]}
-          floorOccupied={view().floorOccupied[1]}
-          placed={view().transition?.newlyPlaced[1] ?? null}
-          scoreDelta={view().transition?.scoreDelta[1] ?? null}
-          toMove={!game().isTerminal && game().currentPlayer === 1}
-          names={names()}
-          destinations={destinations(1)}
-        />
+        <Show when={game().isTerminal}>
+          <GameOver game={game()} names={names()} bonuses={view().scoring?.bonuses ?? null} />
+        </Show>
+
+        {board(0)}
+        {board(1)}
+
+        {/* The workings of the last round, for as long as it is the last round
+            [U3-82]. Unlike the transition marking of [U3-43] this does not clear
+            on the next ply — reading a round's arithmetic takes longer than a
+            ply does. Under each board where the table has room, as a sheet
+            where it has not [U3-102]. */}
+        <Show when={view().scoring}>
+          {(scoring) => (
+            <Scoring
+              scoring={scoring()}
+              names={names()}
+              playerNames={['Player 1', 'Player 2']}
+              onClose={sheet() && layout() !== 'wide' ? () => setSheet(false) : undefined}
+            />
+          )}
+        </Show>
       </div>
 
-      {/* The workings of the last round, for as long as it is the last round
-          [U3-82]. Unlike the transition marking of [U3-43] this does not clear
-          on the next ply — reading a round's arithmetic takes longer than a
-          ply does. */}
-      <Show when={view().scoring}>
-        {(scoring) => (
-          <Scoring
-            scoring={scoring()}
-            names={names()}
-            playerNames={['Player 1', 'Player 2']}
-          />
-        )}
+      <Show when={curtainUp()}>
+        <div class="curtain" role="dialog" aria-modal="true" aria-label="Pass the device">
+          <p class="curtain-title">Player {(curtain() ?? 0) + 1}’s turn</p>
+          <p class="curtain-text">
+            Pass the device. Your board is under this screen until you are ready.
+          </p>
+          <button
+            type="button"
+            class="lift"
+            ref={(el: HTMLButtonElement) => queueMicrotask(() => el.focus())}
+            onClick={lift}
+          >
+            Show Player {(curtain() ?? 0) + 1}’s board
+          </button>
+        </div>
       </Show>
-
-      {/* A fresh seed, never the one in the URL [U3-47]. */}
-      <button type="button" class="new-game" onClick={() => startNewGame()}>
-        New game
-      </button>
     </main>
   );
 }
