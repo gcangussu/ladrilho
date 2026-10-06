@@ -257,7 +257,7 @@ describe('rails [U3-98]', () => {
     { width: 1024, height: 768, layout: 'side' },
     { width: 844, height: 390, layout: 'side' },
     { width: 390, height: 844, layout: 'stack' },
-  ])('[U3-98] lights a rail past the wall and inside the board, the floor level with it, at $width × $height',
+  ])('[U3-98] [U3-99] lights a rail past the wall and inside the board, the floor and the strip level with it, at $width × $height',
     async ({ width, height: tall, layout }) => {
       const doc = await load(width, tall);
       await settleOn(doc, layout);
@@ -272,6 +272,12 @@ describe('rails [U3-98]', () => {
       expect(rail.right - wall.right, 'the rail has no outset past the wall').toBeGreaterThanOrEqual(4);
       expect(rail.right, 'the rail runs past the board').toBeLessThan(inner.right);
       expect(Math.round(floor.left), 'the floor is not level with the rails').toBe(Math.round(rail.left));
+      // And the strip saying what is held runs edge to edge with them [U3-99].
+      // Seen red, on a copy, with the docked strip set at the board's padding
+      // again: 5px in from the rails on each side, at all three docked sizes.
+      const strip = mine.querySelector<HTMLElement>('.hand')!.getBoundingClientRect();
+      expect([Math.round(strip.left), Math.round(strip.right)], 'the strip is not edge to edge with the rails')
+        .toEqual([Math.round(rail.left), Math.round(rail.right)]);
     });
 
   it('[U3-98] runs the floor line under both columns, and no wider than the board', async () => {

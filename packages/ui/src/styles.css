@@ -60,6 +60,7 @@
    */
   --tile: 2rem;
   --tile-gap: 0.2rem;
+  --row-gap: 0.1rem;
   /* The gap between a board's two columns, and a panel's padding and border. */
   --play-gap: 1rem;
   --panel-pad: 0.875rem;
@@ -1148,7 +1149,10 @@ input {
 .wall {
   display: flex;
   flex-direction: column;
-  gap: var(--tile-gap);
+  /* Rows sit closer than tiles in a row: each row already carries its own
+     margin, and the lit rails want to read as a stack. The same gap in both
+     columns, so a line stays level with its wall row [U3-88]. */
+  gap: var(--row-gap);
 }
 
 .lines,
@@ -1406,9 +1410,19 @@ input {
   position: absolute;
   z-index: 4;
   top: var(--panel-pad);
-  left: var(--panel-pad);
-  right: var(--panel-pad);
+  /* Edge to edge with the lit rails below it: the play area's margin inside
+     the board, less the rails' 0.3rem outset. */
+  --beside: calc(
+    var(--panel-pad) + max(0px, (100% - 2 * var(--panel-pad) - var(--play-width)) / 2) - 0.3rem
+  );
+  left: var(--beside);
+  right: var(--beside);
   height: 44px;
+}
+
+/* Where the strip has a row of its own, it takes the rails' outset too. */
+.app[data-layout='wide'] .hand {
+  margin-inline: -0.3rem;
 }
 
 .player-board.dock .hand-label,
