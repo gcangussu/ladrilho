@@ -168,6 +168,32 @@ describe('the new-game sheet at a real size [W6-49]', () => {
     });
 });
 
+describe('the result of a game on a docked arrangement [U3-95]', () => {
+  // Seen red, on a copy, with the table's row not given the screen's spare
+  // height: at 768 × 1024 the lines scrolled, 76 pixels of them in 50.
+  it.each([
+    { width: 768, height: 1024, layout: 'stack', whole: true },
+    { width: 390, height: 844, layout: 'stack', whole: false },
+    { width: 844, height: 390, layout: 'side', whole: false },
+  ])('[U3-95] fits the screen at $width × $height, and shows every line where there is room',
+    async ({ width, height: tall, layout, whole }) => {
+      const doc = await load(width, tall, '?seed=12&seating=easy-easy');
+      await settleOn(doc, layout);
+      const deadline = Date.now() + 40_000;
+      while (!doc.querySelector('[aria-label="Final result"]')) {
+        if (Date.now() > deadline) throw new Error('the game never ended');
+        await tick(100);
+      }
+      await tick(100);
+      const root = doc.documentElement;
+      expect(root.scrollHeight, 'the result pushed the page past the screen').toBeLessThanOrEqual(root.clientHeight);
+      const lines = doc.querySelector<HTMLElement>('[aria-label="Final result"] ul')!;
+      if (whole) {
+        expect(lines.scrollHeight, 'the lines scroll though the screen has room').toBeLessThanOrEqual(lines.clientHeight);
+      }
+    }, 60_000);
+});
+
 describe('rails [U3-98]', () => {
   /** The centre of cell `col` of wall row `r` on a board. */
   function wallCell(el: HTMLElement, r: number, col: number): { x: number; y: number } {

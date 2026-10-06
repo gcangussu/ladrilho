@@ -423,14 +423,18 @@ export function App(): JSX.Element {
         </div>
 
         <Show when={game().isTerminal}>
-          <GameOver
-            game={game()}
-            names={names()}
-            bonuses={view().scoring?.bonuses ?? null}
-            onRematch={() => startNewGame()}
-            onReplay={() => replayDeal()}
-            onChangeSeats={openSheet}
-          />
+          {/* A slot the size of the table's room, which the result sits in at
+              its own height and scrolls within only when it must. */}
+          <div class="game-over-slot">
+            <GameOver
+              game={game()}
+              names={names()}
+              bonuses={view().scoring?.bonuses ?? null}
+              onRematch={() => startNewGame()}
+              onReplay={() => replayDeal()}
+              onChangeSeats={openSheet}
+            />
+          </div>
         </Show>
 
         {board(0)}

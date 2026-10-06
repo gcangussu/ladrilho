@@ -228,6 +228,14 @@ input {
 .app[data-layout='stack'] .stage {
   padding: 0 0.5rem 0.5rem;
   gap: 0.3rem;
+  /*
+   * The screen's spare height goes to the table's row, never past it: on a
+   * phone there is none and the row is as tall as its plates, while on a taller
+   * screen the plates sit in its middle and the result of a finished game has
+   * room to grow into.
+   */
+  min-height: 100dvh;
+  grid-template-rows: auto auto 1fr auto;
   grid-template-columns: minmax(0, 1fr);
   grid-template-areas:
     'top'
@@ -1384,6 +1392,7 @@ input {
 
 .app:not([data-layout='wide']) .table {
   padding-top: 0.3rem;
+  justify-content: center;
 }
 
 /*
@@ -1894,22 +1903,37 @@ input {
 }
 
 /*
- * Where the table is small the result takes exactly the table's room — size
- * containment keeps it from growing the row and pushing the page past the
- * screen — with the verdict and the three offers fixed and the per-player
- * lines scrolling between them.
+ * Where the table is small the result sits in a slot exactly the table's room —
+ * size containment keeps the slot from growing the row and pushing the page
+ * past the screen. The result is its own height inside it, and only where the
+ * slot is shorter do the per-player lines scroll, between the verdict and the
+ * three offers.
  */
-.app:not([data-layout='wide']) .game-over {
-  align-self: stretch;
-  width: 100%;
+.app[data-layout='wide'] .game-over-slot {
+  display: contents;
+}
+
+.app:not([data-layout='wide']) .game-over-slot {
+  grid-area: table;
+  z-index: 5;
   contain: size;
+  display: flex;
+  align-items: center;
+  padding: 3px;
+  /* Covers the emptied plates around a shorter card, as the card covers them. */
+  background: var(--ground);
+}
+
+.app:not([data-layout='wide']) .game-over {
+  width: 100%;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
   box-shadow: 0 0 0 3px var(--ink);
 }
 
 .app:not([data-layout='wide']) .game-over .finals {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-height: 0;
   overflow: auto;
 }
@@ -2004,9 +2028,14 @@ input {
 
   .app[data-layout='side'] .stage {
     grid-template-columns: minmax(0, var(--board-width)) minmax(0, 1fr) minmax(0, 12.5rem);
-    grid-template-rows: auto auto;
+    grid-template-rows: auto 1fr;
     min-height: 100dvh;
-    align-content: center;
+  }
+
+  /* The spare height is the table's row (the plates centred in it); the
+     docked board sits level with the middle of the screen. */
+  .app[data-layout='side'] .player-board.dock {
+    align-self: center;
   }
 }
 
@@ -2023,10 +2052,6 @@ input {
     --row: 1.05rem;
   }
 
-  .app[data-layout='stack'] .stage {
-    min-height: 100dvh;
-    align-content: center;
-  }
 }
 
 /* ------------------------------------------------------------------ */
