@@ -796,74 +796,106 @@ input {
     0 10px 14px rgba(0, 0, 0, 0.28);
 }
 
-/* Round the table: five plates in a ring about the centre, as on a real one. */
-.app[data-layout='wide'] .displays {
-  width: 25rem;
-  height: 23.25rem;
+/*
+ * Round the table: five plates in a ring about the centre, as on a real one.
+ * The app says where there is room for it [U3-95] — `data-table`, beside
+ * `data-layout` — and the rows below are the arrangement everywhere else.
+ *
+ * The ring's geometry: plates 7.25rem square on a circle of radius 9.75rem,
+ * at -90°, -18°, 54°, 126° and 198°, the centre pool in the middle.
+ */
+.app[data-table='ring'] .displays {
+  width: 25.8rem;
+  height: 24.9rem;
 }
 
-.app[data-layout='wide'] .roving-group[data-group='factories'] {
+.app[data-table='ring'] .roving-group[data-group='factories'] {
   position: absolute;
   inset: 0;
 }
 
-.app[data-layout='wide'] [data-group='factories'] .display {
+.app[data-table='ring'] [data-group='factories'] .display {
   position: absolute;
+  width: 7.25rem;
+  height: 7.25rem;
 }
 
-.app[data-layout='wide'] [data-group='factories'] .display:nth-child(1) { left: 9.25rem; top: 0.125rem; }
-.app[data-layout='wide'] [data-group='factories'] .display:nth-child(2) { left: 17.9rem; top: 6.4rem; }
-.app[data-layout='wide'] [data-group='factories'] .display:nth-child(3) { left: 14.6rem; top: 16.6rem; }
-.app[data-layout='wide'] [data-group='factories'] .display:nth-child(4) { left: 3.9rem; top: 16.6rem; }
-.app[data-layout='wide'] [data-group='factories'] .display:nth-child(5) { left: 0.55rem; top: 6.4rem; }
+.app[data-table='ring'] [data-group='factories'] .display:nth-child(1) { left: 9.28rem; top: 0; }
+.app[data-table='ring'] [data-group='factories'] .display:nth-child(2) { left: 18.56rem; top: 6.74rem; }
+.app[data-table='ring'] [data-group='factories'] .display:nth-child(3) { left: 15.01rem; top: 17.64rem; }
+.app[data-table='ring'] [data-group='factories'] .display:nth-child(4) { left: 3.55rem; top: 17.64rem; }
+.app[data-table='ring'] [data-group='factories'] .display:nth-child(5) { left: 0; top: 6.74rem; }
 
-.app[data-layout='wide'] .centre {
+.app[data-table='ring'] .centre {
   position: absolute;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -46%);
 }
 
-/* Elsewhere: three plates over two, and the centre as a tray beneath. */
-.app:not([data-layout='wide']) .displays {
+/*
+ * Elsewhere: three plates over two, and the centre as a tray beneath. A plate
+ * is as wide as a third of the table allows, to 7.25rem, so on a phone it gives
+ * up a little air to fit and anywhere wider keeps its margins — the number's,
+ * at its left, and the tiles' off the plate's edges.
+ */
+.table {
+  container: table / inline-size;
+}
+
+.app[data-table='rows'] .displays {
   display: grid;
   gap: 0.4rem;
   justify-items: center;
   width: 100%;
 }
 
-.app:not([data-layout='wide']) .roving-group[data-group='factories'] {
+.app[data-table='rows'] .roving-group[data-group='factories'] {
+  --plate-gap: 0.5rem;
+  --plate-w: min(7.25rem, (100cqw - 2 * var(--plate-gap)) / 3);
   display: grid;
-  grid-template-columns: repeat(6, calc(46px + 0.1rem));
-  column-gap: 0.25rem;
-  row-gap: 0.45rem;
+  grid-template-columns: repeat(6, calc((var(--plate-w) - var(--plate-gap)) / 2));
+  column-gap: var(--plate-gap);
+  row-gap: 0.5rem;
 }
 
-.app:not([data-layout='wide']) [data-group='factories'] .display {
+.app[data-table='rows'] [data-group='factories'] .display {
   grid-column: span 2;
   width: auto;
-  height: calc(2 * 44px + 4px + 0.25rem);
+  height: calc(2 * 44px + 4px + 1rem);
   border-radius: 1.6rem;
 }
 
-.app[data-layout='stack'] .roving-group[data-group='factories'] {
-  column-gap: 0.9rem;
-  row-gap: 0.6rem;
+/* Sideways the height is the scarce thing, and the middle column narrow: the
+   plates have less margin, and the number sits further into it. */
+.app[data-layout='side'] [data-group='factories'] .display-name {
+  left: 0.1rem;
+  font-size: 0.6rem;
 }
 
-.app:not([data-layout='wide']) [data-group='factories'] .display:nth-child(4) {
+/* Sideways the height is the scarce thing, and the middle column narrow. */
+.app[data-layout='side'] .roving-group[data-group='factories'] {
+  --plate-gap: 0.25rem;
+  row-gap: 0.45rem;
+}
+
+.app[data-layout='side'] [data-group='factories'] .display {
+  height: calc(2 * 44px + 4px + 0.25rem);
+}
+
+.app[data-table='rows'] [data-group='factories'] .display:nth-child(4) {
   grid-column: 2 / span 2;
 }
 
-.app:not([data-layout='wide']) [data-group='factories'] .display:nth-child(5) {
+.app[data-table='rows'] [data-group='factories'] .display:nth-child(5) {
   grid-column: 4 / span 2;
 }
 
-.app:not([data-layout='wide']) .centre {
+.app[data-table='rows'] .centre {
   width: 100%;
 }
 
-.app:not([data-layout='wide']) .centre .display {
+.app[data-table='rows'] .centre .display {
   width: 100%;
   min-height: calc(44px + 0.2rem);
   padding: 0.1rem 0.5rem 0.1rem 5.5rem;
@@ -871,13 +903,13 @@ input {
   place-content: center start;
 }
 
-.app:not([data-layout='wide']) .centre .display-name {
+.app[data-table='rows'] .centre .display-name {
   top: 50%;
   left: 1.1rem;
   transform: translateY(-50%);
 }
 
-.app:not([data-layout='wide']) .centre .display-tiles {
+.app[data-table='rows'] .centre .display-tiles {
   max-width: none;
   flex-wrap: nowrap;
 }
@@ -2125,6 +2157,11 @@ input {
     --row: 1.05rem;
   }
 
+  /* The ring is taller than the rows by most of a plate; the board's tiles
+     give a little of it back. */
+  .app[data-layout='stack'][data-table='ring'] {
+    --tile: 2.35rem;
+  }
 }
 
 /* ------------------------------------------------------------------ */
