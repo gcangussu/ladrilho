@@ -120,6 +120,18 @@ describe('the arrangements [U3-95]', () => {
     expect(root.scrollHeight, 'scrolls vertically while thinking').toBeLessThanOrEqual(root.clientHeight);
   });
 
+  // Seen red, on a copy, with the landscape condition dropped: `side` at
+  // 938 × 1226, the factories scrolling sideways in a squeezed middle column.
+  it('[U3-95] stacks on an upright screen wide enough for side, and nothing overflows', async () => {
+    const doc = await load(938, 1226);
+    await settleOn(doc, 'stack');
+    const root = doc.documentElement;
+    expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
+    expect(root.scrollHeight).toBeLessThanOrEqual(root.clientHeight);
+    const table = doc.querySelector<HTMLElement>('.table')!;
+    expect(table.scrollWidth, 'the factories overflow their row').toBeLessThanOrEqual(table.clientWidth);
+  });
+
   // Seen red, on a copy, with the probe measured in pixels instead of root ems
   // (`em` fixed at 16): the arrangement stayed `wide` at a 20px root.
   it('[U3-95] decides the arrangement in root ems, not in pixels', async () => {
@@ -227,6 +239,37 @@ describe('rails [U3-98]', () => {
     // offered: a fresh element, named the same way [U3-93].
     expect(mine.querySelector('[data-row="2"]')?.textContent, 'nothing was placed').toMatch(/holds \d/);
   });
+
+  /** Where a lit row's drawn highlight starts and ends, in the page. */
+  function lit(el: HTMLElement): { left: number; right: number } {
+    const box = el.getBoundingClientRect();
+    const before = getComputedStyle(el, '::before');
+    return { left: box.left + parseFloat(before.left), right: box.right - parseFloat(before.right) };
+  }
+
+  // Seen red, on a copy, with the rail's outset inside its `min()` again: at
+  // all four sizes the rail ended on the wall's edge, its border half cut.
+  it.each([
+    { width: 1280, height: 800, layout: 'wide' },
+    { width: 1024, height: 768, layout: 'side' },
+    { width: 844, height: 390, layout: 'side' },
+    { width: 390, height: 844, layout: 'stack' },
+  ])('[U3-98] lights a rail past the wall and inside the board, the floor level with it, at $width × $height',
+    async ({ width, height: tall, layout }) => {
+      const doc = await load(width, tall);
+      await settleOn(doc, layout);
+      await pick(doc);
+      const mine = board(doc, 'Player 1');
+      const inner = mine.getBoundingClientRect();
+      const wall = mine.querySelector<HTMLElement>('[role="group"][aria-label$="wall"]')!.getBoundingClientRect();
+      const rail = lit(mine.querySelector<HTMLElement>('[data-row="0"]')!);
+      const floor = lit(mine.querySelector<HTMLElement>('.floor-row')!);
+      // The same outset as at its left end, not a sliver: a sub-pixel margin
+      // is a border drawn half off the edge.
+      expect(rail.right - wall.right, 'the rail has no outset past the wall').toBeGreaterThanOrEqual(4);
+      expect(rail.right, 'the rail runs past the board').toBeLessThan(inner.right);
+      expect(Math.round(floor.left), 'the floor is not level with the rails').toBe(Math.round(rail.left));
+    });
 
   it('[U3-98] runs the floor line under both columns, and no wider than the board', async () => {
     const doc = await load(1280, 800);

@@ -62,7 +62,10 @@ export function App(): JSX.Element {
     const em = probe.getBoundingClientRect().width;
     if (em === 0) return;
     const width = root.clientWidth / em;
-    setLayout(width >= WIDE_FROM ? 'wide' : width >= SIDE_FROM ? 'side' : 'stack');
+    // Side by side only on a screen wider than it is tall: upright, the
+    // stacked arrangement uses the height and the side one strands it.
+    const landscape = window.innerWidth >= window.innerHeight;
+    setLayout(width >= WIDE_FROM ? 'wide' : width >= SIDE_FROM && landscape ? 'side' : 'stack');
   };
   /**
    * Started from the root's `ref` rather than from `onSettled`, whose returned
