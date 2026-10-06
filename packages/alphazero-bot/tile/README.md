@@ -45,16 +45,18 @@ Their endgame solver refuses to run on fewer than three threads, so it only runs
 
 - **MCTS** runs it inside the search when the budget is at least 4096 simulations (below that it
   reports `skip_target_sims_lt_min`). The page does the same.
-- **Minimax**, from round 5, probes the solver first. It plays the solver's move when one is
-  proven, and minimax otherwise. The probe is limited to 2M nodes and to `--tail-ms` (default 1000)
-  on a node budget, or to the clock less 120 ms, skipped below a 1 s clock, as on the page. This is
-  the page's own tail-probe branch. The page's *default* threaded path instead races the solver
-  against minimax on at most two threads, which the solver refuses
-  (`skip_tail_solver_web_threads_lt3:2`), and minimax then has the other threads (6 of 8). The
-  solutions the page works out ahead while its opponent thinks use a single-threaded search, which
-  also declines here (`lt3:1`). So in practice the page's minimax appears not to solve endgames at
-  all; this was measured in Node, not in a browser. `--tail off` leaves the probe out, which is
-  closer to that, except that minimax keeps all its threads.
+- **Minimax**, from round 5, follows `--tail`:
+  - `race` (the default) is what the page does by default: the solver raced against minimax on
+    at most two of the threads, minimax on the rest, with the page's timeout (the clock less
+    120 ms, skipped below a 1 s clock; `--tail-ms` on a node budget) and its cancel timer. The
+    solver refuses fewer than three threads (`skip_tail_solver_web_threads_lt3:2`), so it
+    declines and minimax decides, on two threads fewer. The solutions the page works out ahead
+    while its opponent thinks use a single-threaded search, which also declines here (`lt3:1`),
+    so in practice the page's minimax appears not to solve endgames at all; this was measured in
+    Node, not in a browser.
+  - `on` probes the solver first, on every thread, and plays its move when one is proven,
+    minimax otherwise: the page's tail-probe branch, which its default path does not take.
+  - `off` is minimax alone, on every thread.
 
 The `solved` column is the share of their moves the solver proved, and each game's line has
 `theirSolved`. `--workers` defaults to cores ÷ their threads.
@@ -195,3 +197,28 @@ changed it came out ahead every time (7 won both games, 9 won one and drew one),
 on a loaded machine. On the idle latency corpus at 11,300 simulations the proof added 11 ms to the
 mean move (174 to 185 ms) and 476 ms to the longest (1.4 to 1.9 s).
 
+
+**The shipped master against their player at several budgets** (6 Oct 2026). Ours held at the
+browser's defaults: twelfth/120, 10,000 simulations, endgame proof at 300,000 nodes, about 63 ms a
+move on one thread. Theirs as listed, `--tail race`; every point plays the same deals (seed 900)
+from both seats; clock runs one game at a time on an otherwise idle machine.
+
+| their player | games | W–D–L | our score | 95% CI | their ms/move |
+| --- | --- | --- | --- | --- | --- |
+| `nnue-ms:250@8` | 100 | 91–1–8 | 91.5% | 84.4–95.5% | 173 |
+| `nnue-ms:500@8` | 100 | 89–3–8 | 90.5% | 83.2–94.8% | 388 |
+| `nnue-ms:1000@8` (the page's default) | 200 | 169–3–28 | 85.3% | 79.7–89.5% | 814 |
+| `nnue-ms:2000@8` | 60 | 49–0–11 | 81.7% | 70.1–89.4% | 1674 |
+| `nnue:100000` | 60 | 55–1–4 | 92.5% | 83.0–96.9% | 164 |
+| `nnue:400000` | 60 | 51–0–9 | 85.0% | 73.9–91.9% | 761 |
+| `nnue:1600000` | 60 | 48–0–12 | 80.0% | 68.2–88.2% | 3173 |
+| `nnue:6400000` | 60 | 39–4–17 | 68.3% | 55.8–78.7% | 12645 |
+| `mcts:4096@8` | 60 | 60–0–0 | 100% | 94.0–100% | 229 |
+| `mcts:16384@8` | 60 | 57–1–2 | 95.8% | 87.5–98.7% | 786 |
+| `mcts:65536@8` | 60 | 59–0–1 | 98.3% | 91.1–99.7% | 2920 |
+
+A logistic fit of each game's result on log₂ of their budget (bootstrap 95% intervals) gives their
+minimax −56 Elo per doubling on the clock (−119 to −1) and −47 on one thread (−75 to −20); their
+MCTS shows no trend. Nothing tested beats ours, and where theirs would is an extrapolation: the
+fits cross parity near 46 s a move on 8 threads and 46 million single-threaded nodes, with
+intervals spanning orders of magnitude.

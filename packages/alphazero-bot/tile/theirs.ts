@@ -19,12 +19,15 @@
  * can run, which it never does single-threaded:
  *
  * - shared-tree MCTS runs it inside the search, at 4096 simulations or more;
- * - minimax, from round 5, probes it first and plays its move when it proves
- *   one, minimax otherwise — the page's own tail-probe branch. (The page's
- *   default threaded path races the solver against minimax on at most two
- *   threads, and the solver refuses fewer than three, so there it only
- *   contributes what the page solved ahead while its opponent was thinking.
- *   `tail: false` leaves the probe out.)
+ * - minimax, from round 5, as `tail` says:
+ *   - `race` (the default) is the page's own default path: the solver raced
+ *     against minimax, on at most two of the threads, minimax on the rest.
+ *     The solver refuses fewer than three, so in practice it declines and
+ *     minimax decides, on two threads fewer — which is what the page does;
+ *   - `on` probes the solver first, on every thread, and plays its move when
+ *     it proves one, minimax otherwise — the page's tail-probe branch, which
+ *     its default path does not take;
+ *   - `off` is minimax alone, on every thread.
  *
  * Threaded searches are not repeatable: the threads race.
  *
@@ -70,9 +73,11 @@ const TAIL_CLOCK_MARGIN_MS = 120;
 /** The MCTS solver's own threshold, from its skip reason: below it the solver is not tried. */
 export const MCTS_SOLVER_MIN_SIMS = 4096;
 
+export type TailMode = 'race' | 'on' | 'off';
+
 export interface TheirOptions {
-  /** Probe the endgame solver before minimax from round 5, at three threads or more. */
-  tail: boolean;
+  /** What the minimax does with the endgame solver from round 5, at three threads or more. */
+  tail: TailMode;
   /** The probe's time limit on a node budget; on a clock it is the clock less the page's margin. */
   tailMs: number;
 }
@@ -139,6 +144,20 @@ interface TheirSearch {
     terminalScoreValueWeight: number,
     scoreValueScale: number,
   ): MinimaxRoot;
+  minimax_root_threaded_tail_race_bytes(
+    state: Uint8Array,
+    nodes: number,
+    seed: bigint,
+    threads: number,
+    minimaxThreads: number,
+    tailThreads: number,
+    scoreValueWeight: number,
+    terminalScoreValueWeight: number,
+    scoreValueScale: number,
+    tailScoreValueWeight: number,
+    tailTimeoutMs: number,
+    tailMaxNodes: number,
+  ): { root: MinimaxRoot; tail?: { root?: Root; reason?: string } };
   tail_solve_root_shared_tree_limited_bytes(
     state: Uint8Array,
     threads: number,
@@ -312,10 +331,20 @@ export class TheirPlayer {
     const st = this.t.settings;
     const s = this.search;
     const clock = this.spec.kind === 'nnue-ms' ? this.spec.ms : null;
-    if (this.threads >= 3 && this.t.options.tail && round >= 5) {
-      // The page probes only when the clock is at least a second (below it is its "easy mode").
-      const timeout = clock === null ? this.t.options.tailMs : clock >= 1000 ? clock - TAIL_CLOCK_MARGIN_MS : 0;
-      if (timeout > 0) {
+    const mode = this.t.options.tail;
+    // The page tries the solver only when the clock is at least a second (below it is its
+    // "easy mode"), and gives it the time left less a margin.
+    const tailTimeout =
+      this.threads >= 3 && round >= 5
+        ? clock === null
+          ? this.t.options.tailMs
+          : clock >= 1000
+            ? Math.floor(clock - (performance.now() - started) - TAIL_CLOCK_MARGIN_MS)
+            : 0
+        : 0;
+    if (mode === 'on' && tailTimeout > 0) {
+      const timeout = tailTimeout;
+      {
         // The page's tail weight on this path: the MCTS player's score weight.
         const res = s.tail_solve_root_shared_tree_limited_bytes(
           bytes, this.threads, seed, st.mctsScoreValueWeight, st.scoreValueScale, timeout, TAIL_MAX_NODES,
@@ -334,9 +363,21 @@ export class TheirPlayer {
         canceller.arm(Math.max(0, clock - (performance.now() - started) - safety));
       }
       try {
-        root = s.minimax_root_threaded_bytes(
-          bytes, nodes, seed, this.threads, st.minimaxScoreValueWeight, st.minimaxTerminalScoreValueWeight, st.scoreValueScale,
-        );
+        if (mode === 'race' && tailTimeout > 0) {
+          // The page's split: the solver on at most two threads, minimax on the rest.
+          const tailThreads = Math.min(2, Math.max(1, this.threads - 1));
+          const race = s.minimax_root_threaded_tail_race_bytes(
+            bytes, nodes, seed, this.threads, Math.max(1, this.threads - tailThreads), tailThreads,
+            st.minimaxScoreValueWeight, st.minimaxTerminalScoreValueWeight, st.scoreValueScale,
+            st.mctsScoreValueWeight, tailTimeout, TAIL_MAX_NODES,
+          );
+          if (race.tail?.root?.solver_complete === true) return { id: mostVisited(race.tail.root), work: 0, solved: true };
+          root = race.root;
+        } else {
+          root = s.minimax_root_threaded_bytes(
+            bytes, nodes, seed, this.threads, st.minimaxScoreValueWeight, st.minimaxTerminalScoreValueWeight, st.scoreValueScale,
+          );
+        }
       } finally {
         if (clock !== null) canceller.disarm();
       }
