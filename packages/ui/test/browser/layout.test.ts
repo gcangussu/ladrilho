@@ -215,25 +215,42 @@ const height = (el: HTMLElement): number => Math.round(el.getBoundingClientRect(
  * [0007 S7-31]: each was applied to a `git archive HEAD` copy, run, and seen to
  * fail exactly what it names. Re-run them if the rules they point at move.
  *
- * | Mutation in `src/styles.css` | Fails |
+ * | Mutation | Fails |
  * | --- | --- |
- * | `.destination`: `padding: 0` → `0.25rem`, `border: 0` → `2px solid var(--line)` | both [U3-86] |
+ * | `.destination`: `padding: 0` → `0.25rem`, `border: 0` → `2px solid var(--rule)` | one [U3-86] (the turn passing) |
  * | `.lines, .pattern-lines, .wall`: drop `.wall` from the selector | [U3-88] |
  * | `.board-play`: `flex-wrap: wrap` → `nowrap` | [U3-89], and [U3-58] with it |
- * | `.pattern-lines`: `align-items: flex-end` → `flex-start` | [U3-88], both [U3-92] |
+ * | `.pattern-line`: `justify-content: flex-end` → `flex-start` | both [U3-92] |
+ * | `.pattern-lines`: `align-items: flex-end` → `flex-start` | **nothing** — see below |
  * | `.board-play`: `nowrap` plus `@media (max-width: 900px) { flex-direction: column }` | [U3-89] alone |
  * | `.board-play`: `nowrap` plus `@media (max-width: 56.25rem)` — a **rem** breakpoint | [U3-89] alone |
- * | `.boards`: `minmax(min(100%, var(--board-width)))` → `min(100%, 20rem)` | [U3-94] alone |
- * | `--lines-width`: `7 * --tile + 6 * --tile-gap` → `6 * … + 5 * …` (under-measures) | [U3-94] |
- * | `--lines-width`: → `8 * … + 7 * …` (over-measures) | **nothing** — see below |
- * | `--panel-pad`: `0.75rem` → `2rem` | **nothing** — see below |
- * | `--tile: max(2.75rem, 44px)` → `2.75rem`, `.destination { min-height: 44px }` back | [U3-86] at 15px |
+ * | `App.tsx`: `WIDE_FROM = 77` → `40` (two full boards down to 640px) | [U3-94] alone |
+ * | `--lines-width`: `5 * --tile + 4 * --tile-gap` → `4 * … + 3 * …` (under-measures) | [U3-94] |
+ * | `--lines-width`: → `6 * … + 5 * …` (over-measures) | **nothing** — see below |
+ * | `--panel-pad`: `0.875rem` → `2rem` | **nothing** — see below |
+ * | `--row: max(2.75rem, 44px)` → `2.75rem`, `.destination { min-height: 44px }` back | [U3-86] at 15px |
+ *
+ * Re-run in full when the table redesign ([U3-95]) moved the code they name:
+ * the columns became five tiles wide, `--tile` split into `--tile` and `--row`,
+ * `.boards` went, and which arrangement seats two boards became a width in root
+ * ems in `App.tsx`. Two rows changed what they say, and both are worth reading.
+ *
+ * `.pattern-lines`' `align-items` used to be the [U3-92] mutation and now breaks
+ * nothing: a row is as wide as its column, so the five rows share a right edge
+ * whatever the column does. That is also why [U3-92] measures each line's last
+ * tile now and not the line — measuring the row passed with the tiles filling
+ * from the left, which is the `justify-content` row above.
+ *
+ * `WIDE_FROM` at 55 also broke nothing, and correctly: two boards still fit
+ * whole at the widths the sweep visits above 880. It has to fall below the
+ * width two boards need — 40 seats them at 700 — before a play area comes apart.
  *
  * Two are worth keeping for what they are rather than for what they break. The
  * media query is a working layout, and it fails [U3-89] and nothing else, which
- * is what says that requirement is asserted rather than claimed. The `.boards`
- * one is the layout as it actually shipped for a while: it looks right at 1280
- * and at 390 and is wrong across the whole band between, which is why it took a
+ * is what says that requirement is asserted rather than claimed. The `WIDE_FROM`
+ * one is the descendant of a layout that actually shipped for a while — two
+ * boards seated on a row too narrow for either — which looked right at 1280 and
+ * at 390 and was wrong across the whole band between, which is why it took a
  * person looking at the page to find it and why the sweep exists now.
  *
  * The rem breakpoint is worth its row on its own. It is the mutation a reader
@@ -242,8 +259,9 @@ const height = (el: HTMLElement): number => Math.round(el.getBoundingClientRect(
  * font-size and not against a declaration. Recorded so nobody has to rediscover
  * that the hard way.
  *
- * The last three are about `--board-width`, which restates what the two columns
- * are made of. Two of them stay green, and both greens are the point.
+ * The `--lines-width` and `--panel-pad` rows are about `--board-width`, which
+ * restates what the two columns are made of. Two of them stay green, and both
+ * greens are the point.
  *
  * `--panel-pad` is *used* by `--board-width` rather than copied into it, so
  * moving it moves both together and there is no drift to catch — that class of
@@ -252,8 +270,8 @@ const height = (el: HTMLElement): number => Math.round(el.getBoundingClientRect(
  * counts of each column, and those are caught **in one direction only**: a
  * stylesheet that under-measures seats a board at a width it cannot use and
  * [U3-94] reports it, while one that over-measures merely stacks the boards
- * sooner than it needed to, which costs [U3-60] — a SHOULD, exempt from
- * traceability, and so watched by nothing. The asymmetry is benign and is
+ * sooner than it needed to, which costs room the table could have used —
+ * [U3-95] measures the page at three sizes, not the boards' margin at each. The asymmetry is benign and is
  * stated here rather than left to be discovered.
  *
  * The last row was recorded as failing *nothing*, on the reasoning that a px
@@ -262,14 +280,17 @@ const height = (el: HTMLElement): number => Math.round(el.getBoundingClientRect(
  * measures and can set the root font-size itself. Recording a mutation that
  * stays green is how a blind spot stays visible instead of passing for
  * coverage — and this one turned out to be one line of test away from being no
- * blind spot at all. It fails at 15px, where it measured 314 against 301.
+ * blind spot at all. It fails at 15px, where it measured 276 against 263.
  *
  * The first of those is why the ply assertion measures `.board-play`: against
  * the whole board section it stayed green, both boards being grid items that
  * `align-items: stretch` pins to one height whatever they hold.
  */
 describe('a board that holds still', () => {
-  it.each(VIEWPORTS)('[U3-86] is the same size to move as waiting, at $name', async (viewport) => {
+  // Only where both boards are full size. In the docked arrangements the two
+  // are drawn at different sizes on purpose [U3-103], and [U3-86] is the
+  // per-board claim the next test makes at every viewport.
+  it.each(VIEWPORTS.slice(0, 1))('[U3-86] is the same size to move as waiting, at $name', async (viewport) => {
     const doc = await load(viewport.width, viewport.height);
 
     // At the opening the two boards hold the same nothing and differ only in
@@ -362,9 +383,12 @@ describe('a board that holds still', () => {
       // referent — so the assertion is that the five agree, not where they
       // agree. That the shared edge meets the wall's is [U3-88], at the one
       // viewport where there is a wall beside them to meet.
+      // The last tile of each line, not the line: a row is as wide as its
+      // column, so rows share an edge whatever their tiles do, and it is the
+      // tiles that have to fill toward it.
       for (const who of ['Player 1', 'Player 2']) {
         const rights = patternRows(board(doc, who))
-          .map((line) => Math.round(line.getBoundingClientRect().right));
+          .map((line) => Math.round(line.lastElementChild!.getBoundingClientRect().right));
         expect(rights, who).toHaveLength(NUM_ROWS);
         expect([...new Set(rights)], `${who}: the lines do not share a right edge`).toHaveLength(1);
       }
@@ -458,8 +482,10 @@ describe('a board that holds still', () => {
    */
   it('[U3-94] stacks the boards rather than letting a play area come apart', async () => {
     const seen: string[] = [];
-    for (const width of [1400, 1232, 1231, 1000, 844, 700, 622, 600, 390]) {
+    for (const width of [1400, 1232, 1231, 1000, 844, 700, 622, 600, 390, 320]) {
       const doc = await load(width, 800);
+      // The arrangement is measured after the first paint [U3-95].
+      await new Promise((r) => setTimeout(r, 100));
       const one = board(doc, 'Player 1');
       const two = board(doc, 'Player 2');
       const boardsShareARow =

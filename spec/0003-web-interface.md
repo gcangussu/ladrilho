@@ -6,6 +6,7 @@ status: implemented
 intent:
   - 0002 — Web interface
   - 0005 — A board that holds still, and lines beside its wall
+  - 0011 — A table, not a page
 prefix: U3
 depends-on: 0001 — Engine core, 0002 — Engine conformance vectors
 summary: >
@@ -117,6 +118,8 @@ interface ViewModel {
   transition: Transition | null;  // set for exactly one ply; see [U3-42]
   scoring: RoundScoring | null;   // the most recent round's workings; sticky,
                                   // see [U3-82] and [0007 S7-1]
+  lastMoves: [number | null, number | null];
+                                  // each seat's latest action this game; [U3-101]
 }
 
 interface Transition {
@@ -160,8 +163,8 @@ type Selection = { source: number; color: Color } | null;
   nowhere else.
 - **[U3-6]** Every value a component reads **that derives from the game state** MUST be a declared
   field of the view model. It gains `seating`, `thinking` and `lastChoice` with the computer
-  opponent ([0006 W6-2], [0006 W6-19], [0006 W6-25]), and `scoring` with the workings
-  ([U3-82]). *(Extended by [0006 W6-28].)* The exceptions are the current selection and the stateless engine
+  opponent ([0006 W6-2], [0006 W6-19], [0006 W6-25]), `scoring` with the workings
+  ([U3-82]), and `lastMoves` with the table ([U3-101]). *(Extended by [0006 W6-28].)* The exceptions are the current selection and the stateless engine
   functions of [U3-4]. A component that needs anything else gets a new view-model field, computed
   at publish time.
 
@@ -362,7 +365,9 @@ type Selection = { source: number; color: Color } | null;
   on every other ply.
 - **[U3-43]** After a transition the interface MUST show **exactly** two things about it: the
   newly-placed wall cells, marked, and each player's score change as a delta. The marking MUST
-  clear on the next ply. Points MUST NOT be attributed to individual tiles.
+  clear on the next ply. The transition itself MUST NOT attribute points to individual tiles: a
+  diff of two positions cannot split a delta. *(The points a tile earned are shown since
+  [U3-102], read from the round's record and not from this diff.)*
 
   *"Exactly" is the requirement, and the shortfall it creates against intent 0002 is recorded in
   Scope rather than hidden here.*
@@ -464,9 +469,13 @@ engine's `RoundScoring` ([0007 S7-1]); none of them computes anything.
 
 - **[U3-58]** The board MUST be usable at 1280 × 800 and at 844 × 390 — a laptop, and a phone held
   sideways — with **no horizontal page scroll** at either.
-- **[U3-59]** Interactive targets MUST be at least 44 × 44 CSS pixels.
+- **[U3-59]** Interactive targets MUST be at least 44 × 44 CSS pixels. *(The small board of
+  [U3-103] is the one exception, and only while its seat is to move: its six rows are then move
+  controls under [U3-79], and every move control is unavailable while a computer is to move
+  ([0006 W6-22]) or covered by the curtain while a person is. A small board never carries an
+  available control.)*
 - **[U3-60]** Both players' boards, the factories and the centre SHOULD be visible at once,
-  without scrolling, at 1280 × 800.
+  without scrolling, at 1280 × 800. *(Made a `MUST`, and widened to the phone, by [U3-95].)*
 
 ### A board that holds still, and lines beside its wall
 
@@ -483,6 +492,11 @@ level with the wall rows they feed.
   player who was still reading it. The shown configuration is every board that is not the board of
   the player to move, which is the waiting board and the terminal board alike — so there are two
   configurations here and never three.*
+
+  In the docked arrangements of [U3-103] the two boards are drawn at different sizes on purpose,
+  so there the requirement is what it always literally was — about one board: a board's play area
+  is the same size offered as shown. The docked board keeps its size when the turn passes, and so
+  does the small one.
 
   The sizes MUST agree at any root font-size, not only at the browser's default. *A control's
   minimum is stated in pixels ([U3-59]) and a tile's size in `rem`; if the two are written
@@ -567,6 +581,11 @@ level with the wall rows they feed.
   the width will not seat two boards each wide enough for its lines beside its wall, the boards
   MUST stack instead.
 
+  *(Since [U3-95] "stack instead" is the docked arrangement: one board full size and the other
+  small, beside the table or above it. The prohibition is unchanged and still holds — the small
+  board's play area is never stacked, and the docked one shares a row only in `side`, where it is
+  as wide as its play area asks.)*
+
   A prohibition, because the positive form overclaims at the bottom of the range: below the width
   *one* whole board needs, no arrangement keeps a play area together, the boards are stacked
   anyway, and this requirement has nothing left to give. [U3-89] is what applies there.
@@ -627,6 +646,87 @@ the first. [U3-58] is about horizontal scroll and holds; [U3-60] names only 1280
 says nothing about vertical scrolling either way. It is recorded because it is the visible cost of
 [U3-94] rather than an oversight, and because the alternative was two boards neither of which could
 be read.
+
+### A table, not a page
+
+Serves *intent 0011 — A table, not a page*. The whole game on one screen, arranged the way the
+physical game sits on a table; what a turn asks for said by the board itself; the round's workings
+next to the tiles that earned them.
+
+- **[U3-95]** The interface MUST be arranged in one of three ways, chosen from the width of the
+  main element measured in **root ems** — against an element one root em wide, so that a larger
+  root font-size asks for more room exactly as the boards' own `rem` sizes do ([U3-89]):
+
+  | Arrangement | Width | What goes where |
+  | --- | --- | --- |
+  | `wide` | ≥ 77 | both boards full size, one either side of the table; each board's workings under it |
+  | `side` | ≥ 50 | the docked board, the table, and the small board, side by side |
+  | `stack` | < 50 | the small board above the table, the docked board below it |
+
+  The table is the five factory displays and the centre: in a ring about the centre in `wide`, and
+  as three displays over two with the centre beneath in the others. With nothing expanded — no
+  disclosure open and no sheet raised — the document MUST NOT scroll vertically at 1280 × 800,
+  844 × 390 and 390 × 844 at the default root font-size, in addition to [U3-58]'s horizontal rule.
+  Where nothing can be measured the arrangement is `wide`.
+
+  *Root ems and not a media query, for the reason [U3-89] gives: a `rem` in a media query resolves
+  against the initial font-size and never against a declaration. 390 × 844 is not one of
+  [U3-58]'s viewports; it is here because intent 0011 names the phone held upright.*
+
+- **[U3-96]** The seating controls of [0006 W6-1], and the bag and lid counts of [U3-34], MUST sit
+  each behind its own disclosure in the top bar, closed by default. Their behaviour is unchanged —
+  changing a seat still deals at once ([0006 W6-3]). *(They sat above the factories, in the play
+  area, though changing one ends the game.)*
+
+- **[U3-97]** A source control MUST draw its group as **one** tile carrying the group's count as a
+  numeral when the count exceeds one, and never as that many tiles. Its accessible name is
+  unchanged ([U3-54]). *(A pick is always every tile of its colour, so the control is drawn as the
+  one thing it is.)*
+
+- **[U3-98]** On the board of the player to move, where its lines are beside its wall, an
+  **available** pattern line MUST extend across the wall row it feeds: a press anywhere on wall
+  row *r* activates pattern line *r*. An unavailable line does not extend, and the wall holds no
+  control of its own ([U3-79]). The floor line MUST run under both columns, and never wider than
+  the board.
+
+  *The press falls through the wall to the row beneath it rather than the wall becoming a second
+  control, which would double the universe [U3-79] defines.*
+
+- **[U3-99]** Every board MUST carry a strip under its header that says, in this order of
+  precedence: what its player is holding — the count of tiles, their colour, and their source —
+  while a selection is active on that board; otherwise its seat's last move ([U3-101]);
+  otherwise what a turn asks for. While holding, the strip MUST offer a **Put back** control that
+  clears the selection exactly as [U3-26] does and is not a move control ([U3-79]). The strip MUST
+  NOT change the size of its board when what it says changes. *(In the docked arrangements the
+  docked board's strip lies over its header while holding, and is otherwise not drawn there.)*
+
+- **[U3-100]** With a selection active, the keys <kbd>1</kbd> to <kbd>5</kbd> MUST choose pattern
+  line 1 to 5 and <kbd>F</kbd> the floor, exactly as activating that row's control would — so a
+  key for an unavailable row does nothing ([U3-29]). Not while focus is in a form field.
+
+- **[U3-101]** `submit` MUST record the seat that was to move and the action, as `lastMoves`, and
+  dealing MUST clear it. A board MUST show its seat's last move in game terms: the colour, its
+  source and its destination, decoded with `decodeAction` ([U3-51]). *(The seat is a fact about
+  the position, not about who chose the move, so [U3-31] is untouched. The count is not part of
+  an action and is not claimed.)*
+
+- **[U3-102]** The points each placement earned MUST be shown on its wall cell, read from the
+  record's `placements` ([0007 S7-9]) and from nothing else ([U3-84]), for as long as that record
+  is the most recent ([U3-82]). In `wide` each player's workings MUST sit under that player's
+  board; elsewhere they are a sheet raised by a **Workings** control in the top bar, present while
+  there is a record. *(Not the transition of [U3-43], which a diff produces and which clears on
+  the next ply; the record says what each tile earned, and the diff could not.)*
+
+- **[U3-103]** In `side` and `stack` one board is **docked** — full size, with rows at least
+  [U3-59]'s minimum — and the other is **small**, every line, wall cell and floor slot still
+  drawn ([U3-32]). The docked board is the person's when exactly one seat is a person, Player 1's
+  when neither is, and, when both are, the board of the player to move — changed only through a
+  **curtain**: when a ply passes the turn, a modal dialog naming the next player MUST cover the
+  page, everything beneath it MUST be inert, and the boards MUST change places only when that
+  player activates the dialog's control. In `wide` there is no docking and no curtain.
+
+  *The boards change places behind the curtain and never under the finger of the player who just
+  moved, which is what intent 0005 asked of a board and intent 0011 asks of a shared phone.*
 
 ## Invariants
 
@@ -700,7 +800,8 @@ budget.
   replaced by throwing stubs *(the last two added by [0012 T12-32])* — the way [0002 V2-31] treats [0001 E1-50].
   "No persistence" and "no network" are behaviour, and behaviour is testable.
 - **[U3-73]** The suite MUST check [U3-58], [U3-59], [U3-16], the positional half of [U3-81],
-  and [U3-86], [U3-88], [U3-89], [U3-92] and [U3-94], under Vitest browser mode with the Playwright
+  and [U3-86], [U3-88], [U3-89], [U3-92] and [U3-94] — and, for the table, [U3-95], [U3-98],
+  the size half of [U3-99] and [U3-103] — under Vitest browser mode with the Playwright
   provider, which the testing guide names for real-browser needs. *(Extended by [0006 W6-30]: the
   lane also drives a **real worker** — a tier's ply with the main thread watched for a freeze, and
   one complete game from `expert` ([0008 A8-33]) — because jsdom has no `Worker`, no thread to keep
@@ -844,6 +945,8 @@ documentation is right and this section is stale.
   above, handed on
 - Intent [0005 — A board that holds still, and lines beside its wall](../intent/0005-a-board-that-holds-still.md)
   — the layout requirements [U3-86] through [U3-92], and the two residues recorded beside them
+- Intent [0011 — A table, not a page](../intent/0011-a-table-not-a-page.md) — the arrangements,
+  the board's strip, the rails and the curtain, [U3-95] through [U3-103]
 - Spec [0001 — Engine core](0001-engine-core.md)
 - Spec [0002 — Engine conformance vectors](0002-engine-conformance-vectors.md) — the traceability
   doctrine [U3-76] mirrors, and [0002 V2-31]'s exemption categories

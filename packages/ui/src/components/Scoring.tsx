@@ -89,32 +89,35 @@ function FloorCharge(props: { round: PlayerRound }): JSX.Element {
 /** One player's round: what the wall earned, what the floor cost, and the total. */
 function PlayerRoundSummary(props: {
   name: string;
-  round: PlayerRound;
+  round: number;
+  record: PlayerRound;
   bonuses: PlayerBonuses | null;
   names: string[];
 }): JSX.Element {
   return (
     <section class="scoring-player" aria-label={`${props.name} scoring`}>
-      <h3>{props.name}</h3>
+      <h3>
+        {props.name} <span class="scoring-round">round {props.round + 1}</span>
+      </h3>
       <Show
-        when={props.round.placements.length > 0}
+        when={props.record.placements.length > 0}
         fallback={<p class="no-placements">No pattern line was complete, so nothing was placed.</p>}
       >
         <ul class="placements" aria-label={`${props.name} tiles placed`}>
-          <For each={[...props.round.placements]} keyed={false}>
+          <For each={[...props.record.placements]} keyed={false}>
             {(placement) => <PlacementLine placement={placement()} names={props.names} />}
           </For>
         </ul>
       </Show>
-      <p class="scoring-tiling">Tiles placed {signed(props.round.tiling)}</p>
+      <p class="scoring-tiling">Tiles placed {signed(props.record.tiling)}</p>
 
-      <FloorCharge round={props.round} />
+      <FloorCharge round={props.record} />
 
       <p class="scoring-round-total">
-        Score {props.round.scoreBefore} to {props.round.scoreAfterRound}
-        <Show when={props.round.forgiven > 0}>
+        Score {props.record.scoreBefore} to {props.record.scoreAfterRound}
+        <Show when={props.record.forgiven > 0}>
           {' '}
-          ({props.round.forgiven} forgiven — a round never carries a debt forward)
+          ({props.record.forgiven} forgiven — a round never carries a debt forward)
         </Show>
       </p>
 
@@ -152,16 +155,26 @@ export function Scoring(props: {
   scoring: RoundScoring;
   names: string[];
   playerNames: string[];
+  /** Present while the workings are shown as a sheet [U3-102]. */
+  onClose?: (() => void) | undefined;
 }): JSX.Element {
   return (
     <section class="scoring" aria-label="How the last round scored">
       <h2>Round {props.scoring.round + 1} scoring</h2>
+      <Show when={props.onClose}>
+        {(close) => (
+          <button type="button" class="tool close" onClick={() => close()()}>
+            Close
+          </button>
+        )}
+      </Show>
       <div class="scoring-players">
         <For each={[...props.scoring.players]} keyed={false}>
           {(round, p) => (
             <PlayerRoundSummary
               name={props.playerNames[p]}
-              round={round()}
+              round={props.scoring.round}
+              record={round()}
               bonuses={props.scoring.bonuses === null ? null : props.scoring.bonuses[p]}
               names={props.names}
             />

@@ -1,4 +1,5 @@
 import type { JSX } from '@solidjs/web';
+import { Show } from 'solid-js';
 
 /**
  * One tile, or one empty slot.
@@ -30,12 +31,22 @@ export function Tile(props: {
    * with opacity alone would leave the wall unreadable to a screen reader.
    */
   ghost?: boolean;
+  /**
+   * What this cell earned in the most recent round, as the record states it
+   * [U3-102] — shown on the tile it belongs to, and never computed here.
+   */
+  points?: number | null;
 }): JSX.Element {
   return (
     <span
       class={[
         'tile',
-        { empty: props.color === null, ghost: !!props.ghost, placed: !!props.placed },
+        {
+          empty: props.color === null,
+          ghost: !!props.ghost,
+          placed: !!props.placed,
+          scored: props.points !== undefined && props.points !== null,
+        },
       ]}
       data-color={props.color ?? undefined}
     >
@@ -46,6 +57,13 @@ export function Tile(props: {
         {props.color === null ? 'empty' : props.names[props.color]}
         {props.ghost ? ', not yet placed' : props.placed ? ', just placed' : ''}
       </span>
+      {/* Hidden from assistive technology: the workings panel says the same
+          thing in words, beside the run that earned it [U3-84]. */}
+      <Show when={props.points !== undefined && props.points !== null}>
+        <span class="badge" aria-hidden="true">
+          +{props.points}
+        </span>
+      </Show>
     </span>
   );
 }

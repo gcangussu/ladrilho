@@ -1,5 +1,5 @@
 import type { JSX } from '@solidjs/web';
-import { NUM_COLORS, NUM_ROWS, wallColorAt } from 'engine';
+import { NUM_COLORS, NUM_ROWS, type Placement, wallColorAt } from 'engine';
 import { Repeat } from 'solid-js';
 import { Tile } from './Tile.jsx';
 
@@ -20,9 +20,17 @@ export function Wall(props: {
   wall: number[][];
   /** `[25]` flat row-major, from `transition.newlyPlaced[p]`, or `null` [U3-43]. */
   placed: number[] | null;
+  /**
+   * The most recent round's placements for this player, from the record
+   * [U3-102], or `null`. Each names its own cell and what it earned, so the
+   * wall only has to find the cell — no arithmetic, no second source [U3-84].
+   */
+  placements?: readonly Placement[] | null;
   names: string[];
   label: string;
 }): JSX.Element {
+  const earned = (r: number, col: number): number | null =>
+    props.placements?.find((p) => p.row === r && p.col === col)?.points ?? null;
   return (
     <div class="wall" role="group" aria-label={props.label}>
       <Repeat count={NUM_ROWS}>
@@ -35,6 +43,7 @@ export function Wall(props: {
                   names={props.names}
                   ghost={!props.wall[r][col]}
                   placed={!!props.placed?.[r * NUM_COLORS + col]}
+                  points={earned(r, col)}
                 />
               )}
             </Repeat>

@@ -2,63 +2,91 @@
  * Layout and colour. No rule of the game is expressed here: a tile's colour is
  * a `data-color` the engine numbered, and its glyph is in the markup beside it
  * so colour is never the only cue [U3-36].
+ *
+ * The look is a table [U3-95]: a light stone ground, glazed tiles with a bevel,
+ * ink outlines, and one accent — lime — that means "you can act here" and is
+ * no tile's colour, so it can never be read as one.
  */
 
 :root {
-  --bg: #12141a;
-  --panel: #1c1f28;
-  --line: #333947;
-  --text: #e8eaf0;
-  --dim: #97a0b5;
-  --slot: #262b36;
-  --accent: #f5c451;
-  --tile-0: #3b76d8;
-  --tile-1: #e0b33c;
-  --tile-2: #cf4a45;
-  --tile-3: #23262e;
-  --tile-4: #46b6b0;
-  /*
-   * One tile size and one gap between tiles, for the wall and for the lines
-   * alike. [U3-88] wants pattern line r level with wall row r, and two columns
-   * whose rows are the same height and whose gaps are the same width are level
-   * by construction rather than by two numbers that have to be kept equal.
-   *
-   * `max(2.75rem, 44px)` and not `2.75rem`, because [U3-59]'s minimum is in
-   * pixels and a row is a control on one board and not on the other. With the
-   * floor written on `.destination` as `min-height: 44px`, a root font-size
-   * under 16px pins the offered rows to 44 and lets the shown rows shrink with
-   * the rem — five rows, and the board grows when the turn arrives again. The
-   * floor belongs on the size both configurations share, where there is only
-   * one of it and `.destination` needs no minimum of its own.
-   */
-  --tile: max(2.75rem, 44px);
-  --tile-gap: 0.2rem;
-  /* The gap between a board's two columns, and a panel's padding and border. */
-  --play-gap: 0.75rem;
-  --panel-pad: 0.75rem;
-  --panel-border: 1px;
+  --ground: #e6e7e1;
+  --surface: #f7f7f3;
+  --sunk: #ecede7;
+  --pool: #d9dbd2;
+  --rule: #cdcfc6;
+  --ink: #15171c;
+  --text: #15171c;
+  --dim: #4f535b;
+  --faint: #8a8e84;
+  --accent: #c8f03c;
+  --accent-soft: #d4f45c;
+  --loss: #a8261c;
+  --tile-0: #2456d3;
+  --tile-1: #f2b42c;
+  --tile-2: #db4824;
+  --tile-3: #1b1c22;
+  --tile-4: #109c8a;
+  /* An empty wall cell: the colour that belongs there, pale, with its glyph. */
+  --ghost-0: #dde4f6;
+  --ghost-1: #fbefcf;
+  --ghost-2: #f7dfd7;
+  --ghost-3: #dcdde0;
+  --ghost-4: #d1ece7;
+  --ghost-glyph-0: #7f98dc;
+  --ghost-glyph-1: #c08d22;
+  --ghost-glyph-2: #d0816a;
+  --ghost-glyph-3: #767983;
+  --ghost-glyph-4: #4fa99c;
+
+  --font-display: 'Avenir Next', Avenir, 'Segoe UI Variable Display', 'Trebuchet MS', system-ui,
+    sans-serif;
+  --font-body: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
   /*
-   * What one board needs to hold its play area side by side [U3-94]: the two
-   * columns, the gap between them, and the board's own padding and border.
+   * A tile, and the row it sits in.
    *
-   * Composed from the parts rather than restated as one sum, so the gap, the
-   * padding and the border are *used* here and set in one place each — they
-   * cannot drift from this. What is genuinely written twice is the tile and
-   * gap counts of each column, which the components lay out and this measures;
-   * those the [U3-94] sweep catches, in the direction that matters.
+   * Two sizes rather than one, because a row is a control on one board and not
+   * on the other, and [U3-59]'s minimum is the row's and not the tile's. The
+   * floor belongs on the size both configurations share — `--row` — where
+   * there is only one of it, so the two configurations of [U3-86] cannot part
+   * company at a root font-size nothing in the page sets: `max(2.75rem, 44px)`
+   * and not `2.75rem`, for the same reason it always was.
    *
-   * `.boards` uses `--board-width` as the width below which it stops seating
-   * two boards on a row: a board squeezed under it is a board whose lines and
-   * wall come apart, and two boards are worth less than that.
+   * One tile size and one gap for the wall and the lines alike, and every row
+   * one `--row` high: [U3-88] wants pattern line r level with wall row r, and
+   * two columns built from the same two sizes are level by construction.
    */
-  --lines-width: calc(7 * var(--tile) + 6 * var(--tile-gap));
+  --tile: 2rem;
+  --row: max(2.75rem, 44px);
+  --tile-gap: 0.2rem;
+  /* The gap between a board's two columns, and a panel's padding and border. */
+  --play-gap: 1rem;
+  --panel-pad: 0.875rem;
+  --panel-border: 0px;
+
+  color-scheme: light;
+}
+
+/*
+ * What one board needs to hold its play area side by side [U3-94]: the two
+ * columns, the gap between them, and the board's own padding and border. Each
+ * column is five tiles across — the longest pattern line, and a wall row; the
+ * floor line runs under both [U3-98].
+ *
+ * Composed from the parts rather than restated as one sum, so the gap, the
+ * padding and the border are *used* here and set in one place each. And
+ * composed again wherever the parts are set: a custom property built from
+ * others is resolved where it is declared, so declared only on `:root` it would
+ * keep the root's tile size on a board that has a smaller one.
+ */
+:root,
+.app,
+.player-board {
+  --lines-width: calc(5 * var(--tile) + 4 * var(--tile-gap));
   --wall-width: calc(5 * var(--tile) + 4 * var(--tile-gap));
-  --board-width: calc(
-    var(--lines-width) + var(--play-gap) + var(--wall-width) + 2 * var(--panel-pad) +
-      2 * var(--panel-border)
-  );
-  color-scheme: dark;
+  --play-width: calc(var(--lines-width) + var(--play-gap) + var(--wall-width));
+  --board-width: calc(var(--play-width) + 2 * var(--panel-pad) + 2 * var(--panel-border));
 }
 
 * {
@@ -67,9 +95,9 @@
 
 body {
   margin: 0;
-  background: var(--bg);
+  background: var(--ground);
   color: var(--text);
-  font: 16px/1.4 system-ui, sans-serif;
+  font: 15px/1.4 var(--font-body);
   overflow-x: hidden;
 }
 
@@ -84,109 +112,951 @@ body {
   white-space: nowrap;
 }
 
+/* One root em, measured, so the arrangement can be decided in root ems [U3-95]. */
+.layout-probe {
+  position: absolute;
+  width: 1rem;
+  height: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+kbd {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 0 0.3rem;
+  border: 1px solid currentColor;
+  border-radius: 0.3rem;
+  opacity: 0.8;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+button,
+summary,
+select,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 3px solid var(--tile-0);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------ */
+/* The arrangements [U3-95]                                            */
+/* ------------------------------------------------------------------ */
+
 .app {
   max-width: 100%;
-  padding: 0.75rem;
+  min-height: 100dvh;
+}
+
+.stage {
   display: grid;
   gap: 0.75rem;
-}
-
-h1 {
-  font-size: 1.25rem;
-  margin: 0;
-}
-
-h2 {
-  font-size: 1rem;
-  margin: 0;
-}
-
-.status,
-.player-board,
-.game-over,
-.scoring {
-  background: var(--panel);
-  border: var(--panel-border) solid var(--line);
-  border-radius: 0.5rem;
-  padding: var(--panel-pad);
-}
-
-.status p,
-.player-board p {
-  margin: 0.15rem 0;
+  padding: 0 0.75rem 0.75rem;
 }
 
 /*
- * Two boards on a row only where two boards fit whole [U3-94].
+ * Both boards full size, the table between them, and each board's workings
+ * under it. One screen at 1280 × 800 [U3-95].
  *
- * The minimum was 20rem, which is a size a board can be but not a size a board
- * wants: between about 660 and 1230 CSS pixels the row held two boards, each
- * too narrow for its own lines and wall, so both play areas came apart while
- * the layout had the option of stacking the boards and giving each one enough.
- * Seeing both boards at once is [U3-60], a SHOULD; a line level with the wall
- * row it feeds is [U3-88], and it wins.
+ * The board columns are `minmax(0, …)`: a column may be narrower than a board
+ * wants, and then the board's play area wraps inside it rather than pushing
+ * the page sideways [U3-89].
  */
-.boards {
-  display: grid;
-  gap: 0.75rem;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--board-width)), 1fr));
+.app[data-layout='wide'] .stage {
+  height: 100dvh;
+  grid-template-columns: minmax(0, var(--board-width)) minmax(0, 1fr) minmax(0, var(--board-width));
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas:
+    'top top top'
+    'b0 table b1'
+    'w0 table w1';
 }
 
-.player-board.to-move {
-  border-color: var(--accent);
+.app[data-layout='wide'] .seat-0 {
+  grid-area: b0;
 }
 
-.turn-marker {
-  font-weight: 700;
+.app[data-layout='wide'] .seat-1 {
+  grid-area: b1;
 }
 
-.player-header {
+/*
+ * One board docked full size; the other small. Beside the table where the
+ * width allows — a phone held sideways — and above it where it does not.
+ */
+.app:not([data-layout='wide']) {
+  --tile: 1.75rem;
+  --play-gap: 0.6rem;
+  --panel-pad: 0.5rem;
+}
+
+.app[data-layout='side'] .stage {
+  padding: 0.5rem;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, var(--board-width)) minmax(0, 1fr) minmax(0, 9.75rem);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    'dock top mini'
+    'dock table mini';
+}
+
+.app[data-layout='stack'] .stage {
+  padding: 0 0.5rem 0.5rem;
+  gap: 0.3rem;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    'top'
+    'mini'
+    'table'
+    'dock';
+}
+
+.player-board.dock {
+  grid-area: dock;
+}
+
+.player-board.mini {
+  grid-area: mini;
+}
+
+.topbar {
+  grid-area: top;
+}
+
+.table {
+  grid-area: table;
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* The top bar                                                          */
+/* ------------------------------------------------------------------ */
+
+.topbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem 1rem;
-  align-items: baseline;
-  margin-bottom: 0.5rem;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
+  min-height: 3.5rem;
+  min-width: 0;
 }
 
-.score-delta {
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font: 800 1.6rem/1 var(--font-display);
+  letter-spacing: -0.03em;
+}
+
+.logo-mark {
+  display: grid;
+  grid-template-columns: repeat(2, 0.6rem);
+  gap: 2px;
+}
+
+.logo-mark i {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 3px;
+  background: var(--tile-0);
+}
+
+.logo-mark i:nth-child(2) {
+  background: var(--tile-1);
+}
+
+.logo-mark i:nth-child(3) {
+  background: var(--tile-4);
+}
+
+.logo-mark i:nth-child(4) {
+  background: var(--tile-2);
+}
+
+.status {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+  min-width: 0;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  height: 1.9rem;
+  padding: 0 0.75rem;
+  border-radius: 1rem;
+  font-weight: 600;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.pill.round {
+  background: var(--ink);
+  color: var(--surface);
+}
+
+.pill.tiles-left {
+  background: var(--surface);
+  color: var(--dim);
+}
+
+.whose-turn,
+.thinking {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.thinking {
+  display: inline-flex;
+  align-items: center;
+  height: 1.9rem;
+  padding: 0 0.75rem;
+  border-radius: 1rem;
+  background: var(--ink);
   color: var(--accent);
 }
 
-/* A tile, everywhere it appears: a coloured square carrying a glyph. */
+.seed {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--dim);
+}
+
+.seed code {
+  font-family: var(--font-mono);
+}
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.new-game,
+.tool,
+.seats-panel > summary,
+.supply-pop > summary {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0 1rem;
+  border-radius: 0.75rem;
+  border: 2px solid var(--ink);
+  background: var(--surface);
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+
+.supply-pop > summary,
+.tool {
+  border-color: transparent;
+  background: transparent;
+  padding: 0 0.6rem;
+}
+
+.seats-panel > summary::-webkit-details-marker,
+.supply-pop > summary::-webkit-details-marker {
+  display: none;
+}
+
+.seats-panel,
+.supply-pop {
+  position: relative;
+}
+
+.seats-pop,
+.supply {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.5rem);
+  z-index: 30;
+  width: max-content;
+  max-width: min(22rem, 90vw);
+  padding: 1rem;
+  background: var(--surface);
+  border-radius: 1rem;
+  box-shadow: 0 0 0 2px var(--ink), 0 12px 28px rgba(0, 0, 0, 0.18);
+}
+
+.seating {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.seating select,
+.seating input {
+  min-height: 44px;
+  padding: 0 0.6rem;
+  border-radius: 0.6rem;
+  border: 1.5px solid var(--rule);
+  background: var(--surface);
+}
+
+.seating label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  font-weight: 600;
+}
+
+.seating-note {
+  color: var(--dim);
+  font-size: 0.8rem;
+}
+
+.advanced summary {
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+}
+
+.supply {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.supply-colour {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.supply dt,
+.supply dd {
+  margin: 0;
+}
+
+.supply dt {
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------------ */
+/* Tiles                                                               */
+/* ------------------------------------------------------------------ */
+
 .tile {
+  position: relative;
   display: inline-grid;
   place-items: center;
+  flex: none;
   width: var(--tile);
   height: var(--tile);
-  border-radius: 0.3rem;
-  background: var(--slot);
-  border: 1px solid var(--line);
-  font-size: 1.1rem;
+  border-radius: 22%;
+  font-size: calc(var(--tile) * 0.44);
   line-height: 1;
+  color: #fff;
+  background: transparent;
+  box-shadow:
+    inset 0 -3px 0 rgba(0, 0, 0, 0.2),
+    inset 0 2px 0 rgba(255, 255, 255, 0.3),
+    0 1px 1px rgba(0, 0, 0, 0.2);
 }
 
 .tile[data-color='0'] { background: var(--tile-0); }
-.tile[data-color='1'] { background: var(--tile-1); color: #1a1a1a; }
+.tile[data-color='1'] { background: var(--tile-1); color: #33240a; }
 .tile[data-color='2'] { background: var(--tile-2); }
-.tile[data-color='3'] { background: var(--tile-3); }
-.tile[data-color='4'] { background: var(--tile-4); color: #10201f; }
+/* The black tile carries a light rim, so it reads as a tile and never as an
+   empty slot. */
+.tile[data-color='3'] {
+  background: var(--tile-3);
+  box-shadow:
+    inset 0 0 0 1.5px #5d606b,
+    inset 0 -3px 0 rgba(0, 0, 0, 0.4),
+    0 1px 1px rgba(0, 0, 0, 0.2);
+}
+.tile[data-color='4'] { background: var(--tile-4); }
 
-.tile.marker {
-  background: var(--accent);
-  color: #1a1a1a;
-  font-weight: 700;
+/* An empty slot of a line or of the floor. */
+.tile.empty {
+  background: rgba(255, 255, 255, 0.55);
+  border: 1.5px dashed #b3b7ac;
+  box-shadow: none;
 }
 
 /* An empty wall cell shows which colour belongs there [U3-37]. */
 .tile.ghost {
-  background: var(--slot);
-  opacity: 0.55;
-  border-style: dashed;
+  box-shadow: none;
 }
 
+.tile.ghost[data-color='0'] { background: var(--ghost-0); color: var(--ghost-glyph-0); }
+.tile.ghost[data-color='1'] { background: var(--ghost-1); color: var(--ghost-glyph-1); }
+.tile.ghost[data-color='2'] { background: var(--ghost-2); color: var(--ghost-glyph-2); }
+.tile.ghost[data-color='3'] { background: var(--ghost-3); color: var(--ghost-glyph-3); }
+.tile.ghost[data-color='4'] { background: var(--ghost-4); color: var(--ghost-glyph-4); }
+
+.tile.marker {
+  background: var(--surface);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  box-shadow: none;
+  font-family: var(--font-display);
+  font-weight: 800;
+}
+
+/* Placed by the transition this ply [U3-43]. */
 .tile.placed {
-  outline: 3px solid var(--accent);
-  outline-offset: -3px;
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink);
+}
+
+/* What a cell earned last round, on the cell [U3-102]. */
+.badge {
+  position: absolute;
+  right: -0.55rem;
+  top: -0.6rem;
+  z-index: 3;
+  min-width: 1.4rem;
+  height: 1.15rem;
+  padding: 0 0.25rem;
+  display: grid;
+  place-items: center;
+  border-radius: 0.6rem;
+  background: var(--ink);
+  color: var(--accent);
+  font: 800 0.68rem/1 var(--font-body);
+}
+
+/* ------------------------------------------------------------------ */
+/* The table: factory displays around the centre                      */
+/* ------------------------------------------------------------------ */
+
+.table {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding-top: 0.4rem;
+  overflow: auto hidden;
+}
+
+.displays {
+  position: relative;
+  flex: none;
+}
+
+/*
+ * Each display is a plate of its own: numbered, and holding only its own
+ * controls, so which display a control came from is legible from where it
+ * sits and not only from the name assistive technology reads [U3-81].
+ *
+ * A plate is a fixed box — two by two picks — whatever it holds, so emptying
+ * one moves nothing [U3-81].
+ */
+.display {
+  position: relative;
+  width: calc(2 * 44px + 4px + 1rem);
+  height: calc(2 * 44px + 4px + 0.75rem);
+  display: grid;
+  place-content: center;
+  border-radius: 1.9rem;
+  background: var(--surface);
+  box-shadow: 0 2px 0 var(--rule);
+}
+
+.display:has(.display-empty) {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--rule);
+}
+
+.display-name {
+  position: absolute;
+  top: -0.35rem;
+  left: -0.35rem;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 0.35rem;
+  display: grid;
+  place-items: center;
+  border-radius: 0.75rem;
+  background: var(--ink);
+  color: var(--surface);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.display:has(.display-empty) .display-name {
+  background: var(--faint);
+}
+
+.centre .display:has(.display-empty) .display-name {
+  background: transparent;
+}
+
+.display-tiles {
+  display: grid;
+  grid-template-columns: 44px 44px;
+  grid-auto-rows: 44px;
+  gap: 4px;
+}
+
+.display-empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/* The centre is a pool, not a plate: it holds what it holds. */
+.centre .display {
+  width: auto;
+  height: auto;
+  min-width: 10rem;
+  padding: 1.6rem 0.6rem 0.6rem;
+  border-radius: 2.5rem;
+  background: var(--pool);
+  box-shadow: none;
+}
+
+.centre .display:has(.display-empty) {
+  box-shadow: none;
+  background: var(--pool);
+}
+
+.centre .display-name {
+  top: 0.4rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: transparent;
+  color: var(--dim);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.centre .display-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: calc(3 * 44px + 2 * 4px);
+  min-height: 44px;
+}
+
+.centre-marker {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+}
+
+.centre-marker .tile {
+  --tile: 2.3rem;
+}
+
+/* A pick: one tile and a count, drawn as a stack [U3-97]. */
+.pick {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 0.75rem;
+  background: transparent;
+  cursor: pointer;
+}
+
+.pick .tile {
+  --tile: 2.35rem;
+  transition: transform 120ms ease;
+}
+
+.pick:has(.count) .tile {
+  box-shadow:
+    inset 0 -3px 0 rgba(0, 0, 0, 0.2),
+    inset 0 2px 0 rgba(255, 255, 255, 0.3),
+    5px -5px 0 -1px var(--sunk),
+    5px -5px 0 0 var(--rule);
+}
+
+.count {
+  position: absolute;
+  right: -0.3rem;
+  bottom: -0.3rem;
+  z-index: 2;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  padding: 0 0.3rem;
+  display: grid;
+  place-items: center;
+  border-radius: 0.7rem;
+  background: var(--ink);
+  color: var(--surface);
+  border: 2px solid var(--surface);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.pick[aria-disabled='true'] {
+  cursor: default;
+}
+
+.pick[aria-disabled='true'] .tile {
+  filter: saturate(0.55) opacity(0.6);
+}
+
+/* The pick in hand, lifted off its plate. */
+.pick.selected .tile,
+.pick.selected .count {
+  transform: translateY(-6px);
+}
+
+.pick.selected .tile {
+  box-shadow:
+    0 0 0 3px var(--accent),
+    0 0 0 5px var(--ink),
+    0 10px 14px rgba(0, 0, 0, 0.28);
+}
+
+/* Round the table: five plates in a ring about the centre, as on a real one. */
+.app[data-layout='wide'] .displays {
+  width: 25rem;
+  height: 23.25rem;
+}
+
+.app[data-layout='wide'] .roving-group[data-group='factories'] {
+  position: absolute;
+  inset: 0;
+}
+
+.app[data-layout='wide'] [data-group='factories'] .display {
+  position: absolute;
+}
+
+.app[data-layout='wide'] [data-group='factories'] .display:nth-child(1) { left: 9.25rem; top: 0.125rem; }
+.app[data-layout='wide'] [data-group='factories'] .display:nth-child(2) { left: 17.9rem; top: 6.4rem; }
+.app[data-layout='wide'] [data-group='factories'] .display:nth-child(3) { left: 14.6rem; top: 16.6rem; }
+.app[data-layout='wide'] [data-group='factories'] .display:nth-child(4) { left: 3.9rem; top: 16.6rem; }
+.app[data-layout='wide'] [data-group='factories'] .display:nth-child(5) { left: 0.55rem; top: 6.4rem; }
+
+.app[data-layout='wide'] .centre {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -46%);
+}
+
+/* Elsewhere: three plates over two, and the centre as a tray beneath. */
+.app:not([data-layout='wide']) .displays {
+  display: grid;
+  gap: 0.4rem;
+  justify-items: center;
+  width: 100%;
+}
+
+.app:not([data-layout='wide']) .roving-group[data-group='factories'] {
+  display: grid;
+  grid-template-columns: repeat(6, calc(46px + 0.1rem));
+  column-gap: 0.25rem;
+  row-gap: 0.45rem;
+}
+
+.app:not([data-layout='wide']) [data-group='factories'] .display {
+  grid-column: span 2;
+  width: auto;
+  height: calc(2 * 44px + 4px + 0.25rem);
+  border-radius: 1.6rem;
+}
+
+.app:not([data-layout='wide']) [data-group='factories'] .display:nth-child(4) {
+  grid-column: 2 / span 2;
+}
+
+.app:not([data-layout='wide']) [data-group='factories'] .display:nth-child(5) {
+  grid-column: 4 / span 2;
+}
+
+.app:not([data-layout='wide']) .centre {
+  width: 100%;
+}
+
+.app:not([data-layout='wide']) .centre .display {
+  width: 100%;
+  min-height: calc(44px + 0.2rem);
+  padding: 0.1rem 0.5rem 0.1rem 5.5rem;
+  border-radius: 1.7rem;
+  place-content: center start;
+}
+
+.app:not([data-layout='wide']) .centre .display-name {
+  top: 50%;
+  left: 1.1rem;
+  transform: translateY(-50%);
+}
+
+.app:not([data-layout='wide']) .centre .display-tiles {
+  max-width: none;
+  flex-wrap: nowrap;
+}
+
+.keys {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.35rem 0.9rem;
+  color: var(--dim);
+  font-size: 0.78rem;
+}
+
+.keys span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* A player's board                                                    */
+/* ------------------------------------------------------------------ */
+
+.player-board,
+.game-over,
+.scoring-player {
+  background: var(--surface);
+  border: var(--panel-border) solid transparent;
+  border-radius: 1.4rem;
+  padding: var(--panel-pad);
+  box-shadow: 0 2px 0 var(--rule);
+}
+
+.player-board {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+  align-self: start;
+}
+
+/*
+ * The board of the player to move stands up off the table: an ink outline and
+ * a raised edge, as well as the words of [U3-33] and `aria-current`.
+ */
+.player-board.to-move {
+  box-shadow: 0 0 0 3px var(--ink), 0 6px 0 var(--ink);
+}
+
+.player-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 44px;
+}
+
+.avatar {
+  flex: none;
+  width: 2.5rem;
+  height: 2.5rem;
+  display: grid;
+  place-items: center;
+  border-radius: 0.75rem;
+  background: var(--sunk);
+  font: 800 1.05rem/1 var(--font-display);
+}
+
+.to-move .avatar {
+  background: var(--ink);
+  color: var(--accent);
+}
+
+.who {
+  min-width: 0;
+}
+
+.who h2 {
+  font: 700 1.1rem/1.1 var(--font-display);
+  white-space: nowrap;
+}
+
+.seat-kind {
+  font-size: 0.75rem;
+  color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.turn-marker {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 1.8rem;
+  padding: 0 0.7rem;
+  border-radius: 0.9rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--dim);
+  border: 1.5px solid #c3c6bc;
+}
+
+.to-move .turn-marker {
+  color: var(--ink);
+  background: var(--accent);
+  border: 2px solid var(--ink);
+}
+
+.dots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 3px;
+  background: currentColor;
+  animation: think 1.2s infinite ease-in-out;
+}
+
+.dots i:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.dots i:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes think {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dots i {
+    animation: none;
+  }
+}
+
+.score {
+  margin-left: auto;
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  white-space: nowrap;
+}
+
+.score-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.score-num {
+  font: 800 2.4rem/1 var(--font-display);
+  letter-spacing: -0.04em;
+}
+
+.score {
+  position: relative;
+}
+
+/* A chip over the score, taking no room in the header, so a transition ply
+   does not push the name about [U3-43]. */
+.score-delta {
+  position: absolute;
+  right: -0.2rem;
+  bottom: calc(100% - 0.1rem);
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.5rem;
+  background: var(--ink);
+  color: var(--accent);
+  font-size: 0.68rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+/* The strip that says what this seat holds or did [U3-99]. One height, always. */
+.hand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 3.25rem;
+  padding: 0 0.4rem 0 0.9rem;
+  border-radius: 0.9rem;
+  background: var(--sunk);
+  font-size: 0.82rem;
+  color: var(--dim);
+  overflow: hidden;
+}
+
+.hand.holding {
+  background: var(--ink);
+  color: var(--surface);
+}
+
+.hand-text {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hand-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.hand .tile {
+  --tile: 1.4rem;
+}
+
+.hand-tiles {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.put-back {
+  margin-left: auto;
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 0.75rem;
+  border: 0;
+  border-radius: 0.65rem;
+  background: #2e3139;
+  color: var(--surface);
+  font-weight: 600;
+  cursor: pointer;
 }
 
 /*
@@ -198,21 +1068,21 @@ h2 {
  * the two columns fit side by side they sit side by side; where they do not
  * they wrap, which is the stacked arrangement and needs no second rule.
  *
- * The two are not the same question even though `--board-width` now keeps them
- * mostly in step: what the columns ask for is in `rem`, so at a fixed viewport
- * a larger root font-size wraps them and a smaller one does not. That is what
- * [U3-89] is asserted on, and what a breakpoint cannot imitate.
+ * A size container as well, so the floor line can run under both columns and
+ * never wider than the board [U3-98], and so a row reaches across the wall
+ * only where the wall is beside it.
  */
 .board-play {
+  container: play / inline-size;
+  isolation: isolate;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
-  gap: 0.6rem var(--play-gap);
-  margin: 0.5rem 0;
+  gap: var(--tile-gap) var(--play-gap);
 }
 
 /*
- * The two columns, and every row inside them: one height, one gap, from the two
+ * The two columns, and every row inside them: one height, one gap, from the
  * custom properties. Nothing here is per-configuration — this is what makes a
  * board the same size whether its rows are offered or shown [U3-86].
  */
@@ -224,322 +1094,767 @@ h2 {
   gap: var(--tile-gap);
 }
 
+.lines,
+.pattern-lines {
+  width: var(--lines-width);
+  flex: none;
+}
+
 .wall-row,
 .pattern-line,
 .floor-row {
   display: flex;
+  align-items: center;
   gap: var(--tile-gap);
-  height: var(--tile);
+  height: var(--row);
 }
 
 /*
- * The lines column is as wide as the floor line needs, and every pattern line
- * is pushed to its right-hand edge, so a line's filled end meets the wall's
- * left edge — which is where its tiles are going [U3-92]. The staircase this
- * leaves is the printed board's own shape.
+ * Every pattern line is pushed to the right-hand edge of its column, so a
+ * line's filled end meets the wall's left edge — which is where its tiles are
+ * going [U3-92]. The staircase this leaves is the printed board's own shape.
  *
- * A row is as wide as its own tiles and no wider. Full width would be a larger
- * target, but a row of the player to move is a control drawn with a background
- * and an outline, and stretched across the column those cover the empty slots
- * and the staircase disappears from the one board that most needs to show it.
- * Row 1 is then 44 by 44, which is [U3-59]'s minimum and why `--tile` is 44.
+ * A row is as wide as its column: its own tiles sit at the right, and on the
+ * board of the player to move the whole row is the target.
  */
 .pattern-lines {
   align-items: flex-end;
 }
 
 .pattern-line {
+  width: 100%;
   justify-content: flex-end;
 }
 
-/* Tile and penalty; taller than a tile row, and the last row, so it disturbs
-   nothing above it. */
+/* The floor runs under both columns, never wider than the board [U3-98]. */
+.floor-block {
+  width: min(100cqw, var(--play-width));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--tile-gap) 0.6rem;
+}
+
+/* At least a row high, and taller only where the slots have had to wrap —
+   which is the same in both configurations [U3-86]. */
 .floor-row {
+  max-width: 100%;
   height: auto;
+  min-height: var(--row);
 }
 
 .floor-slots {
   display: flex;
-  gap: var(--tile-gap);
   flex-wrap: wrap;
+  gap: var(--tile-gap);
 }
 
 .floor-slot {
+  position: relative;
   display: grid;
-  justify-items: center;
+  place-items: center;
   width: var(--tile);
 }
 
+/* The rung a slot charges, printed in the slot until a tile covers it. */
 .floor-cost {
-  color: var(--dim);
-  font-size: 0.75rem;
-}
-
-.floor-summary,
-.completed {
-  color: var(--dim);
-  font-size: 0.85rem;
-}
-
-.supply {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 0.9rem;
-  margin: 0.25rem 0 0;
-  color: var(--dim);
-  font-size: 0.8rem;
-}
-
-.supply-colour {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.supply dt,
-.supply dd {
-  margin: 0;
-}
-
-.verdict {
-  font-size: 1.1rem;
-  font-weight: 700;
-}
-
-.finals {
-  margin: 0.25rem 0 0;
-  padding-left: 1.1rem;
-  color: var(--dim);
-  font-size: 0.9rem;
-}
-
-/*
- * Controls. Availability is expressed by appearance and by `aria-disabled`; an
- * unavailable control is still present and still focusable [U3-29], so it is
- * dimmed rather than removed.
- */
-
-.displays {
+  position: absolute;
+  inset: 0;
   display: grid;
-  gap: 0.5rem;
+  place-items: center;
+  color: var(--faint);
+  font-size: 0.68rem;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.floor-slot:has(.tile:not(.empty)) .floor-cost {
+  display: none;
+}
+
+.floor-summary {
+  flex: 1 1 5rem;
+  min-width: 5rem;
+  color: var(--dim);
+  font-size: 0.72rem;
+  line-height: 1.25;
 }
 
 /*
- * A group arranges its own controls: the factory plates as a grid of plates
- * below, a board's rows as the `.lines` column above. The centre pool is the
- * one that wants a plain wrapping row, so it is the one that says so — a bare
- * `.roving-group` rule here would tie with `.lines` on specificity and be
- * settled by which of the two happened to be written last.
- */
-.roving-group[data-group='centre'] {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-}
-
-.pick,
-.new-game {
-  min-width: 44px;
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.2rem;
-  padding: 0.25rem;
-  background: var(--slot);
-  border: 2px solid var(--line);
-  border-radius: 0.4rem;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-
-/*
- * A destination is a row of the board that happens to be a control [U3-79], so
- * it is drawn with an inset outline and no border and no padding: an outline is
- * painted over the box rather than added to it, and a row that is offered has
- * to be exactly the size of the same row shown [U3-86]. The border and the
- * 0.25rem of padding this replaces are the four pixels a turn used to cost.
+ * A row that is a control [U3-79]: no border, no padding, and nothing a
+ * configuration adds to the box, so an offered row is exactly the size of the
+ * same row shown [U3-86].
  */
 .destination {
+  position: relative;
   padding: 0;
-  background: var(--slot);
   border: 0;
-  border-radius: 0.4rem;
-  outline: 2px solid var(--line);
-  outline-offset: -2px;
-  color: inherit;
-  font: inherit;
+  border-radius: 0.75rem;
+  background: transparent;
   cursor: pointer;
 }
 
-.pick[aria-disabled='true'],
 .destination[aria-disabled='true'] {
-  opacity: 0.4;
   cursor: default;
 }
 
-.pick.selected {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent);
+/* With tiles in hand, a row that cannot take them is hatched — still there,
+   still focusable [U3-29] — and a row that can is lit. */
+.player-board.offered:has(.hand.holding) .destination[aria-disabled='true'] {
+  background: repeating-linear-gradient(
+    135deg,
+    rgba(21, 23, 28, 0.07) 0 5px,
+    transparent 5px 10px
+  );
 }
 
-.pick:focus-visible,
-.destination:focus-visible,
-.new-game:focus-visible {
-  outline: 3px solid var(--accent);
-  outline-offset: 2px;
+.player-board.offered:has(.hand.holding) .destination[aria-disabled='true'] .tile {
+  opacity: 0.5;
+}
+
+.destination[aria-disabled='false'] {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 2px var(--ink);
+}
+
+.destination[aria-disabled='false']:hover {
+  background: var(--accent);
+  box-shadow: inset 0 0 0 3px var(--ink);
 }
 
 /*
- * Each display is a plate of its own: named, outlined, and holding only its own
- * controls, so which display a control came from is legible from where it sits
- * and not only from the name assistive technology reads [U3-81].
+ * A rail: an available pattern line reaches across the wall row it feeds, and
+ * the whole of it is the target [U3-98]. Only where the wall is beside the
+ * lines — that is, where the play area is as wide as both columns — and the
+ * wall lets a press fall through to the row beneath it, holding no control of
+ * its own.
  */
+/* The full board's play area: 2 × (5 × 2rem + 4 × 0.2rem) + 1rem. */
+@container play (min-width: 22.6rem) {
+  .app[data-layout='wide'] .player-board.offered .wall {
+    pointer-events: none;
+  }
 
-/*
- * A grid rather than a wrapping row, because a plate must keep the place it
- * had while it held tiles [U3-81]. As flex items the plates shrink to fit, so
- * emptying one pulled every plate to its right along the row — under a pointer
- * already aiming at one of them. Equal columns, sized by the viewport and not
- * by what the displays happen to hold, do not move for anything a ply does.
- */
-.roving-group[data-group='factories'] {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
-  gap: 0.6rem;
+  .app[data-layout='wide'] .pattern-line.destination[aria-disabled='false'] {
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .app[data-layout='wide'] .pattern-line.destination[aria-disabled='false']::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: 0 calc(-1 * (var(--play-gap) + var(--wall-width) + 0.35rem)) 0 -0.35rem;
+    border-radius: 0.75rem;
+    background: var(--accent-soft);
+    box-shadow: inset 0 0 0 2px var(--ink);
+  }
+
+  .app[data-layout='wide'] .pattern-line.destination[aria-disabled='false']:hover::before {
+    background: var(--accent);
+    box-shadow: inset 0 0 0 3px var(--ink);
+  }
 }
 
-.display {
-  display: grid;
-  gap: 0.3rem;
-  padding: 0.4rem 0.45rem;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 0.6rem;
+/* The compact board's play area: 2 × (5 × 1.75rem + 4 × 0.2rem) + 0.6rem. */
+@container play (min-width: 19.7rem) {
+  .app:not([data-layout='wide']) .player-board.offered .wall {
+    pointer-events: none;
+  }
+
+  .app:not([data-layout='wide']) .pattern-line.destination[aria-disabled='false'] {
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .app:not([data-layout='wide']) .pattern-line.destination[aria-disabled='false']::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: 0 calc(-1 * (var(--play-gap) + var(--wall-width) + 0.3rem)) 0 -0.3rem;
+    border-radius: 0.75rem;
+    background: var(--accent-soft);
+    box-shadow: inset 0 0 0 2px var(--ink);
+  }
 }
 
-.display-name {
-  color: var(--dim);
-  font-size: 0.7rem;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+.destination:focus-visible {
+  outline: 3px solid var(--tile-0);
+  outline-offset: 1px;
 }
 
-.display-tiles {
+/* How far from a row, a column, a colour [U3-35]. */
+.completed {
   display: flex;
   flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0.3rem 0;
+  border-top: 1px solid #e2e3dc;
+  font-size: 0.75rem;
+  color: var(--dim);
+}
+
+.progress {
+  display: inline-flex;
   align-items: center;
   gap: 0.35rem;
 }
 
-/*
- * Exactly the height of a control, so an emptied factory plate keeps the
- * footprint it had while it held tiles [U3-81]. The centre pool is under no
- * such rule — it grows all round — and reserving the space there would cost a
- * band of nothing on a page [U3-60] already wants shorter.
- */
-[data-group='factories'] .display-tiles {
-  min-height: 3rem;
+.pips {
+  display: inline-flex;
+  gap: 2px;
 }
 
-/*
- * The centre is one display across the width it is given, not a plate in a row
- * of them, and its name sits beside its tiles rather than above them: it is on
- * screen from the opening, when it holds nothing, and a band of nothing is
- * what [U3-60] can least afford.
- */
-.centre .display {
-  width: 100%;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 0.6rem;
+.pips i {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 2px;
+  background: #d5d7cf;
 }
 
-.display-empty {
-  padding: 0 0.35rem;
-  color: var(--dim);
-  font-size: 0.85rem;
-  font-style: italic;
+.pips i.on {
+  background: var(--ink);
 }
 
-/*
- * Tiles in a source control are a size down from the ones on a board, which
- * buys height rather than width: the column count is the grid's to decide, and
- * five stand side by side at either size. What changes is how soon four picks
- * wrap inside a plate — at 2.75rem they wrap at a laptop's column width and
- * every plate in the row grows from 83 to 153 pixels, which is 69 more on a
- * page [U3-60] wants shorter. The control around them keeps its 44 [U3-59].
- */
-.pick .tile {
-  width: 2.25rem;
-  height: 2.25rem;
+/* ------------------------------------------------------------------ */
+/* The docked board, and the small one                                 */
+/* ------------------------------------------------------------------ */
+
+/* Docked: the strip lies over the header while tiles are in hand, so holding
+   them changes nothing about the board's size [U3-99]. */
+.player-board.dock .hand {
+  display: none;
 }
 
-.centre {
-  display: grid;
+.player-board.dock .hand.holding {
+  display: flex;
+  position: absolute;
+  z-index: 4;
+  top: var(--panel-pad);
+  left: var(--panel-pad);
+  right: var(--panel-pad);
+  height: 44px;
+}
+
+.player-board.dock .hand-label,
+.player-board.dock .put-back kbd {
+  display: none;
+}
+
+.player-board.dock .score-num {
+  font-size: 2rem;
+}
+
+.player-board.dock {
   gap: 0.3rem;
 }
 
-.centre-marker {
-  display: flex;
-  align-items: center;
+.player-board.dock .completed {
+  padding-top: 0.1rem;
+  font-size: 0.7rem;
+}
+
+.app:not([data-layout='wide']) .table {
+  padding-top: 0.3rem;
+}
+
+/*
+ * Small, not hidden [U3-103]: every line, wall cell and floor slot of the
+ * other board is still drawn, at a size made for reading rather than for
+ * pressing — it is never the board a person here plays on.
+ */
+.player-board.mini {
+  --tile: 0.65rem;
+  --row: 0.72rem;
+  --tile-gap: 2px;
+  --play-gap: 0.3rem;
+  --panel-pad: 0.6rem;
+  gap: 0.35rem;
+  align-self: stretch;
+}
+
+.player-board.mini .tile {
+  font-size: 0.45rem;
+  border-radius: 3px;
+  box-shadow: none;
+}
+
+.player-board.mini .tile.empty {
+  border-width: 1px;
+}
+
+.player-board.mini .tile.marker {
+  border-width: 1px;
+}
+
+.player-board.mini .badge,
+.player-board.mini .floor-cost {
+  display: none;
+}
+
+.player-board.mini .floor-summary {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.player-board.mini .player-header {
   gap: 0.4rem;
-  margin: 0;
-  color: var(--dim);
+  min-height: 0;
+}
+
+.player-board.mini .seat-kind {
+  display: none;
+}
+
+.player-board.mini .avatar {
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 0.5rem;
   font-size: 0.85rem;
 }
 
-.new-game {
-  justify-self: start;
-  padding: 0.5rem 1rem;
+.player-board.mini .who h2 {
+  font-size: 0.95rem;
 }
 
-/* How the last round scored [U3-82]. Two columns where there is room, one
-   where there is not, exactly as `.boards` is. */
+.player-board.mini .score-num {
+  font-size: 1.6rem;
+}
+
+.player-board.mini .score-delta,
+.player-board.mini .score-label {
+  display: none;
+}
+
+.player-board.mini .turn-marker {
+  height: 1.5rem;
+  font-size: 0.7rem;
+  padding: 0 0.5rem;
+}
+
+.player-board.mini .hand {
+  height: auto;
+  min-height: 0;
+  padding: 0.2rem 0.5rem;
+  background: transparent;
+  border-top: 1px solid #e2e3dc;
+  border-radius: 0;
+  font-size: 0.72rem;
+}
+
+.player-board.mini .hand-text {
+  white-space: normal;
+}
+
+.player-board.mini .hand .tile {
+  --tile: 0.85rem;
+}
+
+.player-board.mini .completed {
+  font-size: 0.65rem;
+  border-top: 0;
+  padding: 0;
+}
+
+.player-board.mini .pips i {
+  width: 0.35rem;
+  height: 0.35rem;
+}
+
+/* Above the table: header and strip to one side, the board to the other. */
+.app[data-layout='stack'] .player-board.mini {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'head play'
+    'hand play'
+    'done play';
+  align-items: start;
+  column-gap: 0.75rem;
+}
+
+.app[data-layout='stack'] .player-board.mini .player-header {
+  grid-area: head;
+}
+
+.app[data-layout='stack'] .player-board.mini .hand {
+  grid-area: hand;
+  border-top: 0;
+  padding: 0;
+}
+
+.app[data-layout='stack'] .player-board.mini .board-play {
+  grid-area: play;
+  width: var(--play-width);
+}
+
+.app[data-layout='stack'] .player-board.mini .completed {
+  grid-area: done;
+  justify-content: flex-start;
+  gap: 0.4rem;
+  font-size: 0.58rem;
+}
+
+.app[data-layout='stack'] .player-board.mini .pips i {
+  width: 0.28rem;
+  height: 0.28rem;
+}
+
+.app[data-layout='stack'] .player-board.mini .hand-text {
+  white-space: nowrap;
+}
+
+.app[data-layout='stack'] .player-board.mini .hand-label {
+  display: none;
+}
+
+.app[data-layout='stack'] .player-board.mini .score {
+  margin-left: 0;
+}
+
+.app[data-layout='side'] .player-board.mini .completed {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* The top bar where the table is narrow                               */
+/* ------------------------------------------------------------------ */
+
+.app:not([data-layout='wide']) .topbar {
+  min-height: 0;
+  gap: 0.3rem 0.5rem;
+}
+
+.app:not([data-layout='wide']) .logo {
+  font-size: 1.3rem;
+}
+
+.app:not([data-layout='wide']) .whose-turn {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.app:not([data-layout='wide']) .status {
+  order: 3;
+  flex-basis: 100%;
+  gap: 0.3rem 0.35rem;
+}
+
+.app:not([data-layout='wide']) .top-actions {
+  margin-left: auto;
+  gap: 0.25rem;
+}
+
+.app:not([data-layout='wide']) .new-game,
+.app:not([data-layout='wide']) .seats-panel > summary,
+.app:not([data-layout='wide']) .tool {
+  padding: 0 0.6rem;
+  white-space: nowrap;
+  font-size: 0.85rem;
+}
+
+.app:not([data-layout='wide']) .player-header {
+  gap: 0.45rem;
+}
+
+.app:not([data-layout='wide']) .avatar {
+  width: 2.1rem;
+  height: 2.1rem;
+}
+
+.app:not([data-layout='wide']) .score-label {
+  display: none;
+}
+
+.app:not([data-layout='wide']) .seed {
+  margin-left: 0;
+}
+
+.app:not([data-layout='wide']) .seed-word {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.app:not([data-layout='wide']) .seed code::before {
+  content: '#';
+}
+
+.app[data-layout='side'] .player-board.mini .player-header {
+  flex-wrap: wrap;
+}
+
+.app[data-layout='side'] .player-board.mini .score {
+  margin-left: auto;
+}
+
+.app:not([data-layout='wide']) .pill {
+  height: 1.6rem;
+  padding: 0 0.55rem;
+  font-size: 0.75rem;
+}
+
+.app:not([data-layout='wide']) .supply-pop > summary {
+  min-height: 1.6rem;
+  padding: 0 0.35rem;
+  font-size: 0.78rem;
+}
+
+.app[data-layout='side'] .logo {
+  display: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* The last round's workings [U3-82], [U3-102]                         */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Under each board where the table has room: the panel lends its two halves to
+ * the grid, one under each board, and keeps its name for assistive technology.
+ */
+.app[data-layout='wide'] .scoring,
+.app[data-layout='wide'] .scoring-players {
+  display: contents;
+}
+
+.app[data-layout='wide'] .scoring > h2 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.app[data-layout='wide'] .scoring-player:nth-child(1) {
+  grid-area: w0;
+}
+
+.app[data-layout='wide'] .scoring-player:nth-child(2) {
+  grid-area: w1;
+}
+
+.app[data-layout='wide'] .scoring-player {
+  min-height: 0;
+  overflow: auto;
+}
+
+/* Elsewhere, a sheet the player asks for. */
+.app:not([data-layout='wide']) .scoring {
+  display: none;
+}
+
+.app[data-sheet='workings'] .scoring {
+  display: grid;
+  gap: 0.6rem;
+  position: fixed;
+  z-index: 40;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 85dvh;
+  overflow: auto;
+  padding: 1rem;
+  background: var(--ground);
+  border-radius: 1.4rem 1.4rem 0 0;
+  box-shadow: 0 -2px 0 var(--ink), 0 -12px 28px rgba(0, 0, 0, 0.2);
+}
+
+.app[data-sheet='workings'] .scoring {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.app[data-sheet='workings'] .scoring-players {
+  grid-column: 1 / -1;
+}
+
+.scoring > h2 {
+  font: 800 1.3rem/1.1 var(--font-display);
+}
+
+.scoring .close {
+  justify-self: end;
+  border: 2px solid var(--ink);
+  background: var(--surface);
+}
+
 .scoring-players {
   display: grid;
-  gap: 0.75rem;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: 0.6rem;
 }
 
-.scoring h2,
-.scoring h3,
+.scoring-player {
+  display: grid;
+  gap: 0.3rem;
+  align-content: start;
+  font-size: 0.8rem;
+  color: var(--dim);
+}
+
+.scoring-player h3 {
+  font: 700 0.95rem/1.2 var(--font-display);
+  color: var(--ink);
+}
+
+.scoring-round {
+  font-family: var(--font-body);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
 .scoring h4 {
-  margin: 0 0 0.35rem;
-}
-
-.scoring p {
-  margin: 0.15rem 0;
+  font-size: 0.82rem;
+  color: var(--ink);
 }
 
 .placements,
 .rungs,
 .bonus-lines {
   list-style: none;
-  margin: 0.25rem 0;
+  margin: 0;
   padding: 0;
 }
 
 .placement {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 0.75rem;
+  padding: 0.2rem 0;
+  border-bottom: 1px solid #e2e3dc;
+}
+
+.placement-where {
+  color: var(--ink);
+}
+
+.placement-runs {
+  grid-column: 1;
+  font-size: 0.75rem;
 }
 
 .placement-points {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+
+.placement-points {
+  font-weight: 800;
+  color: var(--ink);
   font-variant-numeric: tabular-nums;
+}
+
+.scoring-round-total,
+.scoring-tiling,
+.scoring-penalty,
+.bonus-total {
+  color: var(--ink);
+  font-weight: 600;
 }
 
 /* The ladder reads as a ladder: one entry per slot charged [U3-85]. */
 .rungs {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  gap: 0.3rem;
 }
 
 .rung {
-  border: 1px solid var(--line);
-  border-radius: 0.25rem;
-  font-size: 0.85em;
-  padding: 0.1rem 0.35rem;
+  border-radius: 0.4rem;
+  background: var(--sunk);
+  color: var(--loss);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.1rem 0.4rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* The end of the game                                                 */
+/* ------------------------------------------------------------------ */
+
+.game-over {
+  grid-area: table;
+  align-self: end;
+  justify-self: center;
+  z-index: 5;
+  width: min(100%, 25rem);
+  display: grid;
+  gap: 0.4rem;
+  box-shadow: 0 0 0 3px var(--ink), 0 8px 0 var(--ink);
+}
+
+.game-over h2 {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.verdict {
+  font: 800 2rem/1.05 var(--font-display);
+  letter-spacing: -0.03em;
+}
+
+.ending {
+  color: var(--dim);
+  font-size: 0.85rem;
+}
+
+.finals {
+  margin: 0.25rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* The curtain between two people sharing a device [U3-103]            */
+/* ------------------------------------------------------------------ */
+
+.curtain {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 1rem;
+  padding: 2rem;
+  background: var(--ink);
+  color: var(--surface);
+  text-align: center;
+}
+
+.curtain-title {
+  font: 800 2.4rem/1.05 var(--font-display);
+  letter-spacing: -0.03em;
+}
+
+.curtain-text {
+  max-width: 22rem;
+  color: #b8bbb2;
+}
+
+.lift {
+  min-height: 3.5rem;
+  padding: 0 1.5rem;
+  border: 0;
+  border-radius: 1.1rem;
+  background: var(--accent);
+  color: var(--ink);
+  font: 800 1.05rem/1 var(--font-display);
+  cursor: pointer;
 }

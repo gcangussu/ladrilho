@@ -111,7 +111,9 @@ describe('what is offered', () => {
     for (let source = 0; source < NUM_FACTORIES; source++) {
       const plate = screen.getByRole('group', { name: factoryName(source) });
       // The number is on screen, not only in the accessible name of the group.
-      expect(plate.textContent).toContain(factoryName(source));
+      // The plate is captioned with the number alone, ahead of its tiles — the
+      // tile counts are numbers too, so "contains" would not tell them apart.
+      expect(plate.textContent?.startsWith(String(source + 1)), plate.textContent ?? '').toBe(true);
       const mine = picksIn(game().factories[source], source);
       const controls = within(plate).queryAllByRole('button');
       expect(controls, `factory ${source}`).toHaveLength(mine.length);

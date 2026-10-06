@@ -82,6 +82,12 @@ export interface ViewModel {
    * are, and dealing a game clears it [U3-83].
    */
   scoring: RoundScoring | null;
+  /**
+   * Each seat's most recent action this game, or `null` before it has moved
+   * [U3-101]. Recorded by `submit` from the seat to move, which is a fact about
+   * the position and not about who chose the action [U3-31]; dealing clears it.
+   */
+  lastMoves: [number | null, number | null];
 }
 
 /**
@@ -123,6 +129,9 @@ let lastChoice: Choice | ExpertChoice | MasterChoice | null = null;
  * difference between this and `transition`.
  */
 let lastScoring: RoundScoring | null = null;
+
+/** Each seat's most recent action this game [U3-101]. Replaced, never mutated [U3-21]. */
+let lastMoves: [number | null, number | null] = [null, null];
 
 /**
  * The worker seam [W6-18]. Created lazily and replaced only by a test — a
@@ -250,6 +259,7 @@ function nextView(): ViewModel {
     thinking,
     lastChoice,
     scoring: lastScoring,
+    lastMoves,
   };
   previous = next;
   return next;
@@ -275,6 +285,7 @@ function deal(seed: number): ViewModel {
   // its first round scores, which the sticky lifetime of [U3-82] makes minutes
   // rather than a frame — and which no single-game test can see.
   lastScoring = null;
+  lastMoves = [null, null];
   return nextView();
 }
 
@@ -443,7 +454,11 @@ export function submit(action: number): void {
   // [U3-18], widened: `applyExplained` is the state module's alone and is the
   // path `submit` takes [0007 S7-1]. Still synchronous, still the single path,
   // and still learning nothing about who chose the action.
+  const mover = state.currentPlayer;
   const scoring = applyExplained(state, action);
+  // A fresh pair rather than an edit, so the view model this replaces still
+  // says what it said [U3-21].
+  lastMoves = mover === 0 ? [action, lastMoves[1]] : [lastMoves[0], action];
   // A ply that resolved no round returns `null` and leaves the last record
   // standing [U3-82]; a ply that resolved one replaces it.
   if (scoring !== null) lastScoring = scoring;
