@@ -1,13 +1,13 @@
 import type { JSX } from '@solidjs/web';
 import { FLOOR, NUM_ROWS, decodeAction, encodeAction } from 'engine';
 import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
-import { computerSeat, startNewGame, startWithSeating, submit, view } from '../game.js';
+import { computerSeat, replayDeal, startNewGame, startWithSeating, submit, view } from '../game.js';
 import { Announcer, announcement } from './Announcer.jsx';
 import { Displays, type Pick } from './Displays.jsx';
 import { GameOver } from './GameOver.jsx';
 import { PlayerBoard } from './PlayerBoard.jsx';
 import { Scoring } from './Scoring.jsx';
-import { Seating, seatLabel } from './Seating.jsx';
+import { NewGameSheet, seatLabel } from './Seating.jsx';
 import { Status } from './Status.jsx';
 
 /**
@@ -155,6 +155,28 @@ export function App(): JSX.Element {
   document.addEventListener('pointerdown', onOutside);
   onCleanup(() => document.removeEventListener('pointerdown', onOutside));
 
+  /**
+   * The new-game sheet [W6-49]: open or not, and the control that opened it,
+   * which gets focus back when it closes.
+   */
+  const [dealing, setDealing] = createSignal(false);
+  let opener: HTMLElement | null = null;
+  const openSheet = (event: MouseEvent): void => {
+    opener = event.currentTarget as HTMLElement;
+    closePopovers(null);
+    setDealing(true);
+  };
+  const closeSheet = (): void => {
+    setDealing(false);
+    const back = opener;
+    queueMicrotask(() => {
+      // The opener may be gone — a game-over offer, after the deal — and then
+      // focus falls to the new game's first group, as after any ply [U3-57].
+      if (back?.isConnected) back.focus();
+      else root.querySelector<HTMLElement>('[data-group="factories"] [data-roving][tabindex="0"]')?.focus();
+    });
+  };
+
   /** The last round's workings, as a sheet, where the boards leave no room [U3-102]. */
   const [sheet, setSheet] = createSignal(false);
 
@@ -294,7 +316,10 @@ export function App(): JSX.Element {
       ref={observe}
       // Escape clears a selection wherever focus happens to be [U3-26].
       onKeyDown={(event) => {
-        if (event.key === 'Escape') {
+        if (event.key === 'Escape' && dealing()) {
+          // [W6-49]: Escape discards the sheet's choices and nothing else.
+          closeSheet();
+        } else if (event.key === 'Escape') {
           setSelection(null);
           setSheet(false);
           closePopovers(null);
@@ -309,7 +334,7 @@ export function App(): JSX.Element {
       <Announcer message={announcement(view())} />
 
       {/* Everything under the curtain is out of reach while it is up [U3-103]. */}
-      <div class="stage" inert={curtainUp() || undefined}>
+      <div class="stage" inert={curtainUp() || dealing() || undefined}>
         <header class="topbar">
           <h1 class="logo">
             <span class="logo-mark" aria-hidden="true">
@@ -337,22 +362,14 @@ export function App(): JSX.Element {
                 Workings
               </button>
             </Show>
-            {/* Who sits where is a setting, and changing it deals a new game
-                [W6-3], so it lives behind its own disclosure and out of the
-                play area [U3-96]. */}
-            <details
-              class="seats-panel"
-              onToggle={(event) => {
-                if (event.currentTarget.open) closePopovers(event.currentTarget);
-              }}
+            {/* Opens the sheet, where the seats are and where Deal is [W6-49];
+                available throughout, a search included [W6-23]. */}
+            <button
+              type="button"
+              class="new-game"
+              aria-haspopup="dialog"
+              onClick={openSheet}
             >
-              <summary>Seats</summary>
-              <div class="seats-pop">
-                <Seating seating={view().seating} onChoose={(next) => startWithSeating(next)} />
-              </div>
-            </details>
-            {/* A fresh seed, never the one in the URL [U3-47]. */}
-            <button type="button" class="new-game" onClick={() => startNewGame()}>
               New game
             </button>
           </div>
@@ -406,7 +423,14 @@ export function App(): JSX.Element {
         </div>
 
         <Show when={game().isTerminal}>
-          <GameOver game={game()} names={names()} bonuses={view().scoring?.bonuses ?? null} />
+          <GameOver
+            game={game()}
+            names={names()}
+            bonuses={view().scoring?.bonuses ?? null}
+            onRematch={() => startNewGame()}
+            onReplay={() => replayDeal()}
+            onChangeSeats={openSheet}
+          />
         </Show>
 
         {board(0)}
@@ -428,6 +452,17 @@ export function App(): JSX.Element {
           )}
         </Show>
       </div>
+
+      <Show when={dealing()}>
+        <NewGameSheet
+          seating={view().seating}
+          onClose={closeSheet}
+          onDeal={(deal) => {
+            closeSheet();
+            startWithSeating(deal.seating, deal.seed);
+          }}
+        />
+      </Show>
 
       <Show when={curtainUp()}>
         <div class="curtain" role="dialog" aria-modal="true" aria-label="Pass the device">

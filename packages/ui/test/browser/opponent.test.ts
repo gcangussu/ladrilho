@@ -203,7 +203,15 @@ describe('the opponent against a real worker [W6-30]', () => {
     // Clickable, and it actually deals: the player's way out of a long think.
     const seedBefore = doc.querySelector('.status')?.textContent ?? '';
     const opening = tilesLeft(doc);
+    // The control opens the sheet, and the sheet's Deal deals [W6-49]; both
+    // stay live mid-search [W6-23].
     control!.click();
+    await until(() => doc.querySelector('[role="dialog"][aria-labelledby]') !== null, 2_000, 'the sheet');
+    const dealButton = [...doc.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
+      (b) => b.textContent?.trim() === 'Deal',
+    );
+    expect(dealButton, 'no Deal in the sheet').toBeDefined();
+    dealButton!.click();
     await until(
       () => (doc.querySelector('.status')?.textContent ?? '') !== seedBefore,
       10_000,

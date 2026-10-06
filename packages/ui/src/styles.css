@@ -363,7 +363,6 @@ input {
 
 .new-game,
 .tool,
-.seats-panel > summary,
 .supply-pop > summary {
   min-width: 44px;
   min-height: 44px;
@@ -387,17 +386,14 @@ input {
   padding: 0 0.6rem;
 }
 
-.seats-panel > summary::-webkit-details-marker,
 .supply-pop > summary::-webkit-details-marker {
   display: none;
 }
 
-.seats-panel,
 .supply-pop {
   position: relative;
 }
 
-.seats-pop,
 .supply {
   position: absolute;
   right: 0;
@@ -409,41 +405,6 @@ input {
   background: var(--surface);
   border-radius: 1rem;
   box-shadow: 0 0 0 2px var(--ink), 0 12px 28px rgba(0, 0, 0, 0.18);
-}
-
-.seating {
-  display: grid;
-  gap: 0.6rem;
-}
-
-.seating select,
-.seating input {
-  min-height: 44px;
-  padding: 0 0.6rem;
-  border-radius: 0.6rem;
-  border: 1.5px solid var(--rule);
-  background: var(--surface);
-}
-
-.seating label {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.6rem;
-  font-weight: 600;
-}
-
-.seating-note {
-  color: var(--dim);
-  font-size: 0.8rem;
-}
-
-.advanced summary {
-  cursor: pointer;
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  font-weight: 600;
 }
 
 .supply {
@@ -1635,8 +1596,7 @@ input {
 }
 
 .app:not([data-layout='wide']) .new-game,
-.app:not([data-layout='wide']) .seats-panel > summary,
-.app:not([data-layout='wide']) .tool {
+.app:not([data-layout='wide']) .topbar .tool {
   padding: 0 0.6rem;
   white-space: nowrap;
   font-size: 0.85rem;
@@ -2049,4 +2009,299 @@ input {
     min-height: 100dvh;
     align-content: center;
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* The new-game sheet [W6-49]                                          */
+/* ------------------------------------------------------------------ */
+
+.sheet-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(21, 23, 28, 0.45);
+}
+
+.sheet {
+  width: min(100%, 27rem);
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem 1.1rem 1.1rem;
+  border-radius: 1.6rem;
+  background: var(--surface);
+  box-shadow: 0 0 0 3px var(--ink), 0 18px 40px rgba(0, 0, 0, 0.3);
+}
+
+.sheet-body,
+.sheet-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* Where there is room, two columns: who sits where, and how to deal. */
+@media (min-width: 48rem) {
+  .sheet {
+    width: min(100%, 50rem);
+  }
+
+  .sheet-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    align-items: start;
+    gap: 1.25rem;
+  }
+
+  .sheet-col:last-child {
+    position: sticky;
+    top: 0;
+  }
+}
+
+/* A phone: the sheet rises from the bottom edge, under the thumb. */
+@media (max-width: 40rem) {
+  .sheet-scrim {
+    place-items: end stretch;
+    padding: 0;
+  }
+
+  .sheet {
+    width: 100%;
+    max-height: 94dvh;
+    border-radius: 1.6rem 1.6rem 0 0;
+    box-shadow: 0 -3px 0 var(--ink), 0 -12px 30px rgba(0, 0, 0, 0.25);
+  }
+
+  /* Deal stays under the thumb however far the choices scroll. */
+  .sheet .deal {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    box-shadow: 0 -1rem 1rem var(--surface), 0 0.6rem 0 var(--surface);
+  }
+
+  .choice {
+    min-height: 44px;
+    padding: 0.2rem 0.9rem;
+  }
+}
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sheet-head h2 {
+  font: 800 1.7rem/1 var(--font-display);
+  letter-spacing: -0.03em;
+}
+
+.sheet .close {
+  border: 2px solid var(--ink);
+  background: var(--surface);
+}
+
+.seats {
+  position: relative;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.seat-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 3.6rem;
+  padding: 0 1rem;
+  border: 0;
+  border-radius: 1.1rem;
+  background: var(--sunk);
+  text-align: left;
+  cursor: pointer;
+}
+
+.seat-card[aria-pressed='true'] {
+  background: var(--ink);
+  color: var(--surface);
+}
+
+.seat-card[aria-pressed='true'] .avatar {
+  background: var(--accent);
+  color: var(--ink);
+}
+
+.seat-text {
+  display: grid;
+}
+
+.seat-name {
+  font: 700 1rem/1.2 var(--font-display);
+}
+
+.seat-who {
+  font-size: 0.8rem;
+  opacity: 0.75;
+}
+
+/* Between the two cards, on their right, where a thumb finds it. */
+.swap {
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  translate: 0 -50%;
+  z-index: 1;
+  min-height: 44px;
+  padding: 0 0.9rem;
+  border: 2px solid var(--ink);
+  border-radius: 22px;
+  background: var(--surface);
+  font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.choices {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.choices legend,
+.deal-number > span,
+.budget-row > span {
+  margin-bottom: 0.3rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 3rem;
+  padding: 0.35rem 0.9rem;
+  border: 1.5px solid var(--rule);
+  border-radius: 1rem;
+  cursor: pointer;
+}
+
+.choice.chosen {
+  border: 2px solid var(--ink);
+  background: var(--accent-soft);
+}
+
+.choice input {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0;
+  accent-color: var(--ink);
+  flex: none;
+}
+
+.choice-text {
+  display: grid;
+}
+
+.choice-name {
+  font-weight: 700;
+}
+
+.choice-line {
+  font-size: 0.8rem;
+  color: var(--dim);
+}
+
+.budget {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 1rem;
+  background: var(--sunk);
+}
+
+.budget-row,
+.deal-number {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.budget-row > span {
+  margin-bottom: 0;
+}
+
+.budget input[type='range'] {
+  width: 100%;
+  min-height: 44px;
+  accent-color: var(--ink);
+}
+
+.budget input[type='number'],
+.deal-number input {
+  min-height: 44px;
+  padding: 0 0.75rem;
+  border: 1.5px solid var(--rule);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  font-family: var(--font-mono);
+}
+
+.sheet-note {
+  font-size: 0.78rem;
+  color: var(--dim);
+}
+
+.sheet-note.center {
+  text-align: center;
+}
+
+.sheet-refusal:empty {
+  display: none;
+}
+
+.sheet-refusal {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--loss);
+}
+
+.deal {
+  min-height: 3.3rem;
+  border: 0;
+  border-radius: 1.1rem;
+  background: var(--ink);
+  color: var(--accent);
+  font: 800 1.1rem/1 var(--font-display);
+  cursor: pointer;
+}
+
+/* The end of a game's three offers [W6-52]. */
+.game-over-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+
+.game-over-actions .deal {
+  flex: 1 1 100%;
+  min-height: 2.9rem;
+}
+
+.game-over-actions .tool.outline {
+  flex: 1;
+  border: 2px solid var(--ink);
+  background: var(--surface);
+  padding: 0 0.6rem;
 }

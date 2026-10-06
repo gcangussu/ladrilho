@@ -386,7 +386,8 @@ type Selection = { source: number; color: Color } | null;
   they did before.
 - **[U3-47]** A terminal position has no legal actions ([0001 E1-11]), so every move control MUST
   be unavailable, and the only offer MUST be a new game. That new game MUST take a freshly
-  generated seed per [U3-13], never the one in the URL.
+  generated seed per [U3-13], never the one in the URL. *(Amended by [U3-104]: unless the player
+  asks for a deal by number, or to replay this one — an explicit choice, never a default.)*
 
 ### How a round scored
 
@@ -674,9 +675,11 @@ next to the tiles that earned them.
   [U3-58]'s viewports; it is here because intent 0011 names the phone held upright.*
 
 - **[U3-96]** The seating controls of [0006 W6-1], and the bag and lid counts of [U3-34], MUST sit
-  each behind its own disclosure in the top bar, closed by default. Their behaviour is unchanged —
-  changing a seat still deals at once ([0006 W6-3]). *(They sat above the factories, in the play
-  area, though changing one ends the game.)*
+  out of the play area and closed by default: the bag behind a disclosure in the top bar, the
+  seating in the new-game sheet of [0006 W6-49], which the top bar's new-game control opens.
+  *(They sat above the factories, in the play area, though changing one ends the game. The
+  seating spent one change behind a disclosure of its own, dealing at every change, before
+  [0006 W6-49] gathered it into the sheet.)*
 
 - **[U3-97]** A source control MUST draw its group as **one** tile carrying the group's count as a
   numeral when the count exceeds one, and never as that many tiles. Its accessible name is
@@ -727,6 +730,18 @@ next to the tiles that earned them.
 
   *The boards change places behind the curtain and never under the finger of the player who just
   moved, which is what intent 0005 asked of a board and intent 0011 asks of a shared phone.*
+
+- **[U3-104]** A deal MAY take a seed the player chose, and only by asking for it: a **deal
+  number** typed into the new-game sheet ([0006 W6-49]), or **Replay this deal** at the end of a
+  game ([0006 W6-52]), which takes the seed just played. A typed deal number MUST be accepted by
+  exactly the rule [U3-13] applies to the URL — a plain run of decimal digits naming an integer in
+  `[0, 2**32)` — and anything else MUST be refused in a `role="status"` line inside the sheet,
+  with the range, dealing nothing. An empty field means a fresh seed. The URL's seed is still
+  never reused by a new game ([U3-47]).
+
+  *[U3-14] shows the seed because "with no undo and nothing surviving a reload, it is the only way
+  to see a deal twice" — and until now seeing it twice meant editing the URL. This is the same
+  promise, kept from inside the page.*
 
 ## Invariants
 

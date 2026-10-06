@@ -52,17 +52,19 @@ beforeEach(() => {
 });
 
 describe('settings out of the play area [U3-96]', () => {
-  it('[U3-96] puts the seats and the bag behind closed disclosures in the top bar', async () => {
+  it('[U3-96] keeps the seats in the new-game sheet and the bag behind a closed disclosure', async () => {
     const { screen } = await mount();
-    const seats = screen.getAllByRole('combobox');
-    expect(seats).toHaveLength(2);
-    for (const seat of seats) {
-      const holder = seat.closest('details');
-      expect(holder, 'a seat control outside any disclosure').not.toBeNull();
-      expect(holder!.open, 'the seats disclosure starts open').toBe(false);
-      expect(holder!.querySelector('summary')?.textContent).toBe('Seats');
-      expect(holder!.closest('header'), 'the seats are not in the top bar').not.toBeNull();
-    }
+    // No seat control in the page until the sheet is opened, and none in the
+    // play area ever [0006 W6-49].
+    expect(screen.queryAllByRole('radio')).toEqual([]);
+    expect(screen.queryAllByRole('combobox')).toEqual([]);
+    const opener = screen.getByRole('button', { name: 'New game' });
+    expect(opener.closest('header'), 'the new-game control is not in the top bar').not.toBeNull();
+    opener.click();
+    flush();
+    const sheet = screen.getByRole('dialog', { name: 'New game' });
+    expect(within(sheet).getAllByRole('radio').length).toBeGreaterThan(1);
+
     const status = screen.getByRole('region', { name: 'Game status' });
     const bag = within(status).getByRole('table').closest('details');
     expect(bag, 'the bag counts are not behind a disclosure').not.toBeNull();

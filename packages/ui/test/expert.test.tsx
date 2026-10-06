@@ -17,6 +17,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { render } from '@solidjs/testing-library';
 import { flush } from 'solid-js';
+import { choiceNames, choices, choose, deal, editSeat, openSheet } from './sheet-helpers.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { apply, legalActions, newGame, toJSON, type AzulJSON } from 'engine';
 import type { Expert, ExpertChoice } from 'ai-bot';
@@ -96,18 +97,6 @@ async function mount(
   return { screen, state };
 }
 
-/** The seat selectors, in seat order. */
-function selectors(screen: ReturnType<typeof render>): HTMLSelectElement[] {
-  return [...screen.container.querySelectorAll('select')];
-}
-
-/** Pick a value in a selector the way a player does. */
-function pick(select: HTMLSelectElement, value: string): void {
-  select.value = value;
-  select.dispatchEvent(new Event('change', { bubbles: true }));
-  flush();
-}
-
 /** `opponent.ts` as it loads against a given gate result. */
 async function withGate(passed: boolean): Promise<typeof import('../src/opponent.js')> {
   vi.resetModules();
@@ -175,16 +164,17 @@ describe('the expert is offered exactly when the gate passed [0008 A8-33]', () =
   });
 });
 
-describe('what the seat selector offers [W6-1]', () => {
+describe('what the new-game sheet offers [W6-1]', () => {
   it('[W6-1] offers expert as a fourth difficulty, after sharp, by name', async () => {
     // Intent 0006: "picking it is picking one more difficulty setting, next to
     // the other three". Nothing looked at the control until now — every
     // computer option could have been dropped with the suite green.
     const { screen } = await mount('?seed=42', true);
-    const selects = selectors(screen);
-    expect(selects).toHaveLength(2); // a seat each [W6-5]
-    for (const select of selects) {
-      expect([...select.options].map((option) => option.value)).toEqual([
+    const sheet = openSheet(screen);
+    for (const seat of [0, 1] as const) {
+      // A seat each [W6-5], offered the same.
+      editSeat(sheet, seat);
+      expect(choices(sheet).map((radio) => radio.value)).toEqual([
         'human',
         'easy',
         'steady',
@@ -192,16 +182,9 @@ describe('what the seat selector offers [W6-1]', () => {
         'expert',
         'master',
       ]);
-      // By a name a player can act on, never a number [W6-1], and in the order
-      // the settings rank: swapping two labels is a different interface.
-      expect([...select.options].map((option) => option.textContent)).toEqual([
-        'Person',
-        'Computer — gentle',
-        'Computer — steady',
-        'Computer — ruthless',
-        'Computer — expert',
-        'Computer — master',
-      ]);
+      // By a name a player can act on, never a number [W6-1], and in [W6-1]'s
+      // order: swapping two names is a different interface.
+      expect(choiceNames(sheet)).toEqual(['A person', 'Gentle', 'Steady', 'Ruthless', 'Expert', 'Master']);
     }
   });
 
@@ -211,8 +194,10 @@ describe('what the seat selector offers [W6-1]', () => {
     // rather than derived from `EXPERT_AVAILABLE`: a test that agrees with the
     // model agrees with it when both are wrong.
     const { screen } = await mount('?seed=42', false);
-    for (const select of selectors(screen)) {
-      expect([...select.options].map((option) => option.value)).toEqual([
+    const sheet = openSheet(screen);
+    for (const seat of [0, 1] as const) {
+      editSeat(sheet, seat);
+      expect(choices(sheet).map((radio) => radio.value)).toEqual([
         'human',
         'easy',
         'steady',
@@ -224,14 +209,16 @@ describe('what the seat selector offers [W6-1]', () => {
 
   it('[W6-1] [W6-3] seats the player that was picked, and deals a new game', async () => {
     // What a player *does* with the control, which is the half the options
-    // list cannot see: an interface can offer "Computer — expert" and seat
-    // `easy`, and until this test every lane stayed green when it did.
+    // list cannot see: an interface can offer "Expert" and seat `easy`, and
+    // until this test every lane stayed green when it did.
     const { screen, state } = await mount('?seed=42', true);
-    const [first, second] = selectors(screen);
 
     for (const level of ['expert', 'easy', 'steady', 'sharp'] as const) {
       const before = state.view().seed;
-      pick(first, level);
+      const sheet = openSheet(screen);
+      editSeat(sheet, 0);
+      choose(sheet, level);
+      deal(sheet);
       expect(state.view().seating.players[0], level).toBe(level);
       expect(state.view().seating.players[1], level).toBeNull();
       // [W6-3]: changing the seating deals a new game rather than swapping an
@@ -239,9 +226,15 @@ describe('what the seat selector offers [W6-1]', () => {
       expect(state.view().seed, level).not.toBe(before);
     }
 
-    pick(second, 'expert');
+    let sheet = openSheet(screen);
+    editSeat(sheet, 1);
+    choose(sheet, 'expert');
+    deal(sheet);
     expect(state.view().seating.players[1]).toBe('expert');
-    pick(second, 'human');
+    sheet = openSheet(screen);
+    editSeat(sheet, 1);
+    choose(sheet, 'human');
+    deal(sheet);
     expect(state.view().seating.players[1]).toBeNull();
   });
 });

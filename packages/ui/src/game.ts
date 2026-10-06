@@ -195,7 +195,15 @@ function freshSeed(): number {
  * exactly the failure this rejects.
  */
 function seedFromUrl(search: string): number | null {
-  const raw = new URLSearchParams(search).get('seed');
+  return parseSeed(new URLSearchParams(search).get('seed'));
+}
+
+/**
+ * A seed as a person or a URL wrote it, or `null` when it is not one [U3-13].
+ * One rule for both, so a deal number typed into the new-game sheet is
+ * accepted exactly when the same digits in the URL would be [U3-104].
+ */
+export function parseSeed(raw: string | null): number | null {
   if (raw === null || !/^\d+$/.test(raw)) return null;
   const seed = Number(raw);
   return seed < 2 ** 32 ? seed : null;
@@ -395,11 +403,11 @@ function dispatch(request: ToWorker): void {
 }
 
 /**
- * Deal from `seed`. Deliberately not exported: {@link startNewGame} is the whole
- * entry surface the interface needs, and an exported seeded entry point would
- * hand a component the route to a deal of its choosing that [U3-47] rules out.
- * A test that wants a recorded seed goes through the URL, which is the path that
- * ships.
+ * Deal from `seed`. Deliberately not exported: a component deals a seed of its
+ * choosing only through the two explicit requests [U3-104] allows — a deal
+ * number in the sheet ({@link startWithSeating}) and {@link replayDeal} — and
+ * never by default [U3-47]. A test that wants a recorded seed goes through the
+ * URL, which is the path that ships.
  */
 function startGame(seed: number): void {
   // `deal` resets the held state and builds the opening view; the request is
@@ -428,11 +436,25 @@ export function startNewGame(): void {
  * a person and half by a program is one whose seed no longer describes a match
  * — which is exactly what [0003 U3-14] shows the seed for.
  */
-export function startWithSeating(next: { players: Seating['players']; simulations?: Seating['simulations'] }): void {
+export function startWithSeating(
+  next: { players: Seating['players']; simulations?: Seating['simulations'] },
+  seed: number | null = null,
+): void {
   // The simulations settings are kept unless the change names them [W6-44]:
   // choosing who sits where does not reset how hard a master thinks.
   seating = { players: next.players, simulations: next.simulations ?? seating.simulations };
-  startGame(freshSeed());
+  // A seed only when the player asked for one by number in the sheet
+  // [U3-104]; otherwise a fresh one, never the URL's [U3-47].
+  startGame(seed ?? freshSeed());
+}
+
+/**
+ * Deal the game just played again: the same seating and the same seed
+ * [0006 W6-52], [U3-104]. An explicit request, offered at the end of a game,
+ * and the only route by which a new game takes the seed in play.
+ */
+export function replayDeal(): void {
+  startGame(currentSeed);
 }
 
 /** Whether a seat is played by the computer — for the components [W6-22]. */

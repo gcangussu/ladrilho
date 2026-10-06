@@ -130,7 +130,9 @@ type FromWorker =
   decides whether a seat's moves come from the worker.
 - **[W6-3]** Changing the seating MUST start a new game with a freshly generated seed, per
   [0003 U3-13] and [0003 U3-47]. *(Extended by [0012 T12-19]: so does changing a seat's
-  simulations setting, [W6-44].)*
+  simulations setting, [W6-44].)* *(Amended by [W6-49]: a seating is changed by committing the
+  new-game sheet, and the deal it starts takes the sheet's deal number when one was entered
+  ([0003 U3-104]). Choosing in the sheet changes nothing until then.)*
 
   *Rather than swapping an opponent into a game in progress. [0003 U3-65] says the position only
   ever moves forward from a `newGame`, and a game half-played by a person and half by a program is
@@ -151,6 +153,59 @@ type FromWorker =
   afterwards", and it is only reachable from the interface if the URL carries the seating too.*
 
 - **[W6-5]** A person MUST be able to occupy either seat. The computer MUST NOT be fixed to seat 1.
+
+### The new-game sheet
+
+*Added for intent 0011 — A table, not a page, which moved the seating out of the play area
+([0003 U3-96]). A seat change ends the game in progress, so the choices are gathered in one place
+and take effect together, when the player says so — and then the first deal is the one they
+chose, not one dealt on the way to it.*
+
+- **[W6-49]** The new-game control of [W6-23] MUST open a **new-game sheet**: a modal dialog named
+  `New game`, rendered only while open — a closed sheet leaves no controls in the document, so
+  [0003 U3-59]'s measure of every control is not taken over hidden ones. While it is open the page
+  beneath is inert, focus moves into it, and focus returns to the control that opened it when it
+  closes. The game beneath carries on: a computer to move keeps thinking and may move.
+  - It opens **staged** with the current seating, both simulations settings and an empty deal
+    number. Everything chosen in it is staged, and the view model is untouched until it is
+    committed.
+  - **Deal** commits it: one deal ([0003 U3-5]) with the staged seating and settings and the
+    staged deal number, or a fresh seed when that is empty ([0003 U3-104]). A seating that equals
+    the current one still deals — the sheet is how a new game is started, with or without a change.
+  - **Close** and <kbd>Escape</kbd> discard every staged choice and leave the game as it was.
+  - The sheet says, beside Deal, that dealing ends the game in progress.
+
+- **[W6-50]** The sheet MUST show one card per seat — `Player 1` and `Player 2` — each naming who
+  is staged there in the words of [W6-51], and saying of Player 1 that it opens the game. Choosing
+  a card makes it the seat being edited, and the cards say which it is with `aria-pressed`. A
+  **Swap** control MUST exchange the two seats' staged levels and simulations settings, so who
+  opens can be chosen without re-choosing anyone ([W6-5]: Azul is not seat-symmetric).
+
+- **[W6-51]** For the seat being edited the sheet MUST offer the choices of [W6-1] as one radio
+  group named `Player 1 is` or `Player 2 is`: a person, then each level in [W6-1]'s order, each
+  with a line saying what it is. The words are these, and none of them ranks one level above
+  another or states a number ([W6-1], [W6-24]):
+
+  | Choice | Name | Its line |
+  | --- | --- | --- |
+  | a person | `A person` | `Pass the device between turns` |
+  | `easy` | `Gentle` | `Looks only at its own move` |
+  | `steady` | `Steady` | `Looks at your reply, and its answer to it` |
+  | `sharp` | `Ruthless` | `Looks as far ahead as it can, and times the round's end` |
+  | `expert` | `Expert` | `A published player, learned rather than written` |
+  | `master` | `Master` | `Taught itself by playing itself` |
+
+  Each line is a fact about how the player is built — [0004 B4-33] through [0004 B4-35],
+  intent 0006, intent 0009 — and not a claim about who beats whom: that is measured, it changes
+  when `sharp` does ([0011 Z11-63]), and a sentence in a menu would not change with it. A board
+  still names its seat as `Computer — gentle` and so on (`LABELS`); the sheet's shorter names
+  are its own.
+
+- **[W6-52]** When a game ends, the final result MUST offer three things beside the new-game
+  control: **Rematch**, which deals at once with the current seating and a fresh seed; **Replay
+  this deal**, which deals at once with the current seating and the current seed
+  ([0003 U3-104]); and **Change seats**, which opens the sheet of [W6-49]. Each is a new game
+  under [W6-13] and [0003 U3-83].
 
 ### The turn loop
 
@@ -277,6 +332,8 @@ type FromWorker =
   nothing when activated. It MUST NOT be removed or `disabled`.
 - **[W6-23]** The new-game control MUST remain available throughout, including mid-search. It is
   the player's way out of a long think, and [W6-13] MUST terminate the worker when it is used.
+  *(Amended by [W6-49]: the control opens the new-game sheet, and the sheet's **Deal** control is
+  the one that deals. Both stay available mid-search, and [W6-13] applies to Deal.)*
 - **[W6-24]** The interface MUST NOT show the chosen move's value, the depth reached, or any
   ranking or commentary on a move — the bot's or the player's. Intent 0003 rules out explaining
   moves; [0003 U3-30] already rules out judging one before it is made, and this extends it to after.
@@ -422,7 +479,8 @@ seat, and a worker that a game without it never builds.*
   independent. A request for a `master` seat carries that seat's setting.
   - Each MUST default to `MASTER_SIMULATIONS.default` ([0012 T12-16]).
   - A new game MUST keep both, as it keeps the seats.
-  - Changing either MUST deal a new game with a fresh seed, as a seating change does ([W6-3]).
+  - Changing either MUST deal a new game with a fresh seed, as a seating change does ([W6-3]) —
+    which since [W6-49] means when the sheet that changed it is committed.
   - They MUST be carried in the URL beside `seed` and `seating` ([W6-4]), as `p1Simulations` for
     seat 0 ("Player 1") and `p2Simulations` for seat 1 ("Player 2"). A parameter MUST be written
     only when its seat is `master` and its value is not the default. A value that fails
@@ -434,14 +492,20 @@ seat, and a worker that a game without it never builds.*
   seating, both settings and the person's moves reproduce the whole game, `master`'s play
   included — [W6-4]'s promise, kept for the new level.*
 
-- **[W6-45]** The advanced control MUST be rendered only while at least one seat is `master`. It
-  sits inside a closed-by-default `<details>` whose summary reads `Advanced`.
-  - It holds one number input for each `master` seat, and none for any other seat, labelled
-    `Player 1: simulations per move` or `Player 2: simulations per move`, with `min`, `max` and the
-    current value from that seat's setting. One line states the default and the range.
-  - A valid value, committed on `change`, MUST apply [W6-44] to that seat alone. An invalid one
-    MUST leave both settings and the game as they were, restore the input to the seat's setting,
-    and say why — with the range — in a `role="status"` line inside the control.
+- **[W6-45]** The master's setting MUST be offered inside the new-game sheet ([W6-49]), beside the
+  seat it belongs to, and only while that seat is staged as `master`. *(It was a closed `Advanced`
+  disclosure beside the seat selectors; [W6-49] moved both into the sheet.)*
+  - It is one range slider and one number input, both bound to the seat's staged setting, so
+    moving either moves the other. The slider is coarse and logarithmic — 100 at one end, 200 000
+    at the other, with the default reachable exactly — and states its value in words through
+    `aria-valuetext` ("10,000 simulations"). The number input sets any value in range exactly,
+    which is intent 0010's "set the number themselves"; it is labelled `Player 1: simulations
+    per move` or `Player 2: simulations per move`, with `min`, `max` and the staged value. One
+    line states the default and the range.
+  - A valid value, committed on `change`, MUST stage [W6-44] for that seat alone. An invalid one
+    MUST leave both staged settings as they were, restore the input to the seat's staged setting,
+    and say why — with the range — in a `role="status"` line inside the sheet. Nothing deals until
+    the sheet is committed.
   - It stays available while a search is in flight, as the new-game control does ([W6-23]).
 
   *A status line of its own rather than [0003 U3-56]'s live region, which is derived from the view
@@ -478,6 +542,14 @@ seat, and a worker that a game without it never builds.*
 
   *[W6-42] exists because a seam once crossed its wires on one worker. Two workers are a new
   configuration of the same seam, so it gets a case in that configuration.*
+
+- **[W6-53]** The fast suite MUST show, through the rendered sheet: that nothing deals until Deal,
+  and that Close and Escape deal nothing and restore nothing they did not change; that Deal is a
+  single deal carrying every staged choice, a typed deal number included; that Swap exchanges both
+  seats' levels and settings; that the slider and the number input move together and the number
+  input's refusal of [W6-45] holds; that the sheet leaves no control in the document when closed;
+  and each of [W6-52]'s three offers. Tests that dealt by pressing the new-game control, or by
+  changing a seat selector, deal through the sheet instead.
 
 ### Traceability exemptions
 
