@@ -64,7 +64,7 @@ describe('settings out of the play area [U3-96]', () => {
       expect(holder!.closest('header'), 'the seats are not in the top bar').not.toBeNull();
     }
     const status = screen.getByRole('region', { name: 'Game status' });
-    const bag = within(status).getAllByText(/^bag \d+, lid \d+$/)[0].closest('details');
+    const bag = within(status).getByRole('table').closest('details');
     expect(bag, 'the bag counts are not behind a disclosure').not.toBeNull();
     expect(bag!.open).toBe(false);
   });

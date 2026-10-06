@@ -358,7 +358,22 @@ export function App(): JSX.Element {
           </div>
         </header>
 
-        <div class="table">
+        <div class={['table', { paused: view().thinking !== null }]}>
+          {/* The table is paused while a computer chooses, said once for the
+              whole table rather than by fading every tile [W6-20]. The live
+              region already announces it, so this is for the eye only. */}
+          <Show when={view().thinking}>
+            {(thinking) => (
+              <p class="table-note" aria-hidden="true">
+                <span class="dots">
+                  <i />
+                  <i />
+                  <i />
+                </span>
+                Player {thinking().seat + 1} is choosing a move
+              </p>
+            )}
+          </Show>
           <Displays
             game={game()}
             names={names()}

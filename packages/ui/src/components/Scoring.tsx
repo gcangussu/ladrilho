@@ -1,6 +1,7 @@
 import type { JSX } from '@solidjs/web';
 import { type PlayerBonuses, type PlayerRound, type RoundScoring, wallColorAt } from 'engine';
 import { For, Show } from 'solid-js';
+import { Tile } from './Tile.jsx';
 
 /**
  * How the last round was scored [U3-82], [U3-84].
@@ -26,30 +27,51 @@ function signed(n: number): string {
   return n > 0 ? `+${n}` : `${n}`;
 }
 
-/** One tile's line: where it landed, the runs through it, and what it earned. */
+/**
+ * One tile's line: where it landed, the runs through it, and what it earned.
+ *
+ * Said twice, deliberately: in full for assistive technology, and in one short
+ * line on screen — the tile itself, its row, and its runs as "3 across · 2
+ * down" — so five placements fit under a board without the card scrolling.
+ * Both forms read the same three fields of the record and nothing else [U3-84].
+ */
 function PlacementLine(props: {
   placement: PlayerRound['placements'][number];
   names: string[];
 }): JSX.Element {
   const p = (): PlayerRound['placements'][number] => props.placement;
+  const color = (): number => wallColorAt(p().row, p().col);
   return (
     <li class="placement">
-      <span class="placement-where">
-        Row {p().row + 1}, column {p().col + 1}, {props.names[wallColorAt(p().row, p().col)]}
+      <span class="sr-only">
+        <span class="placement-where">
+          Row {p().row + 1}, column {p().col + 1}, {props.names[color()]}
+        </span>{' '}
+        <span class="placement-runs">
+          <Show
+            when={p().h > 1 || p().v > 1}
+            fallback={<span class="placement-alone">on its own</span>}
+          >
+            <Show when={p().h > 1}>
+              <span class="run">row run of {p().h}</span>
+            </Show>
+            <Show when={p().h > 1 && p().v > 1}>{' and '}</Show>
+            <Show when={p().v > 1}>
+              <span class="run">column run of {p().v}</span>
+            </Show>
+          </Show>
+        </span>
       </span>
-      <span class="placement-runs">
-        <Show
-          when={p().h > 1 || p().v > 1}
-          fallback={<span class="placement-alone">on its own</span>}
-        >
-          <Show when={p().h > 1}>
-            <span class="run">row run of {p().h}</span>
+      <span class="placement-terse" aria-hidden="true">
+        <Tile color={color()} names={props.names} />
+        <span class="placement-row">row {p().row + 1}</span>
+        <span class="placement-shape">
+          <Show when={p().h > 1 || p().v > 1} fallback="alone">
+            <Show when={p().h > 1}>{p().h} across</Show>
+            <Show when={p().h > 1 && p().v > 1}>{' · '}</Show>
+            <Show when={p().v > 1}>{p().v} down</Show>
           </Show>
-          <Show when={p().h > 1 && p().v > 1}>{' and '}</Show>
-          <Show when={p().v > 1}>
-            <span class="run">column run of {p().v}</span>
-          </Show>
-        </Show>
+        </span>
       </span>
       <span class="placement-points">{signed(p().points)}</span>
     </li>
@@ -61,7 +83,7 @@ function FloorCharge(props: { round: PlayerRound }): JSX.Element {
   const floor = (): PlayerRound['floor'] => props.round.floor;
   return (
     <div class="scoring-floor">
-      <p class="scoring-floor-line">
+      <p class="scoring-floor-line sr-only">
         Floor line: {floor().occupied} slots, {floor().rungs.length} of them charged
         <Show when={floor().markerHeld}>{', the first-player marker among them'}</Show>
         {/* Both numbers are the record's own. Their difference is not shown,
@@ -72,16 +94,31 @@ function FloorCharge(props: { round: PlayerRound }): JSX.Element {
           {' — the rest are past the last slot and cost nothing'}
         </Show>
       </p>
-      <ul class="rungs" aria-label="floor penalty by slot">
-        <For each={[...floor().rungs]} keyed={false}>
-          {(rung, slot) => (
-            <li class="rung">
-              Slot {slot + 1}: {rung()}
-            </li>
-          )}
-        </For>
-      </ul>
-      <p class="scoring-penalty">Floor penalty {floor().penalty}</p>
+      <div class="scoring-floor-ladder">
+        <span class="scoring-floor-label" aria-hidden="true">
+          Floor
+        </span>
+        <ul class="rungs" aria-label="floor penalty by slot">
+          <For each={[...floor().rungs]} keyed={false}>
+            {(rung, slot) => (
+              <li class="rung">
+                <span class="sr-only">Slot {slot + 1}: </span>
+                {rung()}
+              </li>
+            )}
+          </For>
+        </ul>
+        <Show when={floor().rungs.length === 0}>
+          <span class="scoring-floor-none" aria-hidden="true">
+            nothing charged
+          </span>
+        </Show>
+        <Show when={floor().markerHeld}>
+          <span class="tile marker" aria-hidden="true">
+            <span class="glyph">1</span>
+          </span>
+        </Show>
+      </div>
     </div>
   );
 }
@@ -109,17 +146,24 @@ function PlayerRoundSummary(props: {
           </For>
         </ul>
       </Show>
-      <p class="scoring-tiling">Tiles placed {signed(props.record.tiling)}</p>
-
       <FloorCharge round={props.record} />
 
-      <p class="scoring-round-total">
-        Score {props.record.scoreBefore} to {props.record.scoreAfterRound}
-        <Show when={props.record.forgiven > 0}>
-          {' '}
-          ({props.record.forgiven} forgiven — a round never carries a debt forward)
-        </Show>
-      </p>
+      {/* The round's three totals on one line, each the record's own figure:
+          what the wall earned, what the floor cost, and the score it came to. */}
+      <div class="scoring-totals">
+        <p class="scoring-tiling">Tiles placed {signed(props.record.tiling)}</p>
+        <p class="scoring-penalty">Floor penalty {props.record.floor.penalty}</p>
+        <p class="scoring-round-total">
+          Score {props.record.scoreBefore} to {props.record.scoreAfterRound}
+          <Show when={props.record.forgiven > 0}>
+            {' '}
+            <span title="A round never carries a debt forward">
+              ({props.record.forgiven} forgiven
+              <span class="sr-only"> — a round never carries a debt forward</span>)
+            </span>
+          </Show>
+        </p>
+      </div>
 
       <Show when={props.bonuses}>
         {(bonus) => (
