@@ -78,6 +78,9 @@ async function playAPly(doc: Document): Promise<void> {
   await tick();
 }
 
+/** A board row: one of the six destinations of [U3-79], held to 32px tall rather than 44 [U3-59]. */
+const isRow = (control: HTMLElement): boolean => control.closest('[data-group="destinations"]') !== null;
+
 const curtain = (doc: Document): HTMLElement | null =>
   doc.querySelector<HTMLElement>('[role="dialog"][aria-label="Pass the device"]');
 
@@ -359,12 +362,13 @@ describe('the docked board and the curtain [U3-103]', () => {
       expect(docked(doc)).toBe('Player 1');
     });
 
-  it('[U3-103] [U3-59] keeps every control on a docked arrangement at 44 by 44', async () => {
+  it('[U3-103] [U3-59] keeps every control on a docked arrangement at 44 by 44, a row at 32 tall', async () => {
     const doc = await load(390, 844);
     await settleOn(doc, 'stack');
     const small = [...doc.querySelectorAll<HTMLElement>('button')]
-      .map((control) => ({ name: control.getAttribute('aria-label') ?? control.textContent ?? '', box: control.getBoundingClientRect() }))
-      .filter(({ box }) => box.width < 44 || box.height < 44)
+      .map((control) => ({ control, name: control.getAttribute('aria-label') ?? control.textContent ?? '', box: control.getBoundingClientRect() }))
+      // A board's rows are the one exception, and have their own floor.
+      .filter(({ control, box }) => (isRow(control) ? box.height < 32 : box.width < 44 || box.height < 44))
       .map(({ name, box }) => `${name}: ${Math.round(box.width)}x${Math.round(box.height)}`);
     expect(small).toEqual([]);
   });
