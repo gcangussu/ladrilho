@@ -125,6 +125,9 @@ export function NewGameSheet(props: {
     const [x, y] = sims();
     setPlayers([b, a]);
     setSims([y, x]);
+    // The card being edited follows the player who moved, so what was on
+    // screen — a master's setting, say — stays there rather than vanishing.
+    setEditing(editing() === 0 ? 1 : 0);
   };
 
   const stage = (seat: 0 | 1, n: number): void => {
@@ -161,7 +164,13 @@ export function NewGameSheet(props: {
   };
 
   return (
-    <div class="sheet-scrim">
+    <div
+      class="sheet-scrim"
+      // A press on the dimmed page outside the sheet is Close [W6-49].
+      onClick={(event) => {
+        if (event.target === event.currentTarget) props.onClose();
+      }}
+    >
       <section
         class="sheet"
         role="dialog"
@@ -268,25 +277,29 @@ export function NewGameSheet(props: {
               </div>
             </Show>
 
-            <label class="deal-number">
-              <span>Deal number</span>
-              <input
-                type="text"
-                inputmode="numeric"
-                placeholder="Random"
-                ref={dealField}
-              />
-            </label>
-            <p class="sheet-note">Leave it empty for a fresh deal, or type a number to play that deal.</p>
+            {/* At the foot of its column, so it stays put while the master's
+                setting comes and goes above it. */}
+            <div class="sheet-deal">
+              <label class="deal-number">
+                <span>Deal number</span>
+                <input
+                  type="text"
+                  inputmode="numeric"
+                  placeholder="Random"
+                  ref={dealField}
+                />
+              </label>
+              <p class="sheet-note">Leave it empty for a fresh deal, or type a number to play that deal.</p>
 
-            <p class="sheet-refusal" role="status">
-              {refusal()}
-            </p>
+              <p class="sheet-refusal" role="status">
+                {refusal()}
+              </p>
 
-            <button type="button" class="deal" onClick={deal}>
-              Deal
-            </button>
-            <p class="sheet-note center">The game in progress ends when you deal.</p>
+              <button type="button" class="deal" onClick={deal}>
+                Deal
+              </button>
+              <p class="sheet-note center">The game in progress ends when you deal.</p>
+            </div>
           </div>
         </div>
       </section>

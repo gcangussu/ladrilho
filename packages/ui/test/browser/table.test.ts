@@ -133,6 +133,41 @@ describe('the arrangements [U3-95]', () => {
   });
 });
 
+describe('the new-game sheet at a real size [W6-49]', () => {
+  // Seen red, on a copy, with the short-height sticky Deal removed: 512 against 390.
+  // Found by looking: at 844 × 390 the sheet scrolled and Deal sat below its
+  // fold, and at 390 × 844 the master's setting pushed it off the bottom.
+  it.each([
+    { width: 1280, height: 800, layout: 'wide' },
+    { width: 844, height: 390, layout: 'side' },
+    { width: 390, height: 844, layout: 'stack' },
+  ])('[W6-49] keeps Deal on screen with a master seat being edited, at $width × $height',
+    async ({ width, height: tall, layout }) => {
+      const doc = await load(width, tall, '?seed=909&seating=human-master');
+      await settleOn(doc, layout);
+      [...doc.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.trim() === 'New game')!.click();
+      await tick(80);
+      const sheet = doc.querySelector<HTMLElement>('[role="dialog"]');
+      expect(sheet, 'the sheet did not open').not.toBeNull();
+      [...sheet!.querySelectorAll<HTMLButtonElement>('button')].find((b) => /^2\s*Player 2/.test(b.textContent ?? ''))!.click();
+      await tick(80);
+      expect(sheet!.querySelector('input[type="range"]'), 'no master setting on show').not.toBeNull();
+      const dealButton = [...sheet!.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.trim() === 'Deal')!;
+      const box = dealButton.getBoundingClientRect();
+      // On screen, and the top of the sheet's stack at its centre: not under
+      // anything else.
+      expect(box.top, 'Deal starts below the screen').toBeGreaterThanOrEqual(0);
+      expect(box.bottom, 'Deal ends below the screen').toBeLessThanOrEqual(tall);
+      const hit = doc.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      expect(hit?.closest('button'), 'something covers Deal').toBe(dealButton);
+      // And every control in it is a target a finger can take [U3-59].
+      const small = [...sheet!.querySelectorAll<HTMLElement>('button, input:not([type="radio"]), label.choice')]
+        .filter((el) => el.getBoundingClientRect().height < 44)
+        .map((el) => `${el.className || el.tagName}: ${Math.round(el.getBoundingClientRect().height)}`);
+      expect(small).toEqual([]);
+    });
+});
+
 describe('rails [U3-98]', () => {
   /** The centre of cell `col` of wall row `r` on a board. */
   function wallCell(el: HTMLElement, r: number, col: number): { x: number; y: number } {
