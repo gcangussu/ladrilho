@@ -53,7 +53,15 @@ export function Status(props: {
         <span class="seed-word">Deal </span>
         <code>{props.seed}</code>
       </p>
-      <details class="supply-pop">
+      <details
+        class="supply-pop"
+        onToggle={(event) => {
+          if (!event.currentTarget.open) return;
+          for (const other of document.querySelectorAll<HTMLDetailsElement>('.topbar details[open]')) {
+            if (other !== event.currentTarget) other.open = false;
+          }
+        }}
+      >
         <summary>Bag</summary>
         <dl class="supply">
           <For each={props.names} keyed={false}>

@@ -50,6 +50,8 @@ function Hand(props: {
   onPutBack: () => void;
   lastMove: number | null;
   toMove: boolean;
+  /** A person sits here, so a hint about what a turn asks for is for them. */
+  person: boolean;
   names: string[];
 }): JSX.Element {
   return (
@@ -61,9 +63,11 @@ function Hand(props: {
             when={props.lastMove !== null}
             fallback={
               <p class="hand-text">
-                {props.toMove
+                {props.toMove && props.person
                   ? 'Take one colour from a factory or the centre.'
-                  : 'No move yet this game.'}
+                  : props.toMove
+                    ? 'Choosing a move.'
+                    : 'No move yet this game.'}
               </p>
             }
           >
@@ -146,6 +150,8 @@ export function PlayerBoard(props: {
   seat?: number;
   /** A search is in flight for this seat [W6-19]. */
   thinking?: boolean;
+  /** A person plays this seat, not the computer [W6-1]. */
+  person?: boolean;
   /** The selection, on the board it is about to be placed on [U3-99]. */
   holding?: Pick | null;
   onPutBack?: () => void;
@@ -204,6 +210,7 @@ export function PlayerBoard(props: {
         onPutBack={() => props.onPutBack?.()}
         lastMove={props.lastMove ?? null}
         toMove={props.toMove}
+        person={props.person ?? true}
         names={props.names}
       />
 

@@ -139,6 +139,22 @@ export function App(): JSX.Element {
   };
   const curtainUp = (): boolean => curtain() !== null && layout() !== 'wide';
 
+  /**
+   * The top bar's disclosures [U3-96] behave as popovers: one open at a time,
+   * and a press anywhere else closes them. Native `<details>` does neither.
+   */
+  const closePopovers = (except: Element | null): void => {
+    for (const open of root.querySelectorAll<HTMLDetailsElement>('.topbar details[open]')) {
+      if (open !== except && !open.contains(except)) open.open = false;
+    }
+  };
+  const onOutside = (event: PointerEvent): void => {
+    const target = event.target as Element;
+    closePopovers(target.closest('.topbar details'));
+  };
+  document.addEventListener('pointerdown', onOutside);
+  onCleanup(() => document.removeEventListener('pointerdown', onOutside));
+
   /** The last round's workings, as a sheet, where the boards leave no room [U3-102]. */
   const [sheet, setSheet] = createSignal(false);
 
@@ -258,6 +274,7 @@ export function App(): JSX.Element {
       scoreDelta={view().transition?.scoreDelta[seat] ?? null}
       toMove={!game().isTerminal && game().currentPlayer === seat}
       thinking={view().thinking?.seat === seat}
+      person={view().seating.players[seat] === null}
       names={names()}
       destinations={destinations(seat)}
       holding={holding(seat)}
@@ -280,6 +297,7 @@ export function App(): JSX.Element {
         if (event.key === 'Escape') {
           setSelection(null);
           setSheet(false);
+          closePopovers(null);
         } else onShortcut(event);
       }}
       onFocusIn={(event) => {
@@ -322,7 +340,12 @@ export function App(): JSX.Element {
             {/* Who sits where is a setting, and changing it deals a new game
                 [W6-3], so it lives behind its own disclosure and out of the
                 play area [U3-96]. */}
-            <details class="seats-panel">
+            <details
+              class="seats-panel"
+              onToggle={(event) => {
+                if (event.currentTarget.open) closePopovers(event.currentTarget);
+              }}
+            >
               <summary>Seats</summary>
               <div class="seats-pop">
                 <Seating seating={view().seating} onChoose={(next) => startWithSeating(next)} />
