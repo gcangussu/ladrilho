@@ -2,6 +2,7 @@ import type { JSX } from '@solidjs/web';
 import type { AzulJSON } from 'engine';
 import { For, Show } from 'solid-js';
 import type { Thinking } from '../game.js';
+import { Tile } from './Tile.jsx';
 
 /**
  * The round, what is left to take, whose turn it is, and the seed this game was
@@ -63,18 +64,33 @@ export function Status(props: {
         }}
       >
         <summary>Bag</summary>
-        <dl class="supply">
-          <For each={props.names} keyed={false}>
-            {(name, color) => (
-              <div class="supply-colour">
-                <dt>{name()}</dt>
-                <dd>
-                  bag {props.game.bag[color]}, lid {props.game.lid[color]}
-                </dd>
-              </div>
-            )}
-          </For>
-        </dl>
+        {/* A table, so a colour's two counts are read together: a tile for
+            the colour, and the bag and the lid as columns [U3-34]. */}
+        <table class="supply">
+          <caption class="sr-only">Tiles in the bag and in the lid, by colour</caption>
+          <thead>
+            <tr>
+              <th scope="col">
+                <span class="sr-only">Colour</span>
+              </th>
+              <th scope="col">Bag</th>
+              <th scope="col">Lid</th>
+            </tr>
+          </thead>
+          <tbody>
+            <For each={props.names} keyed={false}>
+              {(_, color) => (
+                <tr>
+                  <th scope="row">
+                    <Tile color={color} names={props.names} />
+                  </th>
+                  <td>{props.game.bag[color]}</td>
+                  <td>{props.game.lid[color]}</td>
+                </tr>
+              )}
+            </For>
+          </tbody>
+        </table>
       </details>
     </section>
   );

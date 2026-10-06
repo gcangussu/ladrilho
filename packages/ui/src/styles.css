@@ -447,25 +447,37 @@ input {
 }
 
 .supply {
-  display: grid;
-  gap: 0.25rem;
-  margin: 0;
-  font-size: 0.82rem;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
 }
 
-.supply-colour {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: space-between;
+.supply th,
+.supply td {
+  padding: 0.2rem 0.5rem;
 }
 
-.supply dt,
-.supply dd {
-  margin: 0;
+.supply thead th {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--dim);
+  text-align: right;
 }
 
-.supply dt {
-  font-weight: 600;
+.supply td {
+  text-align: right;
+  font-weight: 700;
+  min-width: 2.75rem;
+}
+
+.supply tbody th {
+  padding-left: 0;
+}
+
+.supply .tile {
+  --tile: 1.5rem;
 }
 
 /* ------------------------------------------------------------------ */
@@ -695,8 +707,14 @@ input {
 }
 
 .pick .tile {
-  --tile: 2.35rem;
+  --tile: 2.2rem;
   transition: transform 120ms ease;
+}
+
+/* A stack sits a little down and left, so its shadow tile stays inside the
+   control's 44 × 44 and never over the next pick [U3-97]. */
+.pick:has(.count) .tile {
+  translate: -2px 2px;
 }
 
 .pick:has(.count) .tile {
@@ -709,8 +727,8 @@ input {
 
 .count {
   position: absolute;
-  right: -0.3rem;
-  bottom: -0.3rem;
+  right: 0;
+  bottom: 0;
   z-index: 2;
   min-width: 1.35rem;
   height: 1.35rem;
@@ -729,9 +747,52 @@ input {
   cursor: default;
 }
 
-.pick[aria-disabled='true'] .tile {
-  filter: saturate(0.55) opacity(0.6);
+/*
+ * While a computer chooses every pick is unavailable at once, so it is said
+ * once, for the whole table — the note below — and the tiles keep their
+ * colours, which are what a player waiting wants to study.
+ */
+.table.paused .pick {
+  cursor: not-allowed;
 }
+
+.table.paused .displays {
+  opacity: 0.88;
+}
+
+.table {
+  position: relative;
+}
+
+.table-note {
+  position: absolute;
+  z-index: 6;
+  top: 0.15rem;
+  left: 50%;
+  translate: -50% 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 1.8rem;
+  padding: 0 0.8rem;
+  border-radius: 0.9rem;
+  background: var(--ink);
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Just under the ring where the table is round, in place of the key hints. */
+.app[data-layout='wide'] .table-note {
+  top: 24.3rem;
+}
+
+.table.paused .keys {
+  visibility: hidden;
+}
+
 
 /* The pick in hand, lifted off its plate. */
 .pick.selected .tile,
@@ -1436,9 +1497,19 @@ input {
 }
 
 .player-board.mini .turn-marker {
-  height: 1.5rem;
-  font-size: 0.7rem;
-  padding: 0 0.5rem;
+  height: 1.4rem;
+  gap: 0.25rem;
+  font-size: 0.65rem;
+  padding: 0 0.4rem;
+}
+
+.player-board.mini .player-header {
+  gap: 0.3rem;
+}
+
+.player-board.mini .dots i {
+  width: 4px;
+  height: 4px;
 }
 
 .player-board.mini .hand {
@@ -1540,6 +1611,10 @@ input {
   font-size: 1.3rem;
 }
 
+/* Where the table is narrow the boards say whose turn it is and who is
+   thinking, so the top bar keeps both only for assistive technology. */
+.app:not([data-layout='wide']) .thinking,
+.app:not([data-layout='wide']) .table-note,
 .app:not([data-layout='wide']) .whose-turn {
   position: absolute;
   width: 1px;
@@ -1652,6 +1727,21 @@ input {
 .app[data-layout='wide'] .scoring-player {
   min-height: 0;
   overflow: auto;
+  /*
+   * Scroll shadows: the `local` covers move with the content and hide the
+   * `scroll` shadows beneath them when there is nothing more to see, so a
+   * soft edge appears only at a side that has more — the card says "there is
+   * more" without a scrollbar having to.
+   */
+  background:
+    linear-gradient(var(--surface) 30%, transparent) top / 100% 1.5rem no-repeat local,
+    linear-gradient(transparent, var(--surface) 70%) bottom / 100% 1.5rem no-repeat local,
+    radial-gradient(farthest-side at 50% 0, rgba(21, 23, 28, 0.14), transparent) top / 100% 0.6rem
+      no-repeat scroll,
+    radial-gradient(farthest-side at 50% 100%, rgba(21, 23, 28, 0.14), transparent) bottom / 100%
+      0.6rem no-repeat scroll,
+    var(--surface);
+  scrollbar-width: thin;
 }
 
 /* Elsewhere, a sheet the player asks for. */
@@ -1735,26 +1825,67 @@ input {
 }
 
 .placement {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  column-gap: 0.75rem;
-  padding: 0.2rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 1.6rem;
   border-bottom: 1px solid #e2e3dc;
 }
 
-.placement-where {
-  color: var(--ink);
+.placement-terse {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  white-space: nowrap;
 }
 
-.placement-runs {
-  grid-column: 1;
-  font-size: 0.75rem;
+.placement-terse .tile {
+  --tile: 1.1rem;
+  border-radius: 4px;
+}
+
+.placement-row {
+  color: var(--ink);
+  font-weight: 600;
 }
 
 .placement-points {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  align-self: center;
+  margin-left: auto;
+}
+
+.scoring-floor-ladder {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  min-height: 1.6rem;
+}
+
+.scoring-floor-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  margin-right: 0.2rem;
+}
+
+.scoring-floor-none {
+  color: var(--faint);
+}
+
+.scoring-floor-ladder .tile.marker {
+  --tile: 1.1rem;
+  border-width: 1.5px;
+  font-size: 0.65rem;
+}
+
+.scoring-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.9rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid #e2e3dc;
 }
 
 .placement-points {
@@ -1779,12 +1910,12 @@ input {
 }
 
 .rung {
-  border-radius: 0.4rem;
+  border-radius: 0.35rem;
   background: var(--sunk);
   color: var(--loss);
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  padding: 0.1rem 0.4rem;
+  padding: 0.05rem 0.35rem;
 }
 
 /* ------------------------------------------------------------------ */

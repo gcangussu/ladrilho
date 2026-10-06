@@ -104,6 +104,22 @@ describe('the arrangements [U3-95]', () => {
       expect(root.scrollHeight, 'scrolls vertically after a ply').toBeLessThanOrEqual(root.clientHeight);
     });
 
+  // Seen red, on a copy, with the thinking pill visible again: 870 against 844.
+  // Found by looking, not by this suite: hot-seat never thinks, and the top
+  // bar's thinking pill wrapped the phone's top bar onto a third line.
+  it('[U3-95] does not scroll on a phone while the computer is thinking', async () => {
+    const doc = await load(390, 844, '?seed=12&seating=human-master&p2Simulations=200000');
+    await settleOn(doc, 'stack');
+    await playAPly(doc);
+    const deadline = Date.now() + 5_000;
+    while (!/thinking/.test(doc.querySelector('[aria-label="Game status"]')?.textContent ?? '')) {
+      if (Date.now() > deadline) throw new Error('the computer never started thinking');
+      await tick(25);
+    }
+    const root = doc.documentElement;
+    expect(root.scrollHeight, 'scrolls vertically while thinking').toBeLessThanOrEqual(root.clientHeight);
+  });
+
   // Seen red, on a copy, with the probe measured in pixels instead of root ems
   // (`em` fixed at 16): the arrangement stayed `wide` at a 20px root.
   it('[U3-95] decides the arrangement in root ems, not in pixels', async () => {

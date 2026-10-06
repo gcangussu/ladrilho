@@ -56,10 +56,17 @@ describe('the status panel', () => {
   it('[U3-34] shows bag and lid as per-colour counts', () => {
     const { getByRole } = render(() => <Status game={vm.game} seed={vm.seed} names={names} thinking={null} />);
     const status = getByRole('region', { name: 'Game status' });
-    for (const color of names.keys()) {
-      expect(status).toHaveTextContent(
-        `bag ${vm.game.bag[color]}, lid ${vm.game.lid[color]}`,
-      );
+    const table = within(status).getByRole('table');
+    // The columns by their headers, and a row per colour named by its colour.
+    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(
+      ['Colour', 'Bag', 'Lid'],
+    );
+    for (const [color, name] of names.entries()) {
+      const row = within(table).getByRole('row', { name: new RegExp(`^${name}\\b`) });
+      expect(within(row).getAllByRole('cell').map((c) => c.textContent), name).toEqual([
+        String(vm.game.bag[color]),
+        String(vm.game.lid[color]),
+      ]);
     }
   });
 
