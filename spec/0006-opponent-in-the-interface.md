@@ -172,7 +172,8 @@ chose, not one dealt on the way to it.*
   - **Deal** commits it: one deal ([0003 U3-5]) with the staged seating and settings and the
     staged deal number, or a fresh seed when that is empty ([0003 U3-104]). A seating that equals
     the current one still deals — the sheet is how a new game is started, with or without a change.
-  - **Close** and <kbd>Escape</kbd> discard every staged choice and leave the game as it was.
+  - **Close**, <kbd>Escape</kbd> and a press on the page outside the sheet discard every staged
+    choice and leave the game as it was.
   - The sheet says, beside Deal, that dealing ends the game in progress.
 
 - **[W6-50]** The sheet MUST show one card per seat — `Player 1` and `Player 2` — each naming who

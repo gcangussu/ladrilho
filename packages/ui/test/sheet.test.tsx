@@ -52,7 +52,7 @@ describe('the sheet [W6-49]', () => {
 
   // Seen red, on a copy, with choosing a level dealing at once: the first
   // radio dealt a game.
-  it('[W6-49] [W6-53] stages every choice, and Close or Escape deals nothing', async () => {
+  it('[W6-49] [W6-53] stages every choice, and Close, Escape or a press outside deals nothing', async () => {
     const { screen, state } = await mount('?seed=42&seating=human-sharp');
     const before = state.view();
 
@@ -77,6 +77,16 @@ describe('the sheet [W6-49]', () => {
     editSeat(sheet, 1);
     expect(choices(sheet).find((r) => r.checked)?.value).toBe('sharp');
     fireEvent.keyDown(sheet, { key: 'Escape' });
+    flush();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(state.view()).toBe(before);
+
+    // And a press outside it, on the dimmed page — but not one inside it.
+    sheet = openSheet(screen);
+    sheet.click();
+    flush();
+    expect(screen.queryByRole('dialog'), 'a press inside the sheet closed it').not.toBeNull();
+    (sheet.parentElement as HTMLElement).click();
     flush();
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(state.view()).toBe(before);

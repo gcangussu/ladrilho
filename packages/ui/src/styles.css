@@ -1893,11 +1893,29 @@ input {
   box-shadow: 0 0 0 3px var(--ink), 0 8px 0 var(--ink);
 }
 
+/*
+ * Where the table is small the result takes exactly the table's room — size
+ * containment keeps it from growing the row and pushing the page past the
+ * screen — with the verdict and the three offers fixed and the per-player
+ * lines scrolling between them.
+ */
 .app:not([data-layout='wide']) .game-over {
   align-self: stretch;
   width: 100%;
-  overflow: auto;
+  contain: size;
+  display: flex;
+  flex-direction: column;
   box-shadow: 0 0 0 3px var(--ink);
+}
+
+.app:not([data-layout='wide']) .game-over .finals {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.app:not([data-layout='wide']) .game-over-actions {
+  flex: none;
 }
 
 .game-over h2 {
@@ -2054,14 +2072,38 @@ input {
   .sheet-body {
     display: grid;
     grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-    align-items: start;
+    align-items: stretch;
     gap: 1.25rem;
   }
 
-  .sheet-col:last-child {
-    position: sticky;
-    top: 0;
+  .sheet-deal {
+    margin-top: auto;
   }
+}
+
+/*
+ * Two columns but little height — a phone held sideways: the sheet scrolls,
+ * so the deal group flows from the top of its column and Deal alone sticks to
+ * the sheet's foot. (The group gives its children to the column so that the
+ * column, which runs the sheet's whole height, is what Deal sticks within.)
+ */
+@media (min-width: 48rem) and (max-height: 560px) {
+  .sheet-deal {
+    display: contents;
+  }
+
+  .sheet .deal {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    box-shadow: 0 -0.75rem 0.75rem var(--surface), 0 1.1rem 0 var(--surface);
+  }
+}
+
+.sheet-deal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
 /* A phone: the sheet rises from the bottom edge, under the thumb. */
@@ -2076,6 +2118,14 @@ input {
     max-height: 94dvh;
     border-radius: 1.6rem 1.6rem 0 0;
     box-shadow: 0 -3px 0 var(--ink), 0 -12px 30px rgba(0, 0, 0, 0.25);
+  }
+
+  /* Deal stays under the thumb however far the choices scroll: the columns
+     give their contents to the sheet, so the sheet is what Deal sticks to. */
+  .sheet-body,
+  .sheet-col,
+  .sheet-deal {
+    display: contents;
   }
 
   /* Deal stays under the thumb however far the choices scroll. */
@@ -2266,11 +2316,9 @@ input {
   text-align: center;
 }
 
-.sheet-refusal:empty {
-  display: none;
-}
-
+/* Its line is kept even when empty, so a refusal moves nothing. */
 .sheet-refusal {
+  min-height: 1.1rem;
   font-size: 0.82rem;
   font-weight: 600;
   color: var(--loss);
