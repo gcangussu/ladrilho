@@ -88,6 +88,9 @@ async function playAPly(doc: Document): Promise<void> {
   await tick();
 }
 
+/** A board row: one of the six destinations of [U3-79], held to 32px tall rather than 44 [U3-59]. */
+const isRow = (control: HTMLElement): boolean => control.closest('[data-group="destinations"]') !== null;
+
 describe('the board at a real size', () => {
   it.each(VIEWPORTS)('[U3-58] fits $name with no horizontal page scroll', async (viewport) => {
     const doc = await load(viewport.width, viewport.height);
@@ -97,16 +100,18 @@ describe('the board at a real size', () => {
     );
   });
 
-  it.each(VIEWPORTS)('[U3-59] gives every target 44 by 44 CSS pixels at $name', async (viewport) => {
+  it.each(VIEWPORTS)('[U3-59] gives every target 44 by 44 CSS pixels, and a board row 32 tall, at $name', async (viewport) => {
     const doc = await load(viewport.width, viewport.height);
     const controls = [...doc.querySelectorAll<HTMLElement>('button')];
     expect(controls.length).toBeGreaterThan(5);
     const small = controls
       .map((control) => ({
+        control,
         name: control.getAttribute('aria-label') ?? control.textContent ?? '',
         box: control.getBoundingClientRect(),
       }))
-      .filter(({ box }) => box.width < 44 || box.height < 44)
+      // A board's rows are the one exception, and have their own floor.
+      .filter(({ control, box }) => (isRow(control) ? box.height < 32 : box.width < 44 || box.height < 44))
       .map(({ name, box }) => `${name}: ${Math.round(box.width)}x${Math.round(box.height)}`);
     expect(small).toEqual([]);
   });
@@ -228,7 +233,7 @@ const height = (el: HTMLElement): number => Math.round(el.getBoundingClientRect(
  * | `--lines-width`: `5 * --tile + 4 * --tile-gap` → `4 * … + 3 * …` (under-measures) | [U3-94] |
  * | `--lines-width`: → `6 * … + 5 * …` (over-measures) | **nothing** — see below |
  * | `--panel-pad`: `0.875rem` → `2rem` | **nothing** — see below |
- * | `--row: max(2.75rem, 44px)` → `2.75rem`, `.destination { min-height: 44px }` back | [U3-86] at 15px |
+ * | `--row: max(calc(--tile + 0.35rem), 32px)` → the calc alone, `.destination { min-height: 32px }` | [U3-86] at 13px |
  *
  * Re-run in full when the table redesign ([U3-95]) moved the code they name:
  * the columns became five tiles wide, `--tile` split into `--tile` and `--row`,
@@ -280,7 +285,8 @@ const height = (el: HTMLElement): number => Math.round(el.getBoundingClientRect(
  * measures and can set the root font-size itself. Recording a mutation that
  * stays green is how a blind spot stays visible instead of passing for
  * coverage — and this one turned out to be one line of test away from being no
- * blind spot at all. It fails at 15px, where it measured 276 against 263.
+ * blind spot at all. It failed at 15px under the old 44px floor; with the
+ * 32px floor of today it fails at 13px, where it measured 204 against 196.
  *
  * The first of those is why the ply assertion measures `.board-play`: against
  * the whole board section it stayed green, both boards being grid items that
@@ -338,9 +344,11 @@ describe('a board that holds still', () => {
    * not: the lane owns the document it measures, and can simply say what the
    * root font-size is.
    */
-  it('[U3-86] is the same size to move as waiting at a root font-size of 15px', async () => {
+  it('[U3-86] is the same size to move as waiting at a root font-size of 13px', async () => {
     const doc = await load(1280, 800);
-    doc.documentElement.style.fontSize = '15px';
+    // Small enough that the row's 32px floor is what holds it up [U3-59]: at
+    // 13px a tile and its margin come to 30.55px.
+    doc.documentElement.style.fontSize = '13px';
     expect(height(playArea(board(doc, 'Player 1')))).toBe(
       height(playArea(board(doc, 'Player 2'))),
     );

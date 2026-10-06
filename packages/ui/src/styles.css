@@ -47,18 +47,18 @@
    * A tile, and the row it sits in.
    *
    * Two sizes rather than one, because a row is a control on one board and not
-   * on the other, and [U3-59]'s minimum is the row's and not the tile's. The
-   * floor belongs on the size both configurations share — `--row` — where
-   * there is only one of it, so the two configurations of [U3-86] cannot part
-   * company at a root font-size nothing in the page sets: `max(2.75rem, 44px)`
-   * and not `2.75rem`, for the same reason it always was.
+   * on the other: the row is the tile and a small margin, and has its own
+   * floor — [U3-59]'s 32px for a board's rows. The floor belongs on the size
+   * both configurations share — `--row` — where there is only one of it, so
+   * the two configurations of [U3-86] cannot part company at a root font-size
+   * nothing in the page sets. `--row` is composed below, beside the widths,
+   * because it follows `--tile` wherever a board's tile size is set.
    *
    * One tile size and one gap for the wall and the lines alike, and every row
    * one `--row` high: [U3-88] wants pattern line r level with wall row r, and
    * two columns built from the same two sizes are level by construction.
    */
   --tile: 2rem;
-  --row: max(2.75rem, 44px);
   --tile-gap: 0.2rem;
   /* The gap between a board's two columns, and a panel's padding and border. */
   --play-gap: 1rem;
@@ -83,6 +83,9 @@
 :root,
 .app,
 .player-board {
+  /* The tile and a margin of 0.175rem above and below it: close rows, and the
+     lime of an available row just clears its tiles. Never under 32px [U3-59]. */
+  --row: max(calc(var(--tile) + 0.35rem), 32px);
   --lines-width: calc(5 * var(--tile) + 4 * var(--tile-gap));
   --wall-width: calc(5 * var(--tile) + 4 * var(--tile-gap));
   --play-width: calc(var(--lines-width) + var(--play-gap) + var(--wall-width));
@@ -421,14 +424,18 @@ input {
 }
 
 .supply {
-  border-collapse: collapse;
+  /* Separate, not collapsed: a collapsed table ignores its own padding, which
+     left the tiles against the popover's border. */
+  border-collapse: separate;
+  border-spacing: 0;
+  padding: 0.75rem 1rem;
   font-size: 0.85rem;
   font-variant-numeric: tabular-nums;
 }
 
 .supply th,
 .supply td {
-  padding: 0.2rem 0.5rem;
+  padding: 0.3rem 0.6rem;
 }
 
 .supply thead th {
@@ -588,8 +595,9 @@ input {
  */
 .display-name {
   position: absolute;
-  top: 0.25rem;
+  top: 50%;
   left: 0.3rem;
+  transform: translateY(-50%);
   color: var(--faint);
   font-size: 0.66rem;
   font-weight: 700;
@@ -2052,7 +2060,6 @@ input {
 @media (min-height: 600px) and (min-width: 64rem) {
   .app[data-layout='side'] {
     --tile: 2.25rem;
-    --row: max(3rem, 44px);
     --play-gap: 0.9rem;
     --panel-pad: 0.75rem;
   }
@@ -2078,7 +2085,6 @@ input {
 @media (min-width: 560px) and (min-height: 940px) {
   .app[data-layout='stack'] {
     --tile: 2.5rem;
-    --row: max(3.2rem, 44px);
     --play-gap: 1rem;
     --panel-pad: 0.9rem;
   }

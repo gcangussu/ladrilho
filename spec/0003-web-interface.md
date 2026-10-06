@@ -470,7 +470,11 @@ engine's `RoundScoring` ([0007 S7-1]); none of them computes anything.
 
 - **[U3-58]** The board MUST be usable at 1280 × 800 and at 844 × 390 — a laptop, and a phone held
   sideways — with **no horizontal page scroll** at either.
-- **[U3-59]** Interactive targets MUST be at least 44 × 44 CSS pixels. *(The small board of
+- **[U3-59]** Interactive targets MUST be at least 44 × 44 CSS pixels — except a board's six rows,
+  the destinations of [U3-79], which MUST be at least 32 CSS pixels tall and are as wide as the
+  board's lines column (the rail of [U3-98] reaches across the wall besides). *(Relaxed for intent
+  0011: rows of 44 put a band of empty board between every pair of rows on a phone, where the
+  tiles are 28. A row is the tile and a small margin, and is still well above WCAG 2.5.8's 24.)* *(The small board of
   [U3-103] is the one exception, and only while its seat is to move: its six rows are then move
   controls under [U3-79], and every move control is unavailable while a computer is to move
   ([0006 W6-22]) or covered by the curtain while a person is. A small board never carries an
