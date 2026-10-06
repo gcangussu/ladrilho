@@ -202,6 +202,19 @@ input {
   --panel-pad: 0.5rem;
 }
 
+/* A docked board is as wide as it needs, centred, and never stretched. */
+.app:not([data-layout='wide']) .player-board.dock {
+  width: 100%;
+  max-width: var(--board-width);
+  justify-self: center;
+}
+
+.app[data-layout='stack'] .player-board.mini {
+  width: 100%;
+  max-width: 34rem;
+  justify-self: center;
+}
+
 .app[data-layout='side'] .stage {
   padding: 0.5rem;
   gap: 0.5rem;
@@ -1224,58 +1237,50 @@ input {
 
 /*
  * A rail: an available pattern line reaches across the wall row it feeds, and
- * the whole of it is the target [U3-98]. Only where the wall is beside the
- * lines — that is, where the play area is as wide as both columns — and the
- * wall lets a press fall through to the row beneath it, holding no control of
- * its own.
+ * the whole of it is the target [U3-98]. The wall lets a press fall through to
+ * the row beneath it, holding no control of its own.
+ *
+ * The reach is the gap and the wall, and never past the play area: `100cqw` is
+ * the play area's own width, so where the wall has wrapped below the lines the
+ * rail stops at the board's edge rather than pushing the page sideways — and
+ * the same rule holds at every tile size, with no width written twice.
  */
-/* The full board's play area: 2 × (5 × 2rem + 4 × 0.2rem) + 1rem. */
-@container play (min-width: 22.6rem) {
-  .app[data-layout='wide'] .player-board.offered .wall {
-    pointer-events: none;
-  }
-
-  .app[data-layout='wide'] .pattern-line.destination[aria-disabled='false'] {
-    background: transparent;
-    box-shadow: none;
-  }
-
-  .app[data-layout='wide'] .pattern-line.destination[aria-disabled='false']::before {
-    content: '';
-    position: absolute;
-    z-index: -1;
-    inset: 0 calc(-1 * (var(--play-gap) + var(--wall-width) + 0.35rem)) 0 -0.35rem;
-    border-radius: 0.75rem;
-    background: var(--accent-soft);
-    box-shadow: inset 0 0 0 2px var(--ink);
-  }
-
-  .app[data-layout='wide'] .pattern-line.destination[aria-disabled='false']:hover::before {
-    background: var(--accent);
-    box-shadow: inset 0 0 0 3px var(--ink);
-  }
+.player-board.offered .wall {
+  pointer-events: none;
 }
 
-/* The compact board's play area: 2 × (5 × 1.75rem + 4 × 0.2rem) + 0.6rem. */
-@container play (min-width: 19.7rem) {
-  .app:not([data-layout='wide']) .player-board.offered .wall {
-    pointer-events: none;
-  }
+.pattern-line.destination[aria-disabled='false'] {
+  background: transparent;
+  box-shadow: none;
+}
 
-  .app:not([data-layout='wide']) .pattern-line.destination[aria-disabled='false'] {
-    background: transparent;
-    box-shadow: none;
-  }
+.pattern-line.destination[aria-disabled='false']::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  bottom: 0;
+  left: -0.3rem;
+  right: calc(
+    -1 * min(var(--play-gap) + var(--wall-width) + 0.3rem, 100cqw - var(--lines-width))
+  );
+  border-radius: 0.75rem;
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 2px var(--ink);
+}
 
-  .app:not([data-layout='wide']) .pattern-line.destination[aria-disabled='false']::before {
-    content: '';
-    position: absolute;
-    z-index: -1;
-    inset: 0 calc(-1 * (var(--play-gap) + var(--wall-width) + 0.3rem)) 0 -0.3rem;
-    border-radius: 0.75rem;
-    background: var(--accent-soft);
-    box-shadow: inset 0 0 0 2px var(--ink);
-  }
+/* Focus rings the whole rail, not only its line half. */
+.pattern-line.destination[aria-disabled='false']:focus-visible {
+  outline: none;
+}
+
+.pattern-line.destination[aria-disabled='false']:focus-visible::before {
+  box-shadow: inset 0 0 0 2px var(--ink), 0 0 0 3px var(--tile-0);
+}
+
+.pattern-line.destination[aria-disabled='false']:hover::before {
+  background: var(--accent);
+  box-shadow: inset 0 0 0 3px var(--ink);
 }
 
 .destination:focus-visible {
@@ -1797,6 +1802,13 @@ input {
   box-shadow: 0 0 0 3px var(--ink), 0 8px 0 var(--ink);
 }
 
+.app:not([data-layout='wide']) .game-over {
+  align-self: stretch;
+  width: 100%;
+  overflow: auto;
+  box-shadow: 0 0 0 3px var(--ink);
+}
+
 .game-over h2 {
   font-size: 0.72rem;
   letter-spacing: 0.08em;
@@ -1857,4 +1869,53 @@ input {
   color: var(--ink);
   font: 800 1.05rem/1 var(--font-display);
   cursor: pointer;
+}
+
+/* ------------------------------------------------------------------ */
+/* Docked arrangements with room to spare                              */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Where a docked arrangement has height to spare — a tablet, a small laptop —
+ * the tiles grow into it rather than leaving the bottom of the screen empty.
+ * Height only: the arrangement itself is the width's to decide [U3-95].
+ */
+@media (min-height: 600px) {
+  .app[data-layout='side'] {
+    --tile: 2.25rem;
+    --row: max(3rem, 44px);
+    --play-gap: 0.9rem;
+    --panel-pad: 0.75rem;
+  }
+
+  .app[data-layout='side'] .player-board.mini {
+    --tile: 0.95rem;
+    --row: 1.05rem;
+  }
+
+  .app[data-layout='side'] .stage {
+    grid-template-columns: minmax(0, var(--board-width)) minmax(0, 1fr) minmax(0, 12.5rem);
+    grid-template-rows: auto auto;
+    min-height: 100dvh;
+    align-content: center;
+  }
+}
+
+@media (min-width: 560px) and (min-height: 940px) {
+  .app[data-layout='stack'] {
+    --tile: 2.5rem;
+    --row: max(3.2rem, 44px);
+    --play-gap: 1rem;
+    --panel-pad: 0.9rem;
+  }
+
+  .app[data-layout='stack'] .player-board.mini {
+    --tile: 0.95rem;
+    --row: 1.05rem;
+  }
+
+  .app[data-layout='stack'] .stage {
+    min-height: 100dvh;
+    align-content: center;
+  }
 }
