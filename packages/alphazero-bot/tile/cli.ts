@@ -37,7 +37,8 @@ play options
                           mcts:<sims>       the page's alternate AI: PUCT over the policy/value net
                         any of them @<threads>: the page's threaded mode (not repeatable); with 3 or
                         more threads their endgame solver can run (mcts: at 4096 sims or more)
-  --tail on|off         threaded minimax probes the endgame solver from round 5 (default on)
+  --tail race|on|off    threaded minimax and the endgame solver from round 5: race, the page's
+                        default path (default); on, the solver probed first; off, minimax alone
   --tail-ms <ms>        the probe's time limit on a node budget (default 1000)
   --games <n>           games per (us, them) pair, rounded up to even: each deal from both seats (default 100)
   --seed <n>            first deal's seed                     (default 1)
@@ -123,7 +124,7 @@ async function main(): Promise<void> {
       checkpoint: { type: 'string' },
       config: { type: 'string' },
       out: { type: 'string' },
-      tail: { type: 'string', default: 'on' },
+      tail: { type: 'string', default: 'race' },
       'tail-ms': { type: 'string', default: '1000' },
       'play-nodes': { type: 'string', default: '100000' },
       nodes: { type: 'string', default: '1000000' },
@@ -186,7 +187,7 @@ async function main(): Promise<void> {
     }
     case 'verify': {
       await ensureCache(cacheDir, log);
-      const t = await loadTheirs(cacheDir, build, 1, { tail: false, tailMs: 0 });
+      const t = await loadTheirs(cacheDir, build, 1, { tail: 'off', tailMs: 0 });
       const r = verify(t, int(v.games ?? '20', 'games'), int(v.seed, 'seed'), log);
       process.stdout.write(
         `${r.games} games, ${r.plies} plies, ${r.roundEnds} round ends, ${r.terminals} game ends: ${r.disagreements.length} disagreements\n`,
@@ -199,7 +200,7 @@ async function main(): Promise<void> {
       await ensureCache(cacheDir, log);
       const threads = v.threads !== undefined ? int(v.threads, 'threads') : availableParallelism();
       if (threads < 3) throw new Error('their solver needs at least 3 threads');
-      const t = await loadTheirs(cacheDir, build, threads, { tail: true, tailMs: int(v['tail-ms'], 'tail-ms') });
+      const t = await loadTheirs(cacheDir, build, threads, { tail: 'on', tailMs: int(v['tail-ms'], 'tail-ms') });
       const stamp = new Date().toISOString().replace(/[:.]/g, '-');
       const out = resolve(v.out ?? join(RUNS, 'tile', `solver-check-${stamp}`));
       log(`writing ${out}.jsonl`);
@@ -234,8 +235,8 @@ async function main(): Promise<void> {
       let games = int(v.games ?? '100', 'games');
       games += games % 2;
       const threads = Math.max(...them.map((t) => t.threads));
-      if (v.tail !== 'on' && v.tail !== 'off') throw new Error('--tail must be on or off');
-      const options: TheirOptions = { tail: v.tail === 'on', tailMs: int(v['tail-ms'], 'tail-ms') };
+      if (v.tail !== 'race' && v.tail !== 'on' && v.tail !== 'off') throw new Error('--tail must be race, on or off');
+      const options: TheirOptions = { tail: v.tail, tailMs: int(v['tail-ms'], 'tail-ms') };
       for (const t of them) {
         if (t.kind === 'mcts' && t.threads >= 3 && t.sims < MCTS_SOLVER_MIN_SIMS) {
           log(`note: ${specLabel(t)} is below ${MCTS_SOLVER_MIN_SIMS} simulations, where their MCTS does not try the endgame solver`);
