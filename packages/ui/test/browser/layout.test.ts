@@ -233,7 +233,7 @@ const height = (el: HTMLElement): number => Math.round(el.getBoundingClientRect(
  * | `--lines-width`: `5 * --tile + 4 * --tile-gap` → `4 * … + 3 * …` (under-measures) | [U3-94] |
  * | `--lines-width`: → `6 * … + 5 * …` (over-measures) | **nothing** — see below |
  * | `--panel-pad`: `0.875rem` → `2rem` | **nothing** — see below |
- * | `--row: max(calc(--tile + 0.35rem), 32px)` → the calc alone, `.destination { min-height: 32px }` | [U3-86] at 13px |
+ * | `--row: max(calc(--tile + 0.35rem + 2px), 32px)` → the calc alone, `.destination { min-height: 32px }` | [U3-86] at 12px |
  *
  * Re-run in full when the table redesign ([U3-95]) moved the code they name:
  * the columns became five tiles wide, `--tile` split into `--tile` and `--row`,
@@ -286,7 +286,7 @@ const height = (el: HTMLElement): number => Math.round(el.getBoundingClientRect(
  * stays green is how a blind spot stays visible instead of passing for
  * coverage — and this one turned out to be one line of test away from being no
  * blind spot at all. It failed at 15px under the old 44px floor; with the
- * 32px floor of today it fails at 13px, where it measured 204 against 196.
+ * 32px floor of today it fails at 12px, where it measured 202 against 193.
  *
  * The first of those is why the ply assertion measures `.board-play`: against
  * the whole board section it stayed green, both boards being grid items that
@@ -344,11 +344,11 @@ describe('a board that holds still', () => {
    * not: the lane owns the document it measures, and can simply say what the
    * root font-size is.
    */
-  it('[U3-86] is the same size to move as waiting at a root font-size of 13px', async () => {
+  it('[U3-86] is the same size to move as waiting at a root font-size of 12px', async () => {
     const doc = await load(1280, 800);
     // Small enough that the row's 32px floor is what holds it up [U3-59]: at
-    // 13px a tile and its margin come to 30.55px.
-    doc.documentElement.style.fontSize = '13px';
+    // 12px a tile and its margin come to 30.2px.
+    doc.documentElement.style.fontSize = '12px';
     expect(height(playArea(board(doc, 'Player 1')))).toBe(
       height(playArea(board(doc, 'Player 2'))),
     );

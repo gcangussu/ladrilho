@@ -83,9 +83,10 @@
 :root,
 .app,
 .player-board {
-  /* The tile and a margin of 0.175rem above and below it: close rows, and the
-     lime of an available row just clears its tiles. Never under 32px [U3-59]. */
-  --row: max(calc(var(--tile) + 0.35rem), 32px);
+  /* The tile and a margin of 0.175rem and a pixel above and below it: close
+     rows, and the lime of an available row clears its tiles with a little air.
+     Never under 32px [U3-59]. */
+  --row: max(calc(var(--tile) + 0.35rem + 2px), 32px);
   --lines-width: calc(5 * var(--tile) + 4 * var(--tile-gap));
   --wall-width: calc(5 * var(--tile) + 4 * var(--tile-gap));
   --play-width: calc(var(--lines-width) + var(--play-gap) + var(--wall-width));
