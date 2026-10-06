@@ -669,7 +669,9 @@ next to the tiles that earned them.
   | `stack` | otherwise | the small board above the table, the docked board below it |
 
   The table is the five factory displays and the centre: in a ring about the centre in `wide`, and
-  as three displays over two with the centre beneath in the others. With nothing expanded — no
+  in `stack` where the main element is at least 40 root ems wide and the screen at least 56 tall —
+  a tablet held upright; elsewhere as three displays over two with the centre beneath. A display in
+  the rows is as wide as a third of the table allows, to 7.25rem. With nothing expanded — no
   disclosure open and no sheet raised — the document MUST NOT scroll vertically at 1280 × 800,
   844 × 390 and 390 × 844 at the default root font-size, in addition to [U3-58]'s horizontal rule.
   Where nothing can be measured the arrangement is `wide`.

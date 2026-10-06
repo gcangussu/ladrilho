@@ -30,6 +30,14 @@ const WIDE_FROM = 77;
 const SIDE_FROM = 50;
 
 /**
+ * Where the factories go round the centre rather than in rows [U3-95]: on the
+ * wide arrangement, and stacked on a screen with the width and the height to
+ * spare for a ring — a tablet held upright — in root ems as the rest is.
+ */
+const RING_WIDTH = 40;
+const RING_HEIGHT = 56;
+
+/**
  * The whole interface, and the only component that reads the published view
  * model [U3-6]; everything below it is handed plain data as props, which is
  * also what lets the tests pose a view directly for the endings random play
@@ -57,6 +65,7 @@ export function App(): JSX.Element {
    * `ResizeObserver` and no layout — it is the arrangement that docks nothing.
    */
   const [layout, setLayout] = createSignal<Layout>('wide');
+  const [ring, setRing] = createSignal(true);
   let observer: ResizeObserver | null = null;
   const measure = (): void => {
     const em = probe.getBoundingClientRect().width;
@@ -65,7 +74,12 @@ export function App(): JSX.Element {
     // Side by side only on a screen wider than it is tall: upright, the
     // stacked arrangement uses the height and the side one strands it.
     const landscape = window.innerWidth >= window.innerHeight;
-    setLayout(width >= WIDE_FROM ? 'wide' : width >= SIDE_FROM && landscape ? 'side' : 'stack');
+    const next: Layout = width >= WIDE_FROM ? 'wide' : width >= SIDE_FROM && landscape ? 'side' : 'stack';
+    setLayout(next);
+    setRing(
+      next === 'wide' ||
+        (next === 'stack' && width >= RING_WIDTH && window.innerHeight / em >= RING_HEIGHT),
+    );
   };
   /**
    * Started from the root's `ref` rather than from `onSettled`, whose returned
@@ -315,6 +329,7 @@ export function App(): JSX.Element {
       class="app"
       aria-label="Azul"
       data-layout={layout()}
+      data-table={ring() ? 'ring' : 'rows'}
       data-sheet={sheet() && layout() !== 'wide' ? 'workings' : undefined}
       ref={observe}
       // Escape clears a selection wherever focus happens to be [U3-26].

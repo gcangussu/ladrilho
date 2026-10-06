@@ -123,6 +123,21 @@ describe('the arrangements [U3-95]', () => {
     expect(root.scrollHeight, 'scrolls vertically while thinking').toBeLessThanOrEqual(root.clientHeight);
   });
 
+  // Seen red, on a copy, with the ring's width threshold raised past 768: the
+  // rows at 768 × 1024 — and the other way, with the board's tiles left at
+  // 2.5rem beside the ring: the page at 1026 against 1024.
+  it('[U3-95] sets the factories round the centre on an upright tablet, and still fits', async () => {
+    const doc = await load(768, 1024);
+    await settleOn(doc, 'stack');
+    expect(doc.querySelector<HTMLElement>('main')?.dataset['table']).toBe('ring');
+    const root = doc.documentElement;
+    expect(root.scrollHeight, 'the ring pushed the page past the screen').toBeLessThanOrEqual(root.clientHeight);
+    // And a phone keeps its rows.
+    const phone = await load(390, 844);
+    await settleOn(phone, 'stack');
+    expect(phone.querySelector<HTMLElement>('main')?.dataset['table']).toBe('rows');
+  });
+
   // Seen red, on a copy, with the landscape condition dropped: `side` at
   // 938 × 1226, the factories scrolling sideways in a squeezed middle column.
   it('[U3-95] stacks on an upright screen wide enough for side, and nothing overflows', async () => {
