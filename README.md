@@ -1,154 +1,191 @@
 # azul
 
-A TypeScript implementation of the board game [Azul](https://en.wikipedia.org/wiki/Azul_(board_game)): a rules engine, a web UI, and an AI bot.
+The board game [Azul](https://en.wikipedia.org/wiki/Azul_(board_game)), two players, in three
+parts that check each other:
 
-## Roadmap
+- **a rules engine in TypeScript**, fast and deterministic, held to recorded games from an
+  independent implementation;
+- **a second rules engine in Rust**, 8× faster for training by self-play, held to the same
+  recorded games and cross-checked against the first;
+- **`master`, an AlphaZero-style player we trained ourselves**, from random weights, by self-play
+  on the Rust engine, on one laptop CPU. It needs no GPU to play either: about 60 ms a move in the
+  browser as WebAssembly.
 
-1. **Engine** — a fast, deterministic 2-player Azul rules engine with a thorough test suite. Logic and test vectors are ported from [RemiFabre/ludometer](https://github.com/RemiFabre/ludometer)'s `ludometer/azul` engine.
-2. **UI** — a web client built with [Solid.js](https://www.solidjs.com/) v2.
-3. **AI bot** — an agent that plays via the engine, running in the browser alongside the UI.
+There is a web client to play it in, and two other opponents beside the master: a hand-written
+search (`easy`, `steady`, `sharp`, see [`packages/bot`](packages/bot/README.md)) and a port of a
+published trained player (`expert`, currently withdrawn, see
+[`packages/ai-bot`](packages/ai-bot/README.md)).
 
-Since then: the engine reports how it scored each round and the UI shows it (spec 0007), and a
-fourth package, `ai-bot`, ports a published trained player as an optional `expert` difficulty
-(spec 0008) — currently **not offered**, see [The expert](#the-expert).
+## Playing it
 
-## Structure
+```bash
+pnpm install
+pnpm -F ui dev
+```
+
+Then choose who sits where. There is no server, no account and no storage; everything, the
+master included, runs in the page. A reload deals a fresh game, and the URL reproduces one:
+`?seed=42&seating=human-master` pins the deal and the opponent. The master thinks 10,000
+simulations a move by default (about 60 ms on one thread of a laptop); `p2Simulations=50000`
+makes the second seat's master think longer, anywhere from 100 to 200,000.
+
+## Packages
 
 pnpm monorepo:
 
-| Package | Status | Description |
+| Package | What it is | Spec |
 | --- | --- | --- |
-| `packages/engine` | done | Azul rules engine + conformance suite |
-| `packages/ui` | done | Solid.js v2 client, hot seat or against the bot |
-| `packages/bot` | done | The opponent: evaluation, search, three tiers, and the arena that measures it |
-| `packages/ai-bot` | done, not offered | The `expert`: a port of a published AlphaZero-style player; offered only while its gate passes |
+| [`packages/engine`](packages/engine) | The TypeScript rules engine and its conformance suite | 0001, 0002, 0007 |
+| [`packages/engine-rs`](packages/engine-rs) | The Rust rules engine: same rules, same vectors, 8× faster | 0009 |
+| [`packages/crosscheck`](packages/crosscheck) | Plays invented games through both engines and stops at the first disagreement | 0010 |
+| [`packages/alphazero-bot`](packages/alphazero-bot) | The player we train: Rust search and self-play, PyTorch trainer, TypeScript evaluation, WebAssembly build | 0011, 0012 |
+| [`packages/ui`](packages/ui) | The Solid.js v2 web client: hot seat or against any opponent | 0003, 0006, 0012 |
+| [`packages/bot`](packages/bot/README.md) | The hand-written opponent: three tiers, and the arena that measures them | 0004, 0005 |
+| [`packages/ai-bot`](packages/ai-bot/README.md) | The `expert`: a port of a published AlphaZero-style player; not offered | 0008 |
+
+## The engine, in TypeScript
+
+`packages/engine` is the reference implementation: the rules of 2-player Azul as a small,
+allocation-conscious state machine. The only randomness is the bag's shuffle, from a seedable
+generator, so every game replays exactly.
+
+Its rules are pinned by **conformance vectors**: complete games recorded from
+[ludometer](https://github.com/RemiFabre/ludometer)'s Python engine, replayed move by move with the
+board, the legal moves and the scores compared at every ply. The vectors are committed, so the suite
+needs neither network nor Python; regenerating them does, see
+[`tools/vectors/README.md`](tools/vectors/README.md).
+
+Beyond `apply`, the engine explains how it scored each round (`applyExplained`, which the interface
+shows), and exports a fixed-length **observation vector** from the mover's perspective. That vector
+is the master's input, so its layout is treated as a stable interface: changing it invalidates
+trained networks.
+
+## The engine, in Rust
+
+`packages/engine-rs` is a second, independent implementation: a synchronous library crate with no
+dependencies on the TypeScript code, reading the same vectors in place. Every requirement of the
+TypeScript engine's specs is classified in spec 0009's *Adopted requirements* table, and the build
+fails until a new one is, so a rule change is a change to both engines.
+
+It exists to be fast and to be a second opinion. Its throughput gate, measured on an idle laptop,
+is **8.1×** the TypeScript engine (11.8M plies a second against 1.5M); it is what self-play runs
+on.
+
+## Two engines, checked against each other
+
+`packages/crosscheck` plays invented games through both engines with the same bag orders and the
+same moves, and stops at the first ply where they disagree about anything: the board, the legal
+moves, the score, the round's record, the observation vector. The Rust side runs as a small
+dependency-free binary. A disagreement is written as a report that replays without a seed.
+
+When the two disagree, neither engine decides who is right, and neither does ludometer: the
+**rulebook** does, Next Move Games' English web edition, pinned by its SHA-256 in spec 0010. Each
+ruling becomes a permanent vector, recorded from ludometer and corrected in the open where it is
+wrong. Games can be steered towards rare corners (floors overflowing, an empty bag and lid) so the
+check reaches what random play seldom does.
+
+## The master: a player we trained
+
+`packages/alphazero-bot` is an AlphaZero-style player trained **from scratch**, by self-play on the
+Rust engine, on a 4-core Intel laptop with no GPU, between 29 September and 5 October 2026.
+Training is split in three main parts:
+
+- a Rust crate, `azul_alphazero`: the network's forward pass, the search, self-play;
+- a Python trainer (PyTorch, CPU only) that learns from the samples the crate writes;
+- TypeScript lanes that measure each milestone, apply the stop rule and run the gate.
+
+The network is a small residual MLP (width 256, 4 blocks, about 640,000 weights) over the engine's
+observation vector. The search stops at the end of a round and values the position *before* the
+deal, so it never reads a tile it could not know.
+
+**How it was trained.** Twelve runs, each starting from the last one's best checkpoint and changing
+exactly one thing. The story, with every decision and its evidence, is in the
+[training journal](packages/alphazero-bot/milestones/JOURNAL.md); in short:
+
+| Runs | What changed | Where it got to |
+| --- | --- | --- |
+| `first`–`second` | from random weights; display permutations | plateaued below `sharp` |
+| `third` | 3000 games a generation | **beat `sharp` 79%** at the shipped budget: the gate passed |
+| `fourth`–`fifth` | the gate off; a pool of champions as the yardstick | +464 Elo over `third`/90 |
+| `sixth` | auxiliary targets: final margin and final walls | +496 |
+| `seventh`–`eighth` | learning rate ÷10; 400 self-play simulations | +689 |
+| `ninth`–`tenth` | learning rate ÷10; playout-cap randomisation | +776 |
+| `eleventh`–`twelfth` | learning rate halved, twice | **+856**, at `twelfth`/120 |
+
+Ratings are Elo in the champions' pool, with `third`/90, the checkpoint that first beat `sharp`, at
+0. Every checkpoint is loaded beside a parity file of PyTorch's own outputs and checked on every
+load.
+
+**What ships.** `twelfth`/120, named by [`web/shipped.json`](packages/alphazero-bot/web/shipped.json),
+compiled with the crate's own search to WebAssembly and run in a worker of its own, so a game
+without a master never loads it. After the search, once the game can end this round, an **endgame
+proof** (alpha-beta over the rest of the round, capped at 300,000 nodes) overrides the search's
+move only with a proven win, or a proven draw in place of a proven loss. Replayed over the pool's
+3,201 games, the proof lifts the shipped player from +856 to **+897**.
+
+**Against an outside opponent.** [danluu.com/game/tile](https://danluu.com/game/tile/) has a strong
+browser Azul AI of its own: an NNUE alpha-beta minimax, and an MCTS player. Played offline over
+paired deals at the master's browser defaults, the master scored **85%** against the page's
+default (minimax, 1 s a move on 8 threads), 68% against single-threaded minimax given 6.4 million
+nodes (about 200× the master's time), and 96–100% against its MCTS. How the match is run, how the
+position translation was verified, and the full sweep are in
+[`packages/alphazero-bot/tile/README.md`](packages/alphazero-bot/tile/README.md).
 
 ## Intent and spec
 
-Planned work is described in plain language under [`intent/`](intent/) — one file per idea,
-written before the code exists. See [`intent/README.md`](intent/README.md) for the conventions.
-
-The technical counterparts live in [`spec/`](spec/): precise, numbered requirements you can build
-from and test against, each linked to the intent it serves. See
-[`spec/README.md`](spec/README.md).
+Planned work is described in plain language under [`intent/`](intent/), one file per idea, written
+before the code exists; see [`intent/README.md`](intent/README.md). The technical counterparts live
+in [`spec/`](spec/): numbered, testable requirements (`[E1-14]`, `[Z11-76]`), each linked to the
+intent it serves; see [`spec/README.md`](spec/README.md). Every package's suite fails if a
+requirement is neither cited by a test nor exempted with a reason.
 
 ## Development
+
+`pnpm test` and `pnpm typecheck` also run `cargo`, so a Rust toolchain is a prerequisite;
+`rust-toolchain.toml` pins it.
 
 ```bash
 pnpm install
 pnpm test                        # every package
 pnpm typecheck
 
-pnpm -F engine test              # the engine suite
-pnpm -F engine test vectors      # the oracle replays only
-pnpm -F engine bench             # the [E1-58] / [E1-59] budgets, non-gating
+pnpm -F engine test              # the TypeScript engine
+pnpm -F engine test vectors      # the recorded games only
+pnpm -F engine-rs test           # the Rust engine: vectors, rules, record, traceability
+pnpm -F engine-rs compare        # the throughput gate against TypeScript; run it idle
+pnpm -F crosscheck test          # the cross-check's everyday run and its mutations
+pnpm -F crosscheck check --games 100000 --seed 7   # the long run
+
+pnpm -F alphazero-bot test       # the crate and the evaluation lanes
+pnpm -F alphazero-bot test:train # the trainer's suite; needs uv
+pnpm -F alphazero-bot train --run <name>       # the training loop; resumes where it stopped
+pnpm -F alphazero-bot web        # build the master's WebAssembly payload (ui's scripts run it)
+pnpm -F alphazero-bot tile play  # the master against danluu.com/game/tile's AI
 
 pnpm -F ui dev                   # the client, on a local dev server
 pnpm -F ui test                  # the fast suite: jsdom, under 30s
-pnpm -F ui test:browser          # the [U3-73] lane: layout, reload and the real worker, in chromium
-
-pnpm -F ai-bot test              # the expert: board, network, search, sessions, the gate result
-pnpm -F ai-bot gate              # the [A8-30] gate against `sharp`; ~50 minutes, writes the baseline
+pnpm -F ui test:browser          # layout, reload and the real workers, in chromium
 ```
 
-The engine's conformance fixtures are committed, so the suite needs neither network nor Python.
-Regenerating them does — see [`tools/vectors/README.md`](tools/vectors/README.md).
+The browser lane needs a browser: `pnpm -F ui exec playwright install chromium`, once. The full
+list of commands, and what each costs, is in [`CLAUDE.md`](CLAUDE.md); the `bot` and `ai-bot`
+commands are in their own READMEs.
 
-The browser lane needs a browser: `pnpm -F ui exec playwright install chromium`, once.
+## Acknowledgements
 
-## Playing it
-
-`pnpm -F ui dev`, then choose who sits where. There is no server, no account and no storage; a
-reload deals a fresh game. The URL reproduces one: `?seed=42&seating=human-sharp` pins both the
-deal and the opponent, and because the bot is deterministic that replays its play too.
-
-## The bot
-
-Four commands, and they differ in what they cost and what they are allowed to claim.
-
-```bash
-pnpm -F bot test                 # the fast suite: seconds, gates the build
-pnpm -F bot bench                # per-move budgets [B4-47]..[B4-50]; non-gating
-pnpm -F bot ladder               # the strength gates [M5-13] / [M5-19]; ~2½ minutes
-pnpm -F bot corpus               # regenerate the audit corpus; a deliberate act
-node packages/bot/ladder/wide.mjs > packages/bot/arena/baseline.json   # hours
-```
-
-**`test`** is the ordinary suite and the only one that runs on save. It covers the search,
-the tiers and the arena harness, all at small node budgets — it says nothing about how *strong*
-the opponent is, because a winrate needs hundreds of games.
-
-**`bench`** and **`ladder`** both run against an esbuild bundle rather than the sources, and that
-is not an optimisation. Through Vitest's module runner every cross-package import is a getter call,
-and the bot crosses into the engine on every node it expands, so measured through the runner the
-search reads about a tenth of its real throughput. Bundled it is ~319k nodes/sec; `sharp` at its
-400 000-node budget is about 1.2 seconds a move. `pnpm -F ui dev` serves unbundled modules and will
-also look slow — that is the tooling, not the bot.
-
-**`ladder`** is the gating lane for strength. Each match is played against its **null** — the same
-player against itself over the same seeds — and the lane asserts the result beats it, because a
-threshold below its null gates nothing. Two identical deterministic players split 62.5% on seat
-advantage alone, which is how a 60% bar once passed with the tier under test swapped out for the
-one below it. Current numbers, 40 recorded seeds:
-
-| Match | Null | Measured | Gate |
-| --- | --- | --- | --- |
-| `easy` vs uniform random | ~50% | 100.0% | ≥ 95% |
-| `steady` vs `easy` | 62.5% | 90.0% | ≥ 70% |
-| `sharp` vs `steady` | 52.5% | 75.0% | ≥ 62.5% |
-| `sharp` vs `easy` | 62.5% | 97.5% | ≥ 80% |
-
-`sharp` over `steady` is at the *same* node budget on both sides, so the whole 75.0% is the
-horizon — the tiers differ in how far ahead they see, not in how long they are given.
-
-**`corpus`** regenerates the blunder audit's reference values. It is deliberate and rare: the
-reference is *stale by design*, because one regenerated alongside the bot measures the bot against
-itself and reports every regression as a tie. It records the commit that produced it, marked dirty
-if the tree was.
-
-**`wide.mjs`** is the 200-seed run at shipped budgets that *would* produce the committed baseline.
-It takes hours and is the only lane whose numbers may be quoted as a measurement of the opponent
-that ships — `ladder` runs reduced budgets and pins the ordering on its recorded seeds, nothing
-more. **No baseline is committed yet**: nobody has run it, so nothing in this repository cites a
-number from it.
-
-The search runs in a worker, so the page never blocks. It is handed the board as counts, never the
-bag's order, so it plays with no information a person does not have.
-
-## The expert
-
-`packages/ai-bot` is a port of the AlphaZero-style Azul player in
-[cestpasphoto/alpha-zero-general](https://github.com/cestpasphoto/alpha-zero-general) — its
-network, its trained weights, its search (100 simulations a move) and the tree it keeps for a
-whole game — onto this engine, as a fourth difficulty called `expert`. It lives beside `bot`
-rather than inside it: `bot` is code we can read and explain, and weights we cannot are kept
-apart from it. Spec 0008 has the details, including the fixtures that prove the port matches the
-original move for move.
-
-```bash
-pnpm -F ai-bot test              # fast suite, including parity with the original's recorded outputs
-pnpm -F ai-bot gate              # 200 games against `sharp`, plus the expert-vs-expert null; ~50 minutes
-pnpm -F ai-bot fixtures          # re-record from the original Python program; needs `uv`. Deliberate
-pnpm -F ai-bot weights           # regenerate src/weights.ts from the checkpoint. Deliberate
-```
-
-**It ships only if it beats `sharp`.** The gate plays it against `sharp` at shipped budgets and
-passes at a winrate of 60% or more; a full run writes `packages/ai-bot/gate/baseline.json`,
-which is committed whether it passed or not, and the interface offers `expert` if and only if
-that file says `passed: true`.
-
-**It does not pass today.** Its first gate won 72% (143 of 200), but that was measured against a
-`sharp` whose root search could break a tie on an alpha-beta bound and play a strictly worse
-move ([B4-30]). With that fixed, the rerun over the same seeds reads:
-
-| | Winrate | Lower bound | W / L / D | Mean score (expert – `sharp`) |
-| --- | --- | --- | --- | --- |
-| First gate, old `sharp` | 72.0% | 66.5% | 143 / 55 / 2 | 43.5 – 36.4 |
-| Rerun, fixed `sharp` | **45.0%** | 39.3% | 88 / 108 / 4 | 41.0 – 45.4 |
-
-The null (expert against itself) is 42.75% both times. The expert is deterministic and did not
-change, so the same player on the same deals going from 72% to 45% is the measure of how much
-stronger the fix made `sharp` at its shipped budget — which the ladder, at reduced budgets and
-with the fix in both of its players, cannot say. So `expert` is currently withdrawn from the interface, and a URL naming it
-is discarded like any other unknown setting. The package, its suite and its gate stay, so a
-stronger expert can be measured the same way.
+- **[RemiFabre/ludometer](https://github.com/RemiFabre/ludometer)**: its Python Azul engine is the
+  oracle our engines are held to. The conformance vectors are recorded from it, and the engine's
+  logic was first ported from it.
+- **[danluu.com/game/tile](https://danluu.com/game/tile/)**: the strongest outside opponent we
+  found. Its endgame solver showed us what our search was missing, and we took its approach for
+  the master's endgame proof: a proof search over the rest of the round once the game can end.
+- **[cestpasphoto/alpha-zero-general](https://github.com/cestpasphoto/alpha-zero-general)**, and
+  **[suragnair/alpha-zero-general](https://github.com/suragnair/alpha-zero-general)** it forks: the
+  trained Azul player ported as the `expert` here, and the first demonstration that this approach
+  plays Azul well.
+- **AlphaZero** (Silver et al., *A general reinforcement learning algorithm that masters chess,
+  shogi, and Go through self-play*, Science, 2018): the method the master is trained by.
+- **[KataGo](https://github.com/lightvector/KataGo)** (David J. Wu): playout-cap randomisation and
+  the auxiliary score and ownership targets, both adapted here.
+- **Michael Kiesling**, who designed Azul, and **Next Move Games**, whose English rulebook is the
+  final word when the engines disagree.
