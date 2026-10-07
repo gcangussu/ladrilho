@@ -11,21 +11,26 @@ for two players, in three parts that check each other:
   on the Rust engine, on one laptop CPU. It needs no GPU to play either: about 60 ms a move in the
   browser as WebAssembly.
 
-There is a web client to play it in, and two other opponents beside the master: a hand-written
+There is a web client to play it in, **[live at gcangussu.github.io/ladrilho](https://gcangussu.github.io/ladrilho/)**,
+and two other opponents beside the master: a hand-written
 search (`easy`, `steady`, `sharp`, see [`packages/bot`](packages/bot/README.md)) and a port of a
 published trained player (`expert`, currently withdrawn, see
 [`packages/ai-bot`](packages/ai-bot/README.md)).
 
 ## Playing it
 
+**[Play it in the browser.](https://gcangussu.github.io/ladrilho/)** Every push to `main` that
+passes the test suite is deployed there by [a workflow](.github/workflows/pages.yml). To run it
+locally instead:
+
 ```bash
 pnpm install
 pnpm -F ui dev
 ```
 
-Then choose who sits where. There is no server, no account and no storage; everything, the
+Either way, choose who sits where. There is no server, no account and no storage; everything, the
 master included, runs in the page. A reload deals a fresh game, and the URL reproduces one:
-`?seed=42&seating=human-master` pins the deal and the opponent. The master thinks 10,000
+[`?seed=42&seating=human-master`](https://gcangussu.github.io/ladrilho/?seed=42&seating=human-master) pins the deal and the opponent. The master thinks 10,000
 simulations a move by default (about 60 ms on one thread of a laptop); `p2Simulations=50000`
 makes the second seat's master think longer, anywhere from 100 to 200,000.
 
