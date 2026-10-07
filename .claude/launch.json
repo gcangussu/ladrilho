@@ -3,9 +3,10 @@
   "configurations": [
     {
       "name": "ui",
-      "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["-F", "ui", "dev", "--port", "5173", "--strictPort"],
-      "port": 5173
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "pnpm -F ui dev --port \"${PORT:-5173}\" --strictPort"],
+      "port": 5173,
+      "autoPort": true
     }
   ]
 }
