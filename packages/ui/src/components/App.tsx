@@ -327,7 +327,7 @@ export function App(): JSX.Element {
   return (
     <main
       class="app"
-      aria-label="Azul"
+      aria-label="Ladrilho"
       data-layout={layout()}
       data-table={ring() ? 'ring' : 'rows'}
       data-sheet={sheet() && layout() !== 'wide' ? 'workings' : undefined}
@@ -361,7 +361,7 @@ export function App(): JSX.Element {
               <i />
               <i />
             </span>
-            azul
+            ladrilho
           </h1>
           <Status
             game={game()}

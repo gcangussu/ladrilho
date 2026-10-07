@@ -15,7 +15,7 @@ import { App } from '../src/components/App.jsx';
 describe('toolchain', () => {
   it('renders a Solid v2 component into jsdom', () => {
     const { getByRole } = render(() => <App />);
-    expect(getByRole('main', { name: 'Azul' })).toBeInTheDocument();
+    expect(getByRole('main', { name: 'Ladrilho' })).toBeInTheDocument();
   });
 
   it('stages writes: a read after a set returns the previous value until flush', () => {
