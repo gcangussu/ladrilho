@@ -1,7 +1,7 @@
 import type { JSX } from '@solidjs/web';
 import { FLOOR, NUM_ROWS, decodeAction, encodeAction } from 'engine';
-import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
-import { computerSeat, replayDeal, startNewGame, startWithSeating, submit, view } from '../game.js';
+import { Show, createEffect, createSignal, onCleanup, untrack } from 'solid-js';
+import { computerSeat, replayDeal, startNewGame, startWithSeating, submit, view, type ViewModel } from '../game.js';
 import { Announcer, announcement } from './Announcer.jsx';
 import { Displays, type Pick } from './Displays.jsx';
 import { GameOver } from './GameOver.jsx';
@@ -53,7 +53,21 @@ export function App(): JSX.Element {
   const game = (): ReturnType<typeof view>['game'] => view().game;
   const names = (): string[] => game().colorNames;
 
-  const [selection, setSelection] = createSignal<Pick | null>(null);
+  /**
+   * A selection never survives a ply [U3-28], [U3-64]: it is held beside the
+   * view it was made against and reads as nothing once another is published.
+   * Derived rather than cleared by an effect, so no reader ever sees the new
+   * view with the old selection, however the ply arrived — a click, a key, a
+   * computer's reply or a new game.
+   */
+  const [held, setHeld] = createSignal<{ pick: Pick; against: ViewModel } | null>(null);
+  const selection = (): Pick | null => {
+    const h = held();
+    return h !== null && h.against === view() ? h.pick : null;
+  };
+  const setSelection = (pick: Pick | null): void => {
+    setHeld(pick === null ? null : { pick, against: view() });
+  };
   let root!: HTMLElement;
   let probe!: HTMLDivElement;
   /** The group that last held focus, so [U3-57] can find its way back. */
@@ -128,10 +142,12 @@ export function App(): JSX.Element {
       docks: layout() !== 'wide' && hotSeat(),
     }),
     ({ mover, over, docks }) => {
+      // `shown` is read untracked on purpose: lifting the curtain changes it,
+      // and that is not a reason to look again at whose turn it is.
       if (!docks || over) {
         setShown(mover);
         setCurtain(null);
-      } else if (mover !== shown()) {
+      } else if (mover !== untrack(shown)) {
         setCurtain(mover);
       }
     },
@@ -250,8 +266,8 @@ export function App(): JSX.Element {
   const chooseDest = (dest: number): void => {
     const picked = selection();
     if (picked === null || !destAvailable(dest)) return;
-    // Immediately, with no intervening step [U3-25]. The selection is cleared by
-    // the per-ply effect below, which covers every path a ply can arrive by.
+    // Immediately, with no intervening step [U3-25]. The selection lapses with
+    // the view it was made against, which covers every path a ply can arrive by.
     submit(encodeAction(picked.source, picked.color, dest));
   };
 
@@ -284,17 +300,13 @@ export function App(): JSX.Element {
   };
 
   /**
-   * A selection never survives a ply [U3-28], [U3-64], and focus is never lost
-   * across one [U3-57].
-   *
-   * Keyed on the published view model, so it holds however the ply arrived —
-   * a click, a key, or a new game — rather than only on the paths that
-   * remembered to clear up after themselves.
+   * Focus is never lost across a ply [U3-57]. Keyed on the published view
+   * model, so it holds however the ply arrived, rather than only on the paths
+   * that remembered to clear up after themselves.
    */
   createEffect(
     () => view(),
     () => {
-      setSelection(null);
       if (document.activeElement === null || document.activeElement === document.body) {
         const group = root.querySelector<HTMLElement>(`[data-group="${lastGroup}"]`);
         group?.querySelector<HTMLElement>('[data-roving]')?.focus();

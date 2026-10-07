@@ -267,6 +267,28 @@ describe('taking a turn', () => {
     }
   });
 
+  /**
+   * The case above cannot see a surviving selection: the ply empties the
+   * source the selection named, so no destination is legal for it either way.
+   * Replaying the deal publishes a new view with the same factories, where the
+   * old selection would still be legal — and must still be gone.
+   */
+  it('[U3-28] [U3-64] no selection survives a new view that still offers it', async () => {
+    const { screen, game } = await mount();
+    const { replayDeal } = await import('../src/game.js');
+    const [source, color] = decodeAction(game().legalActions[0]);
+    await user.click(pickButton(screen, game(), source, color));
+    flush();
+    expect(pickButton(screen, game(), source, color)).toHaveAttribute('aria-pressed', 'true');
+
+    replayDeal();
+    flush();
+    expect(pickButton(screen, game(), source, color)).toHaveAttribute('aria-pressed', 'false');
+    for (const d of [...Array(NUM_ROWS).keys(), FLOOR]) {
+      expect(available(destButton(screen, game(), d)), `dest ${d}`).toBe(false);
+    }
+  });
+
   it('[U3-29] [U3-55] an unavailable control is present, focusable, and does nothing', async () => {
     const { screen, game } = await mount();
     const before = game();
