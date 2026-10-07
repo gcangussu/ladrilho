@@ -12,25 +12,25 @@
     "typecheck": "pnpm -F alphazero-bot web && tsc --noEmit"
   },
   "dependencies": {
-    "@solidjs/web": "2.0.0-rc.6",
+    "@solidjs/web": "2.0.0-rc.13",
     "ai-bot": "workspace:*",
     "alphazero-bot": "workspace:*",
     "bot": "workspace:*",
     "engine": "workspace:*",
-    "solid-js": "2.0.0-rc.6"
+    "solid-js": "2.0.0-rc.13"
   },
   "devDependencies": {
     "@solidjs/testing-library": "1.0.0-beta.3",
-    "@solidjs/vite-plugin": "3.0.0-next.39",
+    "@solidjs/vite-plugin": "3.0.0-next.47",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/user-event": "^14.6.1",
-    "@types/node": "^26.4.1",
-    "@vitest/browser": "^5.0.0",
-    "@vitest/browser-playwright": "^5.0.0",
-    "jsdom": "^30.0.1",
+    "@types/node": "^26.6.4",
+    "@vitest/browser": "^5.0.3",
+    "@vitest/browser-playwright": "^5.0.3",
+    "jsdom": "^30.1.2",
     "playwright": "^1.63.0",
     "typescript": "^7.0.2",
-    "vite": "^8.2.2",
-    "vitest": "^5.0.0"
+    "vite": "^8.3.3",
+    "vitest": "^5.0.3"
   }
 }
