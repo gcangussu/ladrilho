@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-TypeScript implementation of the board game Azul, delivered in three roadmap steps:
+An implementation of the two-player board game Azul, first delivered in three roadmap steps:
 
 1. **Engine** (`packages/engine`) — fast, deterministic 2-player Azul rules engine. **Done.**
 2. **UI** (`packages/ui`) — web client using Solid.js **v2**. **Done.**
@@ -12,7 +12,7 @@ TypeScript implementation of the board game Azul, delivered in three roadmap ste
    player (spec 0004), the arena (0005), and the interface seam (0006). The search runs in a
    worker; `packages/ui` reaches it only through `src/opponent.ts`.
 
-Since the three steps, three things have been added. The engine reports how it scored a round
+Since the three steps, more has been added. The engine reports how it scored a round
 (`applyExplained`, spec 0007) and the interface shows it; `apply` is untouched and is still what
 the vectors and the bot drive. And a fourth package, **`packages/ai-bot`** (spec 0008), ports a
 published AlphaZero-style player — network, search, and the deal it guesses — onto our engine as
@@ -34,8 +34,9 @@ differ in the last bit between browsers.
 
 A fifth package, **`packages/engine-rs`** (spec 0009), is a second implementation of the engine
 in Rust: a synchronous library crate, no async anywhere, held to the same conformance vectors,
-which it reads in place from `packages/engine/test/vectors`. It is not a replacement and nothing
-drives it yet; it exists to be fast and to be a second opinion. It classifies every requirement of
+which it reads in place from `packages/engine/test/vectors`. It is not a replacement: the interface
+and `bot` play on the TypeScript engine, while the cross-check's checker and `alphazero-bot`'s
+self-play run on this one. It exists to be fast and to be a second opinion. It classifies every requirement of
 0001, 0002 and 0007 in 0009's *Adopted requirements* table, and its build fails until a
 requirement added to any of them is classified there — so a rule change is a change to both
 engines. Its throughput gate is the committed `packages/engine-rs/bench/baseline.json` (8.1× the
@@ -92,7 +93,7 @@ exactly.
 Two user-visible bugs shipped into review here, and neither was in the new code. Both were in the
 *interaction* between new code and an old requirement: [0003 U3-42] published one view model per
 ply until something else started publishing too, and [0003 U3-7]'s one-request guard held because
-nothing had ever asked twice. Both were invisible to a suite of 142 tests, because every existing
+nothing had ever asked twice. Both were invisible to the suite, because every existing
 test of the old requirement predated the new caller — `transition` was only ever exercised hot-seat,
 and nothing provoked the race.
 
