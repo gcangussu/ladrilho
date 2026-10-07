@@ -30,9 +30,19 @@ jobs:
       # Every cargo project's rust-toolchain.toml is byte-identical ([R9-1]): one
       # pinned release, with clippy and the wasm32 target the master's payload needs
       # ([0012 T12-8]). Installing from one directory installs it for all of them.
+      #
+      # rust-cache hashes the version of every installed toolchain into its key, so
+      # the runner image's preinstalled stable is removed: otherwise each image update
+      # that bumps it changes the key and the cache misses, though nothing we build
+      # with changed. The pin becomes the default, for rustc run outside its folders.
       - name: Install Rust toolchain
         working-directory: packages/engine-rs
-        run: rustup toolchain install
+        run: |
+          rustup toolchain install
+          pinned=$(rustup show active-toolchain | cut -d' ' -f1)
+          rustup default "$pinned"
+          rustup toolchain list --quiet | grep -vxF "$pinned" | xargs -r -n1 rustup toolchain uninstall
+          rustup toolchain list
 
       - uses: Swatinem/rust-cache@v2
         with:
