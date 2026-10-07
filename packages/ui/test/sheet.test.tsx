@@ -14,7 +14,7 @@ import { choiceNames, choices, choose, commit, deal, editSeat, openSheet } from 
 type State = typeof import('../src/game.js');
 type Screen = ReturnType<typeof render>;
 
-async function mount(search = '?seed=42'): Promise<{ screen: Screen; state: State }> {
+async function mount(search = '?seed=42&seating=human-human'): Promise<{ screen: Screen; state: State }> {
   history.replaceState({}, '', `/${search}`);
   vi.resetModules();
   const state = await import('../src/game.js');
@@ -94,7 +94,7 @@ describe('the sheet [W6-49]', () => {
 
   // Seen red, on a copy, with Deal dealing twice: two calls to `newGame`.
   it('[W6-49] [W6-53] deals once, carrying every staged choice', async () => {
-    const { screen, state } = await mount('?seed=42');
+    const { screen, state } = await mount('?seed=42&seating=human-human');
     // The engine the freshly imported state module sees, not this file's copy.
     const engine = await import('engine');
     const deals = vi.spyOn(engine, 'newGame');
@@ -205,7 +205,7 @@ describe('a deal by number [U3-104]', () => {
   // Seen red, on a copy, with the sheet's check replaced by `Number(raw)`:
   // "12.5" dealt seed 12.5 and "1e3" dealt 1000.
   it('[U3-104] [U3-13] deals a typed number, and refuses anything the URL would refuse', async () => {
-    const { screen, state } = await mount('?seed=42');
+    const { screen, state } = await mount('?seed=42&seating=human-human');
     const sheet = openSheet(screen);
     const field = within(sheet).getByLabelText('Deal number') as HTMLInputElement;
     for (const bad of ['abc', '4294967296', '-1', '12.5', '1e3', ' 7x']) {
@@ -221,7 +221,7 @@ describe('a deal by number [U3-104]', () => {
   });
 
   it('[U3-104] [U3-47] deals a fresh seed when the number is left empty', async () => {
-    const { screen, state } = await mount('?seed=42');
+    const { screen, state } = await mount('?seed=42&seating=human-human');
     vi.spyOn(crypto, 'getRandomValues').mockImplementation((array) => {
       (array as Uint32Array)[0] = 777;
       return array;
@@ -244,7 +244,7 @@ describe('the end of a game [W6-52]', () => {
 
   // Seen red, on a copy, with Replay wired to `startNewGame`: a fresh seed.
   it('[W6-52] [W6-53] offers a rematch, the same deal again, and the seats', async () => {
-    const { screen, state } = await ended('?seed=42');
+    const { screen, state } = await ended('?seed=42&seating=human-human');
     const result = screen.getByRole('region', { name: 'Final result' });
 
     within(result).getByRole('button', { name: 'Replay this deal' }).click();
@@ -260,7 +260,7 @@ describe('the end of a game [W6-52]', () => {
     expect(again.state.view().seed).not.toBe(42);
     expect(again.state.view().seating.players).toEqual([null, 'easy']);
 
-    const third = await ended('?seed=42');
+    const third = await ended('?seed=42&seating=human-human');
     within(third.screen.getByRole('region', { name: 'Final result' }))
       .getByRole('button', { name: 'Change seats' }).click();
     flush();

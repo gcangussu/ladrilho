@@ -134,7 +134,7 @@ type StateModule = typeof import('../src/game.js');
  * the state module would reach for a real `Worker` on the opening position and
  * jsdom has none.
  */
-async function load(search = '?seed=42'): Promise<{ state: StateModule; harness: Harness }> {
+async function load(search = '?seed=42&seating=human-human'): Promise<{ state: StateModule; harness: Harness }> {
   history.replaceState({}, '', `/${search}`);
   vi.resetModules();
   const state = (await import('../src/game.js')) as StateModule;
@@ -157,7 +157,7 @@ async function load(search = '?seed=42'): Promise<{ state: StateModule; harness:
  * never look at the DOM — mounting the App for all of them put this file, and
  * with it the suite, over [0003 U3-77]'s budget.
  */
-async function mount(search = '?seed=42'): Promise<{
+async function mount(search = '?seed=42&seating=human-human'): Promise<{
   screen: Screen;
   state: StateModule;
   harness: Harness;
@@ -210,7 +210,7 @@ describe('choosing an opponent [W6-1], [W6-2], [W6-3], [W6-4]', () => {
   });
 
   it('[W6-3] deals a new game when the seating changes', async () => {
-    const { state } = await load('?seed=42');
+    const { state } = await load('?seed=42&seating=human-human');
     const before = state.view().seed;
     state.startWithSeating({ players: [null, 'easy'] });
     flush();
@@ -224,6 +224,25 @@ describe('choosing an opponent [W6-1], [W6-2], [W6-3], [W6-4]', () => {
     const { state } = await load('?seed=42&seating=easy-sharp');
     expect(state.view().seating.players).toEqual(['easy', 'sharp']);
   });
+
+  it('[W6-54] seats a person against master at its default when the URL names no seating', async () => {
+    // Absent, and each way [W6-4] discards one: an unknown level, one seat only.
+    for (const search of ['', '?seed=42', '?seed=42&seating=wizard-human', '?seed=42&seating=human']) {
+      const { state, harness } = await load(search);
+      const view = state.view();
+      expect(view.seating, search).toEqual({
+        players: [null, 'master'],
+        simulations: [MASTER_SIMULATIONS.default, MASTER_SIMULATIONS.default],
+      });
+      // Player 1 opens and is the person, so nothing is asked of the master until they move.
+      expect(view.game.currentPlayer, search).toBe(0);
+      expect(harness.pending, search).toHaveLength(0);
+      state.submit(view.game.legalActions[0]);
+      flush();
+      expect(harness.pending, search).toHaveLength(1);
+      expect(harness.pending[0], search).toMatchObject({ tier: 'master', simulations: MASTER_SIMULATIONS.default });
+    }
+  });
 });
 
 describe('the turn loop [W6-6], [W6-7], [W6-8]', () => {
@@ -235,7 +254,7 @@ describe('the turn loop [W6-6], [W6-7], [W6-8]', () => {
   });
 
   it('[W6-6] [W6-13] asks for nothing in a two-person game', async () => {
-    const { harness } = await load('?seed=42');
+    const { harness } = await load('?seed=42&seating=human-human');
     expect(harness.pending).toHaveLength(0);
   });
 
@@ -375,7 +394,7 @@ describe('while it thinks [W6-19], [W6-20], [W6-33]', () => {
   });
 
   it('[W6-21] shows nothing when no request is outstanding', async () => {
-    const { screen } = await mount('?seed=42');
+    const { screen } = await mount('?seed=42&seating=human-human');
     expect(screen.queryByText(/thinking/i)).toBeNull();
   });
 
@@ -617,7 +636,7 @@ describe('the worker ends with its game [W6-13], [W6-23]', () => {
 
   it('[W6-13] never builds a worker in a two-person game, new games included', async () => {
     vi.stubGlobal('Worker', StubWorker);
-    const state = await loadReal('?seed=42');
+    const state = await loadReal('?seed=42&seating=human-human');
     state.startNewGame();
     state.startWithSeating({ players: [null, null] });
     await settle();
@@ -886,7 +905,7 @@ function masterRequest(generation: number, simulations = 100): ToWorker {
 describe('the master is offered, and seated [W6-43], [W6-44]', () => {
   it('[W6-43] offers master last, by name, whatever the gate says', async () => {
     expect(LEVELS.at(-1)).toBe('master');
-    const { screen } = await mount('?seed=42');
+    const { screen } = await mount('?seed=42&seating=human-human');
     const sheet = openSheet(screen);
     for (const seat of [0, 1] as const) {
       editSeat(sheet, seat);

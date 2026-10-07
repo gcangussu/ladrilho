@@ -101,7 +101,7 @@ function occupied(state: AzulState, p: number): number {
 }
 
 async function mount(seed: number): Promise<Screen> {
-  history.replaceState({}, '', `/?seed=${seed}`);
+  history.replaceState({}, '', `/?seed=${seed}&seating=human-human`);
   vi.resetModules();
   const { App } = await import('../src/components/App.jsx');
   return render(() => <App />);

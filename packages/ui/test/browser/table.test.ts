@@ -19,7 +19,7 @@ afterEach(() => {
 const tick = (ms = 30): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /** Load the interface at a size and resolve once it has settled on an arrangement. */
-async function load(width: number, height: number, search = '?seed=909'): Promise<Document> {
+async function load(width: number, height: number, search = '?seed=909&seating=human-human'): Promise<Document> {
   frame?.remove();
   const el = document.createElement('iframe');
   frame = el;

@@ -169,7 +169,7 @@ describe('what the new-game sheet offers [W6-1]', () => {
     // Intent 0006: "picking it is picking one more difficulty setting, next to
     // the other three". Nothing looked at the control until now — every
     // computer option could have been dropped with the suite green.
-    const { screen } = await mount('?seed=42', true);
+    const { screen } = await mount('?seed=42&seating=human-human', true);
     const sheet = openSheet(screen);
     for (const seat of [0, 1] as const) {
       // A seat each [W6-5], offered the same.
@@ -193,7 +193,7 @@ describe('what the new-game sheet offers [W6-1]', () => {
     // control and not only about the level list a module away. Written out
     // rather than derived from `EXPERT_AVAILABLE`: a test that agrees with the
     // model agrees with it when both are wrong.
-    const { screen } = await mount('?seed=42', false);
+    const { screen } = await mount('?seed=42&seating=human-human', false);
     const sheet = openSheet(screen);
     for (const seat of [0, 1] as const) {
       editSeat(sheet, seat);
@@ -211,7 +211,7 @@ describe('what the new-game sheet offers [W6-1]', () => {
     // What a player *does* with the control, which is the half the options
     // list cannot see: an interface can offer "Expert" and seat `easy`, and
     // until this test every lane stayed green when it did.
-    const { screen, state } = await mount('?seed=42', true);
+    const { screen, state } = await mount('?seed=42&seating=human-human', true);
 
     for (const level of ['expert', 'easy', 'steady', 'sharp'] as const) {
       const before = state.view().seed;
@@ -345,7 +345,7 @@ describe('one session per seat, for the worker’s lifetime [W6-40], [W6-41]', (
    * `deal`.
    */
   it('[W6-40] [W6-41] [W6-13] starts a new game with no sessions, because the deal ends the worker', async () => {
-    history.replaceState({}, '', '/?seed=42');
+    history.replaceState({}, '', '/?seed=42&seating=human-human');
     vi.resetModules();
     const state = await import('../src/game.js');
     const asked: AzulJSON[][] = [];

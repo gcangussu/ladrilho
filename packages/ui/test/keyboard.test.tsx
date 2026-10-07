@@ -37,7 +37,7 @@ const groupOf = (el: HTMLElement): string =>
 describe('[U3-71] a whole game from the keyboard', () => {
   it('[U3-52] [U3-53] [U3-56] reaches a terminal position, announcing as it goes', async () => {
     const user = userEvent.setup();
-    history.replaceState({}, '', `/?seed=${GAME_SEED}`);
+    history.replaceState({}, '', `/?seed=${GAME_SEED}&seating=human-human`);
     vi.resetModules();
     const { App } = await import('../src/components/App.jsx');
     const screen = render(() => <App />);

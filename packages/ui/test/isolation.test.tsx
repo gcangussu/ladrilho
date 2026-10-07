@@ -122,7 +122,7 @@ describe('[U3-72] the stubs themselves', () => {
 describe('[U3-72] a game played with every door stubbed to throw', () => {
   it('[U3-15] [U3-66] writes to no storage and makes no request', async () => {
     const opened = slamShut();
-    history.replaceState({}, '', `/?seed=${GAME_SEED}`);
+    history.replaceState({}, '', `/?seed=${GAME_SEED}&seating=human-human`);
     vi.resetModules();
     const { App } = await import('../src/components/App.jsx');
     const screen = render(() => <App />);

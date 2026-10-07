@@ -19,7 +19,7 @@ import { endedGame } from './fixtures.js';
 
 type Game = typeof import('../src/game.js');
 
-async function load(search = ''): Promise<Game> {
+async function load(search = '?seating=human-human'): Promise<Game> {
   history.replaceState({}, '', `/${search}`);
   vi.resetModules();
   return import('../src/game.js');
@@ -52,7 +52,7 @@ afterEach(() => vi.restoreAllMocks());
 
 describe('the sticky slot [U3-82], [U3-83]', () => {
   it('[U3-82] is null until a round scores, and then carries that round', async () => {
-    const game = await load('?seed=42');
+    const game = await load('?seed=42&seating=human-human');
     expect(game.view().scoring, 'workings before anything scored').toBeNull();
 
     playUntil(game, () => game.view().scoring !== null);
@@ -70,7 +70,7 @@ describe('the sticky slot [U3-82], [U3-83]', () => {
    * ply [U3-42], and the workings are still there.
    */
   it('[U3-82] persists across plies, and is replaced only by a later record', async () => {
-    const game = await load('?seed=42');
+    const game = await load('?seed=42&seating=human-human');
     playUntil(game, () => game.view().scoring !== null);
     const first = game.view().scoring!;
 
@@ -95,7 +95,7 @@ describe('the sticky slot [U3-82], [U3-83]', () => {
    * board for however long the first round takes.
    */
   it('[U3-83] a new game clears it', async () => {
-    const game = await load('?seed=42');
+    const game = await load('?seed=42&seating=human-human');
     playUntil(game, () => game.view().scoring !== null);
     expect(game.view().scoring).not.toBeNull();
 
@@ -108,7 +108,7 @@ describe('the sticky slot [U3-82], [U3-83]', () => {
   });
 
   it('[U3-82] carries the bonus half on the ply that ends the game', async () => {
-    const game = await load('?seed=42');
+    const game = await load('?seed=42&seating=human-human');
     playUntil(game, () => game.view().game.isTerminal);
     expect(game.view().game.isTerminal).toBe(true);
     const scoring = game.view().scoring!;
@@ -328,7 +328,7 @@ describe('the end-of-game bonuses [U3-46]', () => {
  */
 describe('[U3-82] the interface renders the workings it is published', () => {
   async function mount(): Promise<{ screen: ReturnType<typeof render>; game: Game }> {
-    history.replaceState({}, '', '/?seed=42');
+    history.replaceState({}, '', '/?seed=42&seating=human-human');
     vi.resetModules();
     const { App } = await import('../src/components/App.jsx');
     const game = await import('../src/game.js');

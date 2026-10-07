@@ -203,6 +203,12 @@ export const DEFAULT_SIMULATIONS: [number, number] = [MASTER_SIMULATIONS.default
 /** Two people — 0003's game, unchanged. */
 export const HOT_SEAT: Seating = { players: [null, null], simulations: DEFAULT_SIMULATIONS };
 
+/**
+ * What a page opens with when its URL names no seating, or a malformed one
+ * [W6-54]: a person opening the game, against `master` at its default.
+ */
+export const DEFAULT_SEATING: Seating = { players: [null, 'master'], simulations: DEFAULT_SIMULATIONS };
+
 /** Is `seat` played by the computer? */
 export function isComputer(seating: Seating, seat: Player): boolean {
   return seating.players[seat] !== null;
