@@ -1,7 +1,7 @@
-# azul
+# ladrilho
 
-The board game [Azul](https://en.wikipedia.org/wiki/Azul_(board_game)), two players, in three
-parts that check each other:
+An unofficial implementation of the board game [Azul](https://en.wikipedia.org/wiki/Azul_(board_game)),
+for two players, in three parts that check each other:
 
 - **a rules engine in TypeScript**, fast and deterministic, held to recorded games from an
   independent implementation;
@@ -189,3 +189,13 @@ commands are in their own READMEs.
   the auxiliary score and ownership targets, both adapted here.
 - **Michael Kiesling**, who designed Azul, and **Next Move Games**, whose English rulebook is the
   final word when the engines disagree.
+
+## Name and licence
+
+*Ladrilho* is Portuguese for a floor or wall tile. The interface goes by that name because Azul is
+a trademark; this project is not affiliated with or endorsed by Michael Kiesling or Next Move Games.
+The code and docs still say `azul` where they mean the rules.
+
+The code is under the [MIT licence](LICENSE). The `expert`'s ported network and code in
+`packages/ai-bot` keep their own MIT licence, in
+[`LICENSE.alpha-zero-general`](packages/ai-bot/LICENSE.alpha-zero-general).
