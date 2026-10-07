@@ -1,0 +1,69 @@
+name: Test and deploy UI to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4 # version from package.json's packageManager
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # Every cargo project's rust-toolchain.toml is byte-identical ([R9-1]): one
+      # pinned release, with clippy and the wasm32 target the master's payload needs
+      # ([0012 T12-8]). Installing from one directory installs it for all of them.
+      - name: Install Rust toolchain
+        working-directory: packages/engine-rs
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            packages/engine-rs
+            packages/crosscheck/checker
+            packages/alphazero-bot
+            packages/alphazero-bot/web
+
+      - run: pnpm install --frozen-lockfile
+
+      # The root suites: every package's fast tests and typecheck, clippy included —
+      # about a minute and a half warm. Deliberately left out, as too slow or needing
+      # more than Node and Rust: the browser lane (ui test:browser), the trainer's
+      # pytest (alphazero-bot test:train), and every gate, ladder, bench, compare and
+      # long cross-check run.
+      - run: pnpm typecheck
+      - run: pnpm test
+
+      - run: pnpm -F ui build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: packages/ui/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
