@@ -24,7 +24,7 @@ import {
 } from 'engine';
 import { createSignal } from 'solid-js';
 import {
-  HOT_SEAT,
+  DEFAULT_SEATING,
   isComputer,
   seatingFromUrl,
   tierAt,
@@ -101,7 +101,7 @@ let state: AzulState;
 let currentSeed: number;
 
 /** Who occupies each seat this game [W6-2]. Changing it deals a new one [W6-3]. */
-let seating: Seating = HOT_SEAT;
+let seating: Seating = DEFAULT_SEATING;
 
 /**
  * Bumped whenever a game is dealt or the seating changes [W6-16].
@@ -297,7 +297,7 @@ function deal(seed: number): ViewModel {
   return nextView();
 }
 
-seating = seatingFromUrl(location.search) ?? HOT_SEAT;
+seating = seatingFromUrl(location.search) ?? DEFAULT_SEATING;
 const [view, setView] = createSignal<ViewModel>(deal(seedFromUrl(location.search) ?? freshSeed()));
 
 /**

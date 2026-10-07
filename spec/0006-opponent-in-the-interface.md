@@ -154,6 +154,19 @@ type FromWorker =
 
 - **[W6-5]** A person MUST be able to occupy either seat. The computer MUST NOT be fixed to seat 1.
 
+- **[W6-54]** A page whose URL carries no seating, or one [W6-4] discards, MUST open with a person
+  as Player 1 and `master` as Player 2, at the default simulations setting of [W6-44]. A URL that
+  names a seating, `human-human` included, is unaffected.
+
+  *Hot seat was the default until the client was published, because it was the first game there
+  was. Intent 0003 gives the reason to change it: "the main reason anyone opens a board game
+  implementation alone is to play against something", and someone following a bare link is
+  almost always alone. `master` because it is the opponent we trained and the strongest we offer;
+  the person as Player 1 because Player 1 opens, so the board waits for them rather than starting
+  with a search. The cost is that a bare link now loads the master's worker and payload on the
+  person's first move. Spec 0012's promise that a game without a `master` seat never loads it still
+  holds, and `?seating=human-human` is still the link for two people.*
+
 ### The new-game sheet
 
 *Added for intent 0011 — A table, not a page, which moved the seating out of the play area

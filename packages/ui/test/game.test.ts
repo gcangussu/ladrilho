@@ -56,7 +56,7 @@ function held(): AzulState {
  * honest way to exercise the seed handling of [U3-13] and it goes through the
  * production path rather than a test-only entry point.
  */
-async function load(search = ''): Promise<Game> {
+async function load(search = '?seating=human-human'): Promise<Game> {
   history.replaceState({}, '', `/${search}`);
   vi.resetModules();
   engine.states.length = 0;
@@ -85,14 +85,14 @@ afterEach(() => vi.restoreAllMocks());
 
 describe('seeding', () => {
   it('[U3-13] takes an integer seed in range from the URL', async () => {
-    const game = await load('?seed=42');
+    const game = await load('?seed=42&seating=human-human');
     expect(game.view().seed).toBe(42);
     expect(engine.newGame).toHaveBeenCalledWith(42);
   });
 
   it('[U3-13] accepts the ends of [0, 2**32)', async () => {
-    expect((await load('?seed=0')).view().seed).toBe(0);
-    expect((await load('?seed=4294967295')).view().seed).toBe(2 ** 32 - 1);
+    expect((await load('?seed=0&seating=human-human')).view().seed).toBe(0);
+    expect((await load('?seed=4294967295&seating=human-human')).view().seed).toBe(2 ** 32 - 1);
   });
 
   it.each([
@@ -107,7 +107,7 @@ describe('seeding', () => {
     ['1e3', 'an integer value, but not a plain decimal seed'],
   ])('[U3-13] discards ?seed=%j and generates one instead (%s)', async (raw) => {
     randomSeed = 777;
-    const game = await load(`?seed=${raw}`);
+    const game = await load(`?seed=${raw}&seating=human-human`);
     expect(game.view().seed).toBe(777);
     expect(crypto.getRandomValues).toHaveBeenCalled();
   });
@@ -121,16 +121,16 @@ describe('seeding', () => {
   });
 
   it('[U3-14] republishes the seed on every ply', async () => {
-    const game = await load('?seed=42');
+    const game = await load('?seed=42&seating=human-human');
     step(game);
     expect(game.view().seed).toBe(42);
   });
 
   it('[U3-16] a seed reproduces the deal, and the game restarts from the opening', async () => {
-    const first = await load('?seed=42');
+    const first = await load('?seed=42&seating=human-human');
     step(first);
     const opening = first.view().game;
-    const second = await load('?seed=42');
+    const second = await load('?seed=42&seating=human-human');
     expect(second.view().game).toEqual(await openingOf(42));
     expect(second.view().game).not.toEqual(opening);
   });
@@ -144,7 +144,7 @@ async function openingOf(seed: number): Promise<unknown> {
 
 describe('one state per game', () => {
   it('[U3-5] [U3-12] calls newGame once and creates the state no other way', async () => {
-    const game = await load('?seed=42');
+    const game = await load('?seed=42&seating=human-human');
     expect(engine.newGame).toHaveBeenCalledTimes(1);
     step(game);
     step(game);
@@ -155,7 +155,7 @@ describe('one state per game', () => {
     // [U3-18], widened: `applyExplained` is the entry point `submit` takes, and
     // it is the *only* one — a ply that also went through `apply` would be a
     // second path into the held state [0007 S7-2].
-    const game = await load('?seed=42');
+    const game = await load('?seed=42&seating=human-human');
     const state = held();
     const played = [step(game), step(game), step(game)];
     expect(engine.applyExplained.mock.calls.map((c) => c[1])).toEqual(played);
@@ -164,7 +164,7 @@ describe('one state per game', () => {
   });
 
   it('[U3-47] a new game takes a fresh seed, never the one in the URL', async () => {
-    const game = await load('?seed=42');
+    const game = await load('?seed=42&seating=human-human');
     randomSeed = 99;
     game.startNewGame();
     flush();
@@ -176,20 +176,20 @@ describe('one state per game', () => {
 
 describe('submit', () => {
   it('[U3-18] [U3-31] takes an action and nothing else', async () => {
-    const game = await load('?seed=42');
+    const game = await load('?seed=42&seating=human-human');
     expect(game.submit.length).toBe(1);
     const action = step(game);
     expect(engine.applyExplained).toHaveBeenCalledExactlyOnceWith(held(), action);
   });
 
   it('[U3-20] does not guard: the engine throw propagates', async () => {
-    const game = await load('?seed=42');
+    const game = await load('?seed=42&seating=human-human');
     const illegal = [...Array(180).keys()].find((a) => !game.view().game.legalActions.includes(a));
     expect(() => game.submit(illegal as number)).toThrow();
   });
 
   it('[U3-20] a rejected action leaves the published view untouched', async () => {
-    const game = await load('?seed=42');
+    const game = await load('?seed=42&seating=human-human');
     const before = game.view();
     expect(() => game.submit(180)).toThrow();
     flush();
@@ -199,7 +199,7 @@ describe('submit', () => {
 
 describe('publish', () => {
   it('[U3-63] the published game deep-equals toJSON of the held state, from the opening on', async () => {
-    const game = await load('?seed=42');
+    const game = await load('?seed=42&seating=human-human');
     expect(game.view().game).toEqual(toJSON(held()));
     for (let ply = 0; ply < 12; ply++) {
       step(game);
@@ -209,7 +209,7 @@ describe('publish', () => {
 
   it('[U3-4] publishes floorOccupied from the engine, for both players', async () => {
     const actual = await vi.importActual<typeof import('engine')>('engine');
-    const game = await load('?seed=42');
+    const game = await load('?seed=42&seating=human-human');
     for (let ply = 0; ply < 12; ply++) {
       step(game);
       expect(game.view().floorOccupied).toEqual([
@@ -220,7 +220,7 @@ describe('publish', () => {
   });
 
   it('[U3-2] [U3-21] replaces the view model wholesale with plain data, and does not mutate the previous one', async () => {
-    const game = await load('?seed=42');
+    const game = await load('?seed=42&seating=human-human');
     const before = game.view();
     // structuredClone throws on anything that is not plain, cloneable data [U3-2].
     const snapshot = structuredClone(before);
@@ -241,7 +241,7 @@ describe('round transitions', () => {
   }
 
   it('[U3-39] [U3-42] reports the transition on the ply that causes it, and only then', async () => {
-    const game = await load('?seed=42');
+    const game = await load('?seed=42&seating=human-human');
     const opening = game.view().game.round;
     expect(game.view().transition).toBeNull();
 
@@ -255,7 +255,7 @@ describe('round transitions', () => {
   });
 
   it('[U3-42] newlyPlaced marks exactly the wall cells this transition set', async () => {
-    const game = await load('?seed=42');
+    const game = await load('?seed=42&seating=human-human');
     let wallBefore = flatWalls(game.view().game);
     playUntil(game, () => {
       if (game.view().transition !== null) return true;
@@ -273,7 +273,7 @@ describe('round transitions', () => {
   });
 
   it('[U3-42] scoreDelta is each player’s score change across the transition', async () => {
-    const game = await load('?seed=42');
+    const game = await load('?seed=42&seating=human-human');
     let scoresBefore = game.view().game.scores;
     playUntil(game, () => {
       if (game.view().transition !== null) return true;
@@ -288,7 +288,7 @@ describe('round transitions', () => {
   });
 
   it('[U3-39] [U3-42] the final ply reports a transition with ended set', async () => {
-    const game = await load('?seed=42');
+    const game = await load('?seed=42&seating=human-human');
     playUntil(game, () => game.view().game.isTerminal);
     expect(game.view().game.isTerminal).toBe(true);
     expect(game.view().transition).not.toBeNull();
@@ -296,7 +296,7 @@ describe('round transitions', () => {
   });
 
   it('[U3-41] the retained view model does not survive into the next diff', async () => {
-    const game = await load('?seed=42');
+    const game = await load('?seed=42&seating=human-human');
     playUntil(game, () => game.view().transition !== null);
     step(game);
     expect(game.view().transition).toBeNull();

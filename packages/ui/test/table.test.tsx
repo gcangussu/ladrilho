@@ -20,7 +20,7 @@ import { lastMoveText } from '../src/components/PlayerBoard.jsx';
 type Screen = ReturnType<typeof render>;
 type Game = typeof import('../src/game.js');
 
-async function mount(search = '?seed=42'): Promise<{ screen: Screen; game: Game }> {
+async function mount(search = '?seed=42&seating=human-human'): Promise<{ screen: Screen; game: Game }> {
   history.replaceState({}, '', `/${search}`);
   vi.resetModules();
   const { App } = await import('../src/components/App.jsx');

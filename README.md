@@ -28,8 +28,9 @@ pnpm install
 pnpm -F ui dev
 ```
 
-Either way, choose who sits where. There is no server, no account and no storage; everything, the
-master included, runs in the page. A reload deals a fresh game, and the URL reproduces one:
+Either way, you open as Player 1 against the master; **New game** chooses who sits where, two
+people included. There is no server, no account and no storage; everything, the master included,
+runs in the page. A reload deals a fresh game, and the URL reproduces one:
 [`?seed=42&seating=human-master`](https://gcangussu.github.io/ladrilho/?seed=42&seating=human-master) pins the deal and the opponent. The master thinks 10,000
 simulations a move by default (about 60 ms on one thread of a laptop); `p2Simulations=50000`
 makes the second seat's master think longer, anywhere from 100 to 200,000.

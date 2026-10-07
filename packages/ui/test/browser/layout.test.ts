@@ -29,7 +29,7 @@ function load(width: number, height: number): Promise<Document> {
   const el = document.createElement('iframe');
   frame = el;
   el.style.cssText = `width:${width}px;height:${height}px;border:0;position:fixed;left:0;top:0`;
-  el.src = `/index.html?seed=${SEED}`;
+  el.src = `/index.html?seed=${SEED}&seating=human-human`;
   const ready = settled(el);
   document.body.append(el);
   return ready;

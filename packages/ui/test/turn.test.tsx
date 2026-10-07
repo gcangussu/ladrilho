@@ -25,7 +25,7 @@ import { patternLineName } from '../src/components/PatternLines.jsx';
 type Screen = ReturnType<typeof render>;
 
 /** Mount the interface on a fresh game, and hand back the state module too. */
-async function mount(search = '?seed=42'): Promise<{
+async function mount(search = '?seed=42&seating=human-human'): Promise<{
   screen: Screen;
   game: () => AzulJSON;
 }> {
