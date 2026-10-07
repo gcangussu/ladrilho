@@ -198,9 +198,15 @@ describe('[S7-38] the amendments landed in the specs they amend', () => {
     const ui = read('0003-web-interface.md');
     // 0006 promised [0003 U3-82] and declared none of it. The number is taken
     // now; the next free one is not, and a promise about it would read exactly
-    // as that one did.
-    expect(declares(ui, 'U3-99')).toBe(false);
-    expect(declares(engine, 'E1-99')).toBe(false);
+    // as that one did. "Next free" is read from the spec, not written here:
+    // a hard-coded U3-99 went stale the day 0003 grew to declare it.
+    for (const [text, prefix] of [[ui, 'U3'], [engine, 'E1']]) {
+      const declared = [...text.matchAll(new RegExp(`\\*\\*\\[${prefix}-(\\d+)\\]\\*\\*`, 'g'))];
+      expect(declared.length, `no ${prefix} declarations found`).toBeGreaterThan(0);
+      const last = Math.max(...declared.map((m) => Number(m[1])));
+      expect(declares(text, `${prefix}-${last}`)).toBe(true);
+      expect(declares(text, `${prefix}-${last + 1}`)).toBe(false);
+    }
     expect('function apply(s: AzulState, action: number): void;').not.toMatch(
       /function applyExplained\s*\(/,
     );
