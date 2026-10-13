@@ -8,6 +8,8 @@ cached, with the work per move fixed on both sides.
 pnpm -F alphazero-bot tile play --games 200 --us 1000,11300 --them nnue:100000,nnue:600000,mcts:800
 ```
 
+[`FAIRNESS.md`](FAIRNESS.md) audits whether this gives their AI the game it plays on its own page.
+
 ## Their player
 
 Their page is a Rust engine compiled to WebAssembly (wasm-bindgen) that runs entirely in the
@@ -51,9 +53,9 @@ Their endgame solver refuses to run on fewer than three threads, so it only runs
     120 ms, skipped below a 1 s clock; `--tail-ms` on a node budget) and its cancel timer. The
     solver refuses fewer than three threads (`skip_tail_solver_web_threads_lt3:2`), so it
     declines and minimax decides, on two threads fewer. The solutions the page works out ahead
-    while its opponent thinks use a single-threaded search, which also declines here (`lt3:1`),
-    so in practice the page's minimax appears not to solve endgames at all; this was measured in
-    Node, not in a browser.
+    while its opponent thinks use a single-threaded search, which also declines (`lt3:1`),
+    so the page's minimax never plays a solver move. The clamp to two threads is in the page's
+    own worker, so a browser behaves the same; `FAIRNESS.md` has the probe.
   - `on` probes the solver first, on every thread, and plays its move when one is proven,
     minimax otherwise: the page's tail-probe branch, which its default path does not take.
   - `off` is minimax alone, on every thread.
@@ -222,3 +224,8 @@ minimax −56 Elo per doubling on the clock (−119 to −1) and −47 on one th
 MCTS shows no trend. Nothing tested beats ours, and where theirs would is an extrapolation: the
 fits cross parity near 46 s a move on 8 threads and 46 million single-threaded nodes, with
 intervals spanning orders of magnitude.
+
+**Their solver granted** (13 Oct 2026, `FAIRNESS.md`). The sweep's rows ran `--tail race`, where
+their solver declines. The page default with `--tail on`, the same seeds, 100 games, one at a
+time: 81–3–16, our score 82.5% (73.9–88.7%), +269 Elo, margin +5.8; the solver proved 15.8% of
+their moves. Within the interval of the `race` row above, so the sweep's conclusion stands.
