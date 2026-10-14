@@ -1,10 +1,9 @@
 import type { JSX } from '@solidjs/web';
 import type { Player } from 'engine';
-import { For, Show } from 'solid-js';
+import { For, Show, createMemo } from 'solid-js';
 import type { Estimate, PlyRecord } from '../game.js';
 import type { Level, Seating } from '../opponent.js';
-import { estimateWords } from './Estimate.jsx';
-import { levelName } from './Seating.jsx';
+import { estimateWords, estimatorName, signed } from './Estimate.jsx';
 
 /**
  * The record's graph of the estimate, [W6-85] through [W6-94], for intent
@@ -60,6 +59,8 @@ interface Graph {
   kind: Kind;
   title: string;
   name: string;
+  /** The hidden table's caption, which tells it from the record's log [W6-92]. */
+  tableCaption: string;
   caption: string;
   yTicks: Tick[];
   reference: number;
@@ -78,10 +79,6 @@ function entry(estimate: Estimate, seat: Player): number {
   return estimate.kind === 'chance' ? estimate.chance[seat] : estimate.lead[seat];
 }
 
-function signed(value: number): string {
-  return value > 0 ? `+${value}` : value < 0 ? `−${-value}` : '0';
-}
-
 /** [W6-87]: 1, every multiple of 10 up to `last`, and `last`. */
 function xTicks(last: number): number[] {
   const at = [1];
@@ -92,7 +89,6 @@ function xTicks(last: number): number[] {
 
 /** Whose estimates these are, in [W6-58]'s names [W6-90]. */
 function caption(plotted: readonly PlyRecord[], players: Players): string {
-  const both = players[0] !== null && players[1] !== null;
   const names: string[] = [];
   for (const seat of SEATS) {
     const levels: Level[] = [];
@@ -101,7 +97,7 @@ function caption(plotted: readonly PlyRecord[], players: Players): string {
       if (e.by === seat && !levels.includes(e.level)) levels.push(e.level);
     }
     for (const level of levels) {
-      names.push(both ? `Player ${seat + 1}’s ${levelName(level)}` : levelName(level));
+      names.push(estimatorName(seat, level, players));
     }
   }
   return `as ${names.join(' and ')} saw it`;
@@ -161,6 +157,7 @@ function graphOf(kind: Kind, history: readonly PlyRecord[], players: Players): G
     kind,
     title: kind === 'chance' ? 'chance to win, %' : 'lead, points',
     name: `${title} over ${moves}; latest: Player 1 ${shorts[0]}, Player 2 ${shorts[1]}, ${says}`,
+    tableCaption: `${title}, by move`,
     caption: says,
     yTicks: [low, middle, high].map((v, i) => ({ at: yOf(v), label: yLabels[i] })),
     reference: yOf(middle),
@@ -273,6 +270,7 @@ function GraphFigure(props: { graph: Graph }): JSX.Element {
         </For>
       </svg>
       <table class="sr-only">
+        <caption>{g().tableCaption}</caption>
         <thead>
           <tr>
             <th scope="col">move</th>
@@ -302,7 +300,7 @@ function GraphFigure(props: { graph: Graph }): JSX.Element {
  * holds, or a sentence when it holds none [W6-91].
  */
 export function EstimateGraph(props: { history: readonly PlyRecord[]; seating: Seating }): JSX.Element {
-  const graphs = (): Graph[] => layout(props.history, props.seating.players);
+  const graphs = createMemo(() => layout(props.history, props.seating.players));
   return (
     <Show
       when={graphs().length > 0}

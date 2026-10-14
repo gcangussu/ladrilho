@@ -366,6 +366,7 @@ describe('the estimate graph', () => {
     );
     const table = figures(chanceView.container)[0].querySelector('table') as HTMLTableElement;
     expect(table.classList.contains('sr-only')).toBe(true);
+    expect(table.caption?.textContent).toBe('Chance to win, by move');
     const rows = [...table.rows].map((r) => [...r.cells].map((c) => c.textContent));
     expect(rows[0]).toEqual(['move', 'Player 1', 'Player 2']);
     expect(rows.slice(1)).toEqual(
@@ -376,7 +377,9 @@ describe('the estimate graph', () => {
     expect(leadView.container.querySelector('svg')?.getAttribute('aria-label')).toBe(
       'Lead in points over 9 moves; latest: Player 1 win, Player 2 loss, as ruthless saw it',
     );
-    const leadRows = [...(leadView.container.querySelector('table') as HTMLTableElement).rows].map((r) =>
+    const leadTable = leadView.container.querySelector('table') as HTMLTableElement;
+    expect(leadTable.caption?.textContent).toBe('Lead in points, by move');
+    const leadRows = [...leadTable.rows].map((r) =>
       [...r.cells].map((c) => c.textContent),
     );
     expect(leadRows.slice(1)).toEqual([
@@ -409,7 +412,7 @@ describe('the estimate graph', () => {
     }
   });
 
-  it('[W6-85] follows the record as it grows, while it is open', () => {
+  it('[W6-85] follows the record as it grows', () => {
     const [history, setHistory] = createSignal<readonly PlyRecord[]>([ply(1, 0, null)]);
     const { container } = render(() => <EstimateGraph history={history()} seating={seating(null, 'master')} />);
     expect(container.textContent).toBe('No estimates yet.');
