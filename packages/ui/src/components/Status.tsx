@@ -1,8 +1,8 @@
 import type { JSX } from '@solidjs/web';
 import type { AzulJSON } from 'engine';
-import { For, Show } from 'solid-js';
+import { Show } from 'solid-js';
 import type { Thinking } from '../game.js';
-import { Tile } from './Tile.jsx';
+import { Supply } from './Supply.jsx';
 
 /**
  * The round, what is left to take, whose turn it is, and the seed this game was
@@ -15,14 +15,19 @@ import { Tile } from './Tile.jsx';
  *
  * Bag and lid are shown as per-colour counts, which is all the engine reports
  * and all it may: the bag's order is hidden information no player may see
- * [U3-34], [0001 E1-55]. They are folded behind a disclosure, being the one
- * thing here a player looks at rarely.
+ * [U3-34], [0001 E1-55]. Where the table is small they are folded behind a
+ * disclosure, being the one thing here a player looks at rarely [U3-96]; on
+ * the wide table they are in view beneath the ring instead, and `bag` is false
+ * so the top bar does not carry them twice [U3-105]. The caller says which: the
+ * arrangement is measured above this component, not in it [U3-110].
  */
 export function Status(props: {
   game: AzulJSON;
   seed: number;
   names: string[];
   thinking: Thinking;
+  /** Whether the bag's disclosure is in the top bar. Defaults to true. */
+  bag?: boolean;
 }): JSX.Element {
   return (
     <section class="status" aria-label="Game status">
@@ -54,44 +59,20 @@ export function Status(props: {
         <span class="seed-word">Deal </span>
         <code>{props.seed}</code>
       </p>
-      <details
-        class="supply-pop"
-        onToggle={(event) => {
-          if (!event.currentTarget.open) return;
-          for (const other of document.querySelectorAll<HTMLDetailsElement>('.topbar details[open]')) {
-            if (other !== event.currentTarget) other.open = false;
-          }
-        }}
-      >
-        <summary>Bag</summary>
-        {/* A table, so a colour's two counts are read together: a tile for
-            the colour, and the bag and the lid as columns [U3-34]. */}
-        <table class="supply">
-          <caption class="sr-only">Tiles in the bag and in the lid, by colour</caption>
-          <thead>
-            <tr>
-              <th scope="col">
-                <span class="sr-only">Colour</span>
-              </th>
-              <th scope="col">Bag</th>
-              <th scope="col">Lid</th>
-            </tr>
-          </thead>
-          <tbody>
-            <For each={props.names} keyed={false}>
-              {(_, color) => (
-                <tr>
-                  <th scope="row">
-                    <Tile color={color} names={props.names} />
-                  </th>
-                  <td>{props.game.bag[color]}</td>
-                  <td>{props.game.lid[color]}</td>
-                </tr>
-              )}
-            </For>
-          </tbody>
-        </table>
-      </details>
+      <Show when={props.bag ?? true}>
+        <details
+          class="supply-pop"
+          onToggle={(event) => {
+            if (!event.currentTarget.open) return;
+            for (const other of document.querySelectorAll<HTMLDetailsElement>('.topbar details[open]')) {
+              if (other !== event.currentTarget) other.open = false;
+            }
+          }}
+        >
+          <summary>Bag</summary>
+          <Supply game={props.game} names={props.names} />
+        </details>
+      </Show>
     </section>
   );
 }

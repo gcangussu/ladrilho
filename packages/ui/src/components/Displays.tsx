@@ -1,7 +1,7 @@
 import type { JSX } from '@solidjs/web';
 import type { AzulJSON } from 'engine';
 import { CENTER, NUM_COLORS } from 'engine';
-import { For, Show, createMemo } from 'solid-js';
+import { For, Repeat, Show, createMemo } from 'solid-js';
 import { RovingGroup } from './RovingGroup.jsx';
 import { Tile } from './Tile.jsx';
 
@@ -79,6 +79,22 @@ export function pickName(pick: Pick, names: string[]): string {
     : `${tiles}, ${factoryName(pick.source).toLowerCase()}`;
 }
 
+/**
+ * How much of a factory plate's two-column grid a loose control takes [U3-106]:
+ * a group of two or three is a row of its own, four is the whole plate, and a
+ * tile alone is one cell — unless it is the only one on its plate, beside a
+ * group of three, when it takes the other row and sits in the middle of it.
+ * Presentational only, like the floor's order [U3-38]: it decides where a
+ * control is drawn, never which controls there are or what they are called.
+ */
+type Span = 'cell' | 'row' | 'plate';
+
+function spanOf(pick: Pick, picks: Pick[]): Span {
+  if (pick.count >= 4) return 'plate';
+  if (pick.count >= 2) return 'row';
+  return picks.filter((other) => other.count === 1).length === 1 ? 'row' : 'cell';
+}
+
 function PickButton(props: {
   pick: Pick;
   names: string[];
@@ -86,12 +102,16 @@ function PickButton(props: {
   selected: boolean;
   tabIndex: number;
   onChoose: (pick: Pick) => void;
+  /** Every tile of the group, and no numeral — the wide table [U3-106]. */
+  loose: boolean;
+  span: Span;
 }): JSX.Element {
   return (
     <button
       type="button"
       data-roving="true"
-      class={['pick', { selected: props.selected }]}
+      data-span={props.loose ? props.span : undefined}
+      class={['pick', { selected: props.selected, loose: props.loose }]}
       aria-label={pickName(props.pick, props.names)}
       aria-pressed={props.selected ? 'true' : 'false'}
       // Present, focusable and inert rather than `disabled`, which would take it
@@ -100,13 +120,28 @@ function PickButton(props: {
       tabindex={props.tabIndex}
       onClick={() => props.onChoose(props.pick)}
     >
-      {/* One tile and a count rather than a row of identical tiles [U3-97]: a
-          pick is always every tile of its colour, so it is drawn as one stack. */}
-      <Tile color={props.pick.color} names={props.names} />
-      <Show when={props.pick.count > 1}>
-        <span class="count" aria-hidden="true">
-          {props.pick.count}
-        </span>
+      <Show
+        when={props.loose}
+        fallback={
+          <>
+            {/* One tile and a count rather than a row of identical tiles
+                [U3-97]: a pick is always every tile of its colour, so it is
+                drawn as one stack. */}
+            <Tile color={props.pick.color} names={props.names} />
+            <Show when={props.pick.count > 1}>
+              <span class="count" aria-hidden="true">
+                {props.pick.count}
+              </span>
+            </Show>
+          </>
+        }
+      >
+        {/* Where there is room, every tile, side by side inside the one
+            control, so pressing any of them takes them all [U3-106], [U3-107].
+            The name above says the count in words [U3-108]. */}
+        <Repeat count={props.pick.count}>
+          {() => <Tile color={props.pick.color} names={props.names} />}
+        </Repeat>
       </Show>
     </button>
   );
@@ -128,6 +163,7 @@ function Picks(props: {
   /** Where a pick sits in the roving order, given its position in this run. */
   tabIndex: (index: number) => number;
   onChoose: (pick: Pick) => void;
+  loose: boolean;
 }): JSX.Element {
   return (
     <For each={props.picks} keyed={false}>
@@ -139,6 +175,8 @@ function Picks(props: {
           selected={props.selected(pick())}
           tabIndex={props.tabIndex(index)}
           onChoose={props.onChoose}
+          loose={props.loose}
+          span={spanOf(pick(), props.picks)}
         />
       )}
     </For>
@@ -169,6 +207,7 @@ function Display(props: {
   selected: (pick: Pick) => boolean;
   tabIndex: (index: number) => number;
   onChoose: (pick: Pick) => void;
+  loose: boolean;
   children?: JSX.Element;
 }): JSX.Element {
   return (
@@ -188,6 +227,7 @@ function Display(props: {
           selected={props.selected}
           tabIndex={props.tabIndex}
           onChoose={props.onChoose}
+          loose={props.loose}
         />
         <Show when={props.picks.length === 0}>
           <span class="display-empty">empty</span>
@@ -198,14 +238,23 @@ function Display(props: {
   );
 }
 
-/** The five factory displays and the centre pool, as two groups [U3-53]. */
+/**
+ * The five factory displays and the centre pool, as two groups [U3-53].
+ *
+ * `loose` is the arrangement's to say, not this component's to measure [U3-110]:
+ * on the wide table every tile is drawn [U3-106], elsewhere one tile and a
+ * count [U3-97]. Nothing else differs — the same controls, names and roving
+ * order either way [U3-108].
+ */
 export function Displays(props: {
   game: AzulJSON;
   names: string[];
   selection: Pick | null;
   available: (source: number, color: number) => boolean;
   onChoose: (pick: Pick) => void;
+  loose?: boolean;
 }): JSX.Element {
+  const loose = (): boolean => props.loose ?? false;
   const isSelected = (pick: Pick): boolean =>
     props.selection?.source === pick.source && props.selection?.color === pick.color;
 
@@ -238,6 +287,7 @@ export function Displays(props: {
                 selected={isSelected}
                 tabIndex={(index) => tabIndex(factory().offset + index)}
                 onChoose={props.onChoose}
+                loose={loose()}
               />
             )}
           </For>
@@ -255,6 +305,7 @@ export function Displays(props: {
               selected={isSelected}
               tabIndex={tabIndex}
               onChoose={props.onChoose}
+              loose={loose()}
             >
               <Show when={props.game.markerInCenter}>
                 <span class="centre-marker">
