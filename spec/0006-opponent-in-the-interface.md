@@ -452,10 +452,27 @@ requirements are about reading it honestly.*
   `Player N's` when both seats are computers, so two `master`s are told apart. Nothing else of the
   choice is shown ([W6-24]).
 
-  A board shown small ([0003 U3-103]) has room beside its score for a short form alone — `c%`,
-  `+l` / `−l` / `even`, or `win` / `loss` — and MAY draw only that, provided the full words and
-  the attribution above remain its text for assistive technology and the short form is hidden from
-  it. The docked board beside it carries the full words on screen.
+  That sentence — the seat's side and the attribution — MUST be the estimate's text on every
+  board in every arrangement, for assistive technology ([W6-59]). What is **drawn** depends on the
+  room the arrangement gives the board ([0003 U3-95], [0003 U3-103]), in one of two forms, and a
+  board shown small draws neither:
+
+  | Board | Drawn |
+  | --- | --- |
+  | `wide` | The sentence itself, whole, on a line under the header's row. |
+  | docked (`side`, `stack`) | Two short lines in the row's free room beside the score: the **short value** over the estimator's **short name**. |
+  | shown small (`side`, `stack`) | Nothing. The sentence is the board's text, visually hidden, and takes no room in the row, whose name, pill and score are drawn exactly as they were before the estimate existed. |
+
+  The short value is `c%` for a chance; `+l pt`, `−l pt` or `even` for a lead; `win` or `loss`
+  for a decided one — `pt` because the header already shows the round's score change as a bare
+  signed number ([0003 U3-43]), and a lead must not be read as one. The short name is the level's
+  word (`ruthless`, `master`), or `P1 master` / `P2 master` when both seats are computers. The
+  compact form MUST be hidden from assistive technology, since the sentence is already there; and
+  neither drawn form MAY wrap, end in an ellipsis, or overflow its header, at 390 × 844 and
+  844 × 390 as at any other size.
+
+  *A small board's row is its player's name, and the name is worth more there than a number: the
+  docked board beside it carries the estimate for both seats, from its own side.*
 
   *Whose and when, every time, because a chance beside a score is otherwise easy to read as a fact
   about the position, or as a second score. The decided form is the tier's own reading of
@@ -465,10 +482,11 @@ requirements are about reading it honestly.*
   the score is: no `role="status"`, no `aria-live`, and no part of [0003 U3-56]'s announcement.
   A board in the shown configuration ([0003 U3-91]) shows it the same way, and it MUST NOT be or
   contain a control.
-- **[W6-60]** In a game with a computer seat, each board MUST hold room for the estimate from the
-  deal on, so that its appearing, changing and clearing never changes the size of the board
-  ([0003 U3-99]'s discipline for the strip beneath it). In a game of two people no board holds
-  that room, and nothing of the estimate is rendered.
+- **[W6-60]** In a game with a computer seat, each `wide` and docked board MUST hold room for the
+  estimate from the deal on, so that its appearing, changing and clearing never changes the size
+  of the board ([0003 U3-99]'s discipline for the strip beneath it). A board shown small MUST hold
+  none: [W6-58] draws nothing there. In a game of two people no board holds that room, and nothing
+  of the estimate is rendered.
 - **[W6-61]** Showing the estimate MUST cost the game nothing: no request is issued for it, the
   requests and replies are exactly [W6-14]'s, the same deal and seating produce the same requests
   as before it existed, and nothing in `bot`, `ai-bot`, `alphazero-bot` or either worker changes
@@ -701,13 +719,23 @@ the seam as much as the number: on which publish it changes, and on which it mus
   - [W6-59], by finding the estimate inside each board's region by its text, outside every
     `role="status"` and `aria-live` element, and absent from the announcement;
   - [W6-61], by counting exactly one request per computer ply and none on a person's ply over a
-    whole game, and by checking each `ToWorker`'s key set against *Data model*;
+    whole game, and by checking each `ToWorker`'s key set against *Data model* — a tier's and a
+    `master`'s, `simulations` included;
+  - a failed reply from the **other** computer, of the other kind, leaving the standing estimate
+    as it was ([W6-57]) — from the same seat and level, a failure that wrote the estimator back
+    could not be told from one that left it alone;
   - [W6-62] and [W6-64] over whole games in [W6-29]'s property test, at every published view;
   - [W6-25], by a source check that no module under `src/components/` mentions `lastChoice`;
   - that the state module's copy of `WIN` equals `bot`'s ([W6-56]).
 
   [W6-60]'s size half MUST be asserted in the browser lane of [0003 U3-73]: a board's box
-  measured before the computer's first move and after it is the same.
+  measured before the computer's first move and after it is the same. So MUST [W6-58]'s drawn
+  forms: at 390 × 844 and 844 × 390, with one computer and with two (then the small board is
+  thinking, its pill at its widest), the docked board draws the compact form, on one line per
+  part, inside its own box, inside the header, overlapping nothing drawn there and with no text
+  wider than its box — on the real estimate and on the widest text the form carries — and the
+  small board draws nothing of the estimate, holds no place in its row, and draws its player's
+  name.
 - **[W6-66]** Each test of [W6-65] that guards a **sign**, a **perspective** or the **standing**
   rule MUST have been seen to fail, under the rules in `CLAUDE.md` (the anchor confirmed to match,
   the mutation made in a scratch copy, the copy's suite run), and each mutation is recorded here
@@ -716,24 +744,30 @@ the seam as much as the number: on which publish it changes, and on which it mus
   exchanged; the lead not negated for the other seat; `WIN` subtracted with the wrong sign; the
   estimate recomputed or cleared on a person's ply; and the estimate cleared on a transition.
 
-  Run 2026-10-14 against a copy of the worktree: each anchor asserted to match exactly once and
-  the mutated file read back before the run, `test/estimate.test.tsx` and `test/opponent.test.tsx`
-  run against it, and the copy green with no mutation (60 passed, 1 skipped). Test names are
-  abbreviated to their identifiers and first words.
+  Re-run 2026-10-14 after [W6-58] settled on two drawn forms, against a copy of the worktree
+  under this agent's own scratch directory: each anchor asserted to match exactly once and the
+  mutation read back from the copy before the run; the fast lane runs `test/estimate.test.tsx`
+  and `test/opponent.test.tsx`, the browser lane `test/browser/opponent.test.ts`. Unmutated, the
+  copy is green in both (62 passed, 1 skipped; 11 passed, 1 skipped), and its `src` is identical
+  to the tree's afterwards. Test names are abbreviated to their identifiers and first words.
 
   | Mutation (function: edit) | Test that went red |
   | --- | --- |
-  | `game.ts` `nextView`: the estimator's seat read when the view is built (`state.currentPlayer`), not captured with the request | `estimate.test.tsx`: [W6-56] [W6-58] *takes the seat from the request*; [W6-57] [W6-63] [W6-58] *is set on the ply…*; [W6-57] [W6-61] [W6-62] [W6-64] *stands across round transitions…*; [W6-57] *stands through a failed reply*; [W6-57] *is not set by a stale reply*; [W6-58] [W6-62] [W6-64] *with two computers…*; [W6-59] *is plain text…*. `opponent.test.tsx`: [W6-29] … [W6-62] [W6-64] *plays through against easy* and *against master* (9 red) |
+  | `game.ts` `nextView`: the estimator's seat read when the view is built (`state.currentPlayer`), not captured with the request | `estimate.test.tsx`: [W6-56] [W6-58] *takes the seat from the request*; [W6-57] [W6-63] [W6-58] *is set on the ply…*; [W6-57] [W6-61] [W6-62] [W6-64] *stands across round transitions…*; [W6-57] *stands through a failed reply*; [W6-57] *…from the other seat, of the other kind*; [W6-57] *is not set by a stale reply*; [W6-58] [W6-62] [W6-64] *with two computers…*; [W6-59] *is plain text…*. `opponent.test.tsx`: [W6-29] … *plays through against easy* and *against master* (10 red) |
   | `game.ts` `estimateOf`: `chance[s]` and `chance[1 − s]` exchanged | [W6-55] [W6-56] *gives master and expert a chance…*; [W6-58] *says each kind in its own words*; [W6-57] [W6-63] [W6-58] *is set on the ply…*; [W6-59] *is plain text…* (4 red) |
-  | `game.ts` `estimateOf`: `lead[1 − s] = lead[s]`, the lead not negated | [W6-55] [W6-56] *gives a tier a lead…*; [W6-56] *reads a tier that reached the end…*; [W6-58] *says each kind…*; [W6-56] [W6-58] *takes the seat from the request*; [W6-57] [W6-61] [W6-62] [W6-64] *stands across round transitions…*; both [W6-57] reply tests; [W6-58] [W6-62] [W6-64] *with two computers…* (8 red) |
+  | `game.ts` `estimateOf`: `lead[1 − s] = lead[s]`, the lead not negated | [W6-55] [W6-56] *gives a tier a lead…*; [W6-56] *reads a tier that reached the end…*; [W6-58] *says each kind…*; [W6-56] [W6-58] *takes the seat from the request*; [W6-57] [W6-61] [W6-62] [W6-64] *stands across round transitions…*; the stale-reply test and both failed-reply tests; [W6-58] [W6-62] [W6-64] *with two computers…* (9 red) |
   | `game.ts` `estimateOf`: `margin = value + WIN`, `WIN` with the wrong sign | [W6-56] *reads a tier that reached the end…*; [W6-58] *says each kind…* (2 red) |
   | `game.ts` `submit`: the estimate cleared on a person's ply (`estimator = null` when the mover is no computer) | [W6-57] [W6-63] [W6-58] *is set on the ply…, and stands on the person's next*; [W6-57] [W6-61] [W6-62] [W6-64] *stands across round transitions…*; [W6-57] *stands through a failed reply*; [W6-29] *plays through against easy* and *against master* (5 red) |
   | `game.ts` `submit`: the estimate cleared on a round transition (`estimator = null` beside `lastScoring`) | [W6-57] [W6-61] [W6-62] [W6-64] *stands across round transitions…*; [W6-29] *plays through against easy* and *against master* (3 red) |
-  | `game.ts` `dispatch`: an estimator recorded on a failed reply too, before the `ok` check | [W6-57] *stands through a failed reply* (1 red) |
+  | `game.ts` `dispatch`: `estimator = asker` before the `ok` check, so a failed reply records its asker | [W6-57] *stands through a failed reply from the other seat, of the other kind* (1 red). The person-against-`easy` failed-reply test stays green under it, and could not do otherwise: its failed request is the same seat and level as the standing estimate, so the write is of an identical value. That is why the two-computer test exists |
+  | `game.ts` `dispatch`: `estimator = null` in the failure branch | both failed-reply tests (2 red) |
   | `App.tsx` `board`: each board handed the other seat's side (`estimateWords(e, 1 − seat, …)`) | [W6-56] [W6-58] *takes the seat from the request*; [W6-57] [W6-63] [W6-58] *is set on the ply…*; [W6-59] *is plain text…* (3 red) |
   | `game.ts` `estimateOf`: the kind read off the value (a tier's value in [-1, 1] taken for a chance) | [W6-55] [W6-56] *gives a tier a lead…*; [W6-56] *reads a tier that reached the end…*; [W6-58] *says each kind…* (3 red) |
   | `App.tsx` `board`: room held in a game of two people too (`estimateRoom={true}`) | [W6-60] [W6-63] *shows nothing, and holds no room, in a game of two people* (1 red) |
-  | `PlayerBoard.tsx`: room held only once an estimate is set (`when={props.estimateRoom && props.estimate}`), browser lane | `test/browser/opponent.test.ts`: [W6-60] *keeps every board the same size…* at 1280 px — 416.9 px tall before, 437.7 after. The 390 px case stays green under it: on a phone the estimate sits within the header row's own height, so its box never adds any; that case guards the row, not this mutation |
+  | `Estimate.tsx` `estimateWords`: a lead's short value without its unit (`+1`, not `+1 pt`) — the docked board's short value | [W6-58] *says each kind in its own words* (1 red) |
+  | `PlayerBoard.tsx`: room held only once an estimate is set (`when={props.estimateRoom && props.estimate}`), browser lane | [W6-60] *keeps every board the same size…* at 1280 px (1 red). At 390 × 844 it stays green: there the docked form sits within the row's own height, and a small board holds no room to lose |
+  | `styles.css`: both small-board rules removed, so a small board draws the compact form as a docked one does, browser lane | [W6-58] [W6-60] *draws the docked form whole, and nothing on a small board…*, all four cases (4 red) |
+  | `styles.css`: the small board's estimate left in the row's flow, unclipped (its rule emptied), browser lane | the same, all four cases (4 red). Its box is empty there — the sentence is clipped by its own rule and the compact form not displayed — so what it takes is a gap's worth of the row; the test asks that it be out of the flow, which is what holding no room means for a flex row |
 
   Two mutations [W6-66] names have no observable form, and are recorded as such rather than
   claimed. Taking the seat when the **reply arrives**, in `dispatch` before `submit`, gives the

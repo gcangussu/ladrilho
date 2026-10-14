@@ -7,10 +7,14 @@ import { levelName } from './Seating.jsx';
 
 /** What one board says of the estimate: its own side, and whose it is [W6-58]. */
 export interface EstimateWords {
+  /** The seat's side in full: `62% to win`, `Behind by 4 points`. */
   value: string;
+  /** Whose and when, in full: `as master saw it on its move`. */
   by: string;
-  /** The same side, as a board shown small has room for it [W6-58]. */
+  /** The seat's side, short: `62%`, `−4 pt`, `even`, `win`, `loss`. */
   short: string;
+  /** Whose, short: `master`, or `P2 master` when both seats are computers. */
+  name: string;
 }
 
 function points(n: number): string {
@@ -41,14 +45,20 @@ export function estimateWords(
       short = won ? 'win' : 'loss';
     } else {
       value = lead > 0 ? `Ahead by ${points(lead)}` : lead < 0 ? `Behind by ${points(-lead)}` : 'Even';
-      short = lead > 0 ? `+${lead}` : lead < 0 ? `−${-lead}` : 'even';
+      // `pt`, so a lead is never read as the round's score change, which the
+      // header shows as a bare signed number [0003 U3-43].
+      short = lead > 0 ? `+${lead} pt` : lead < 0 ? `−${-lead} pt` : 'even';
     }
   }
   // Two computers: say which, or two masters read alike.
   const both = players[0] !== null && players[1] !== null;
-  const name = levelName(estimate.level);
-  const who = both ? `Player ${estimate.by + 1}’s ${name}` : name;
-  return { value, by: `as ${who} saw it on its move`, short };
+  const level = levelName(estimate.level);
+  return {
+    value,
+    by: `as ${both ? `Player ${estimate.by + 1}’s ${level}` : level} saw it on its move`,
+    short,
+    name: both ? `P${estimate.by + 1} ${level}` : level,
+  };
 }
 
 /**
@@ -56,27 +66,38 @@ export function estimateWords(
  * as the score is — no live region, no announcement [W6-59] — and no control,
  * so a shown board may carry it [0003 U3-91].
  *
- * Rendered from the deal on in any game with a computer, empty until the
- * computer has moved, so that its arriving never resizes the board [W6-60].
+ * Its text is always the full sentence. Where the row has no room for it — a
+ * docked board — the stylesheet draws a compact form instead, hidden from
+ * assistive technology, and keeps the sentence out of sight but read. A board
+ * shown small draws nothing of it: its row is its player's name.
  *
- * A board shown small has room beside its score for the short form alone, so
- * there the full words stay its text for a screen reader and the short form
- * is drawn for the eye; the stylesheet chooses, the text is always both.
+ * Rendered from the deal on in any game with a computer, empty until the
+ * computer has moved, so that its arriving never resizes a wide or docked
+ * board [W6-60].
  */
 export function EstimateLine(props: { words: EstimateWords | null }): JSX.Element {
   return (
     <p class="estimate">
-      <Show when={props.words}>
-        {(words) => (
-          <>
-            <span class="estimate-value">{words().value}</span>{' '}
-            <span class="estimate-by">{words().by}</span>
-            <span class="estimate-short" aria-hidden="true">
-              {words().short}
-            </span>
-          </>
-        )}
-      </Show>
+      <span class="estimate-full">
+        <Show when={props.words}>
+          {(words) => (
+            <>
+              <span class="estimate-value">{words().value}</span>{' '}
+              <span class="estimate-by">{words().by}</span>
+            </>
+          )}
+        </Show>
+      </span>
+      <span class="estimate-compact" aria-hidden="true">
+        <Show when={props.words}>
+          {(words) => (
+            <>
+              <span class="estimate-short">{words().short}</span>
+              <span class="estimate-name">{words().name}</span>
+            </>
+          )}
+        </Show>
+      </span>
     </p>
   );
 }

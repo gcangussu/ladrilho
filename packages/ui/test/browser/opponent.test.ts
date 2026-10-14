@@ -127,6 +127,100 @@ describe('the opponent against a real worker [W6-30]', () => {
   });
 
   /**
+   * [W6-58]'s drawn forms on a phone and on a phone on its side: the docked
+   * board's short value over the estimator's name fits the room it is drawn
+   * in — each on one line, inside its header, overlapping nothing, the
+   * player's name beside it included — and the small board draws nothing of
+   * the estimate, its player's name drawn whole as it always was. Checked on
+   * the real estimate, then on the widest text the compact form can carry
+   * (`−12 pt`, `100%`, `P1 ruthless`) written into the same boxes, since the
+   * real one is whatever this deal gives.
+   */
+  it.for([
+    [390, 844, 'sharp-human'],
+    [844, 390, 'sharp-human'],
+    [390, 844, 'sharp-sharp'],
+    [844, 390, 'sharp-sharp'],
+  ] as const)('[W6-58] [W6-60] draws the docked form whole, and nothing on a small board, at %i × %i, %s', { timeout: 60_000 }, async ([width, height, seating]) => {
+    // Two computers as well as one: then the docked board's name carries its
+    // seat, and the small board is the one thinking the moment the first
+    // estimate lands, its pill at its widest.
+    const { doc, win } = await load(seating, width, height);
+    await until(
+      () => /saw it on its move/.test(doc.querySelector('.player-board .estimate')?.textContent ?? ''),
+      20_000,
+      'the estimate',
+    );
+    const drawn = (el: Element): boolean => {
+      for (let node: Element | null = el; node !== null; node = node.parentElement) {
+        const style = win.getComputedStyle(node);
+        if (style.display === 'none' || style.clipPath === 'inset(50%)') return false;
+      }
+      return true;
+    };
+    const problems = (): string[] => {
+      const out: string[] = [];
+      for (const board of doc.querySelectorAll<HTMLElement>('.player-board')) {
+        const which = board.classList.contains('mini') ? 'small' : 'docked';
+        const header = board.querySelector<HTMLElement>('.player-header')!;
+        const line = board.querySelector<HTMLElement>('.estimate')!;
+        const box = header.getBoundingClientRect();
+        if (header.scrollWidth > header.clientWidth) out.push(`${which}: the header overflows`);
+        const shown = [...line.querySelectorAll<HTMLElement>('.estimate-short, .estimate-name, .estimate-full')].filter(drawn);
+        const names = shown.map((el) => el.className).sort();
+        const expected = which === 'small' ? [] : ['estimate-name', 'estimate-short'];
+        if (names.join() !== expected.join()) out.push(`${which}: draws ${names.join(', ') || 'nothing'}`);
+        // No room on a small board, not even a gap's worth: out of the row's
+        // flow, and nothing of it wider than the clip that hides it.
+        if (which === 'small' && (win.getComputedStyle(line).position !== 'absolute' || line.getBoundingClientRect().width > 1)) {
+          out.push('small: the estimate holds room in the row');
+        }
+        const name = header.querySelector<HTMLElement>('h2')!;
+        if (!drawn(name) || name.getBoundingClientRect().width === 0) out.push(`${which}: the player's name is not drawn`);
+        const own = line.getBoundingClientRect();
+        for (const el of shown) {
+          const r = el.getBoundingClientRect();
+          const tall = parseFloat(win.getComputedStyle(el).lineHeight);
+          if (r.height > tall + 1) out.push(`${which}: ${el.className} wraps`);
+          if (r.left < own.left - 0.5 || r.right > own.right + 0.5) out.push(`${which}: ${el.className} spills out of its box`);
+        }
+        // Everything drawn in the row — the name itself, not just its column —
+        // inside the header and clear of everything else drawn there.
+        const parts = [
+          ...[...header.children].filter((el) => !el.classList.contains('who')),
+          ...header.querySelectorAll('.who > *'),
+        ].filter((el) => drawn(el) && el.getBoundingClientRect().width > 0);
+        parts.forEach((el, i) => {
+          const r = el.getBoundingClientRect();
+          // Text wider than its own box spills over its neighbours whatever the
+          // boxes say. The line under the name is exempt: it ends in an
+          // ellipsis by design, and has since before the estimate.
+          if (!el.classList.contains('seat-kind') && el.scrollWidth > el.clientWidth + 1) {
+            out.push(`${which}: ${el.className || el.tagName}'s text overflows its box`);
+          }
+          if (r.left < box.left - 0.5 || r.right > box.right + 0.5) out.push(`${which}: ${el.className || el.tagName} leaves its header`);
+          for (const other of parts.slice(i + 1)) {
+            const o = other.getBoundingClientRect();
+            const overlaps = r.left < o.right - 0.5 && o.left < r.right - 0.5 && r.top < o.bottom - 0.5 && o.top < r.bottom - 0.5;
+            if (overlaps) out.push(`${which}: ${el.className || el.tagName} overlaps ${other.className || other.tagName}`);
+          }
+        });
+      }
+      return out;
+    };
+    expect(problems()).toEqual([]);
+    for (const [short, name] of [
+      ['−12 pt', 'P1 ruthless'],
+      ['100%', 'P1 ruthless'],
+    ]) {
+      for (const el of doc.querySelectorAll('.estimate-short')) el.textContent = short;
+      for (const el of doc.querySelectorAll('.estimate-name')) el.textContent = name;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(problems(), `with ${short} over ${name}`).toEqual([]);
+    }
+  });
+
+  /**
    * [W6-26], [W6-35], [W6-10]: the page stays alive while the search runs.
    *
    * Measured by driving a timer inside the frame and watching for a gap. A
