@@ -25,11 +25,11 @@ afterEach(() => {
   frame = null;
 });
 
-function load(width: number, height: number): Promise<Document> {
+function load(width: number, height: number, search = `?seed=${SEED}&seating=human-human`): Promise<Document> {
   const el = document.createElement('iframe');
   frame = el;
   el.style.cssText = `width:${width}px;height:${height}px;border:0;position:fixed;left:0;top:0`;
-  el.src = `/index.html?seed=${SEED}&seating=human-human`;
+  el.src = `/index.html${search}`;
   const ready = settled(el);
   document.body.append(el);
   return ready;
@@ -522,6 +522,289 @@ describe('a board that holds still', () => {
     expect(seen, 'the sweep never reached a width too narrow for either').toContain(
       'stacked/stacked',
     );
+  });
+});
+
+/**
+ * The table on a wide screen [U3-105] through [U3-110], measured.
+ *
+ * The bag and the lid in view at 1280 × 800 and in nobody's way; every tile of
+ * a group inside its own control; the page still one screen; and the two
+ * docked arrangements exactly as they were. The centre at its largest is posed
+ * in `wide.test`, which renders the displays alone.
+ *
+ * Mutation records, in the manner of [0007 S7-31] — each applied to a
+ * `git archive HEAD` copy, the anchor asserted to have matched before the file
+ * was written, and run against this file and `wide.test`. The table is the
+ * whole record and is also in the spec, under [U3-110].
+ *
+ * | Mutation | Fails here |
+ * | --- | --- |
+ * | `[data-group='factories'] .pick.loose[data-span='row']`: `grid-column: 1 / -1` dropped | [U3-106] own control: "a tile of 2 teal tiles, factory 1 lies outside it" |
+ * | `Displays.tsx` `PickButton`: one tile inside the button, the rest rendered after it | [U3-106] own control |
+ * | `Displays.tsx`: `loose` ignored, always `true` | [U3-108] changes nothing, at all three docked rows |
+ * | `App.tsx`: `loose={layout() === 'wide'}` → `loose={true}` | [U3-108] changes nothing, at all three docked rows |
+ * | `App.tsx`: `bag={layout() !== 'wide'}` → `bag={true}` | all three [U3-105] checks here: two tables, one behind a disclosure |
+ * | `.table` areas `'keys bag'` → `'keys keys' 'bag bag'` | every [U3-105] in-view check, "off screen" — and nothing else |
+ * | `.table` columns `repeat(2, minmax(0, 1fr))` → `auto auto` | [U3-105] moves nothing: "while master thinks", the bag at `705,592` against `636,592` |
+ * | `.supply-panel`: `grid-area: bag` dropped | **nothing** — see below |
+ *
+ * The areas row and the last row are worth reading together. Dropping the
+ * area changes nothing because auto-placement puts the panel in the one cell left, which is the
+ * same cell: a green that is true. Moving it under the key hints pushes it past
+ * the bottom of the screen, and the page does not scroll for it — `.table`
+ * scrolls within itself (`overflow: auto hidden`), so [U3-95]'s document-scroll
+ * check in `table.test` stays green with the counts out of sight. Only the
+ * "inside the viewport" assertion here sees it, which is why it is there.
+ */
+const CAPTION = 'Tiles in the bag and in the lid, by colour';
+
+const arrangement = (doc: Document): string | undefined =>
+  doc.querySelector<HTMLElement>('main')?.dataset['layout'];
+
+async function settleOn(doc: Document, want: string): Promise<void> {
+  const deadline = Date.now() + 3_000;
+  while (arrangement(doc) !== want && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 25));
+  }
+  expect(arrangement(doc)).toBe(want);
+}
+
+/** The counts' tables, found by their caption: the name a screen reader reads. */
+function supplies(doc: Document): HTMLTableElement[] {
+  return [...doc.querySelectorAll<HTMLTableElement>('table')].filter(
+    (table) => table.caption?.textContent === CAPTION,
+  );
+}
+
+type Box = { left: number; top: number; right: number; bottom: number };
+const boxOf = (el: Element): Box => el.getBoundingClientRect();
+const overlaps = (a: Box, b: Box): boolean =>
+  a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+const inside = (a: Box, b: Box): boolean =>
+  a.left >= b.left - 0.5 && a.right <= b.right + 0.5 && a.top >= b.top - 0.5 && a.bottom <= b.bottom + 0.5;
+
+/** Everything [U3-105] says the counts may not overlap, by name. */
+function clearOf(doc: Document): [string, Element][] {
+  return [
+    ...[...doc.querySelectorAll('section[aria-label^="Player "]')].map(
+      (el) => [el.getAttribute('aria-label')!, el] as [string, Element],
+    ),
+    ...[...doc.querySelectorAll('[data-group="factories"] [role="group"]')].map(
+      (el) => [el.getAttribute('aria-label')!, el] as [string, Element],
+    ),
+    ['the centre', doc.querySelector('.centre .display')!] as [string, Element],
+    ...[...doc.querySelectorAll('.scoring-player')].map(
+      (el, i) => [`workings ${i + 1}`, el] as [string, Element],
+    ),
+  ];
+}
+
+/** The source controls, in both groups. */
+const picks = (doc: Document): HTMLElement[] => [
+  ...doc.querySelectorAll<HTMLElement>(
+    '[data-group="factories"] [data-roving], [data-group="centre"] [data-roving]',
+  ),
+];
+
+/** The count a control's name states in words, which [U3-108] keeps unchanged. */
+const counted = (control: HTMLElement): number =>
+  Number(/^(\d+) /.exec(control.getAttribute('aria-label') ?? '')?.[1]);
+
+/** A ply from whichever source still holds tiles: the round runs to the centre. */
+async function playAnyPly(doc: Document): Promise<void> {
+  const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 20));
+  const source = picks(doc).find((control) => control.getAttribute('aria-disabled') === 'false');
+  expect(source, 'no available source control').toBeDefined();
+  source!.click();
+  await tick();
+  const dest = [
+    ...doc.querySelectorAll<HTMLElement>('[data-group="destinations"] button'),
+  ].find((control) => control.getAttribute('aria-disabled') === 'false');
+  expect(dest, 'the selection made no destination available').toBeDefined();
+  dest!.click();
+  await tick();
+}
+
+/** [U3-105] and [U3-109] at 1280 × 800, said once for every configuration that checks them. */
+function supplyInView(doc: Document, when: string): void {
+  const root = doc.documentElement;
+  const tables = supplies(doc);
+  expect(tables, `${when}: the counts are not in the document exactly once`).toHaveLength(1);
+  const table = tables[0];
+  expect(table.closest('details'), `${when}: behind a disclosure`).toBeNull();
+  const box = boxOf(table);
+  expect(box.right - box.left, when).toBeGreaterThan(0);
+  expect(box.bottom - box.top, when).toBeGreaterThan(0);
+  expect(getComputedStyle(table).visibility, when).toBe('visible');
+  expect(inside(box, { left: 0, top: 0, right: 1280, bottom: 800 }), `${when}: off screen`).toBe(true);
+  const hit = clearOf(doc)
+    .filter(([, el]) => overlaps(box, boxOf(el)))
+    .map(([name]) => name);
+  expect(hit, `${when}: the counts overlap the play area`).toEqual([]);
+  expect(root.scrollHeight, `${when}: scrolls vertically`).toBeLessThanOrEqual(root.clientHeight);
+  expect(root.scrollWidth, `${when}: scrolls sideways`).toBeLessThanOrEqual(root.clientWidth);
+}
+
+describe('the table on a wide screen', () => {
+  // Seen red, on a copy, with the counts moved under the key hints: past the
+  // bottom of the screen, with no page scroll to say so (the record above).
+  it('[U3-105] [U3-109] keeps the bag and lid in view at 1280 × 800, in nobody’s way, with no scroll', async () => {
+    const doc = await load(1280, 800);
+    await settleOn(doc, 'wide');
+    const check = (when: string): void => supplyInView(doc, when);
+
+    check('at the opening');
+    // And through a whole round, so the workings are under the boards [U3-102]
+    // and the centre has held what this deal puts in it.
+    for (let ply = 0; ply < 60 && doc.querySelector('.scoring-player') === null; ply++) {
+      await playAnyPly(doc);
+      check(`after ply ${ply + 1}`);
+    }
+    expect(doc.querySelector('.scoring-player'), 'the round never ended').not.toBeNull();
+    check('with the workings shown');
+  });
+
+  /*
+   * The same checks where the two features of this change meet: a person
+   * against master, which a bare link opens [W6-54]. Hot seat never thinks and
+   * never shows an estimate, so it cannot see the table's note [W6-20] or the
+   * estimate beside a board's score [W6-58] — a new caller of the old seam,
+   * tested in the new configuration.
+   *
+   * Master at a hundred simulations, so a round is seconds and not minutes:
+   * the number changes how long it thinks, never what the page draws.
+   */
+  it('[U3-105] [U3-109] keeps the bag and lid in view against master, through its thinking and a round', async () => {
+    const doc = await load(1280, 800, `?seed=${SEED}&seating=human-master&p2Simulations=100`);
+    await settleOn(doc, 'wide');
+    supplyInView(doc, 'at the opening');
+    let thinking = 0;
+    const deadline = Date.now() + 60_000;
+    while (doc.querySelector('.scoring-player') === null) {
+      if (Date.now() > deadline) throw new Error('the round never ended');
+      if (doc.querySelector('.table-note') !== null) {
+        thinking++;
+        supplyInView(doc, `while master thinks (${thinking})`);
+      } else if (picks(doc).some((c) => c.getAttribute('aria-disabled') === 'false')) {
+        await playAnyPly(doc);
+        supplyInView(doc, 'after a ply');
+        continue;
+      }
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    expect(thinking, 'master was never seen thinking').toBeGreaterThan(0);
+    // The estimate is on master's board, so the two features did meet.
+    expect(board(doc, 'Player 2').textContent).toMatch(/saw it on its move/);
+    supplyInView(doc, 'with the workings shown');
+  }, 90_000);
+
+  /*
+   * Measured before this was fixed: the note sat in the key hints' `auto`
+   * column, nowrap and 226px wide against their 95, so the column grew while
+   * master thought and the bag slid right — 636 to 705 at 1280 × 800, and back.
+   * Seen red, on a copy, with the columns put back to `auto auto`: that slide.
+   */
+  it('[U3-105] moves neither the bag nor any display while master thinks, at 1280 × 800', async () => {
+    const doc = await load(1280, 800, `?seed=${SEED}&seating=human-master`);
+    await settleOn(doc, 'wide');
+    const places = (): string[] =>
+      [
+        doc.querySelector('.supply-panel')!,
+        ...doc.querySelectorAll('[data-group="factories"] [role="group"]'),
+        doc.querySelector('.centre')!,
+      ].map((el) => {
+        const b = el.getBoundingClientRect();
+        return `${Math.round(b.left)},${Math.round(b.top)} ${Math.round(b.width)}x${Math.round(b.height)}`;
+      });
+    const before = places();
+    expect(before).toHaveLength(NUM_FACTORIES + 2);
+
+    await playAnyPly(doc);
+    let deadline = Date.now() + 10_000;
+    while (doc.querySelector('.table-note') === null) {
+      if (Date.now() > deadline) throw new Error('master was never seen thinking');
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    expect(places(), 'while master thinks').toEqual(before);
+    supplyInView(doc, 'while master thinks');
+
+    deadline = Date.now() + 30_000;
+    while (doc.querySelector('.table-note') !== null) {
+      if (Date.now() > deadline) throw new Error('master never moved');
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    expect(places(), 'after master moved').toEqual(before);
+  }, 60_000);
+
+  // Seen red, on a copy, with a row's `grid-column: 1 / -1` dropped: the row of
+  // three spilled out of a cell 51px wide.
+  it('[U3-106] [U3-59] draws each group inside its own control, no two overlapping, at 1280 × 800', async () => {
+    const doc = await load(1280, 800);
+    await settleOn(doc, 'wide');
+    const check = (when: string): number => {
+      const controls = picks(doc);
+      expect(controls.length, when).toBeGreaterThan(0);
+      let tiles = 0;
+      for (const control of controls) {
+        const name = control.getAttribute('aria-label');
+        const own = [...control.querySelectorAll('.tile')];
+        expect(own, `${when}: ${name}`).toHaveLength(counted(control));
+        expect(control.querySelector('.count'), `${when}: ${name} carries a numeral`).toBeNull();
+        const box = boxOf(control);
+        expect(box.right - box.left, `${when}: ${name} is narrower than 44`).toBeGreaterThanOrEqual(44);
+        expect(box.bottom - box.top, `${when}: ${name} is shorter than 44`).toBeGreaterThanOrEqual(44);
+        for (const tile of own) {
+          expect(inside(boxOf(tile), box), `${when}: a tile of ${name} lies outside it`).toBe(true);
+        }
+        tiles += own.length;
+      }
+      for (const [i, a] of controls.entries()) {
+        for (const b of controls.slice(i + 1)) {
+          expect(
+            overlaps(boxOf(a), boxOf(b)),
+            `${when}: ${a.getAttribute('aria-label')} overlaps ${b.getAttribute('aria-label')}`,
+          ).toBe(false);
+        }
+      }
+      return tiles;
+    };
+    expect(check('at the opening')).toBe(20);
+    // A few plies, so the centre holds groups of its own.
+    for (let ply = 0; ply < 4; ply++) {
+      await playAnyPly(doc);
+      check(`after ply ${ply + 1}`);
+    }
+    expect(doc.querySelectorAll('[data-group="centre"] [data-roving]').length).toBeGreaterThan(0);
+  });
+
+  // Seen red, on a copy, with `loose={true}` in `App.tsx`: at both sizes every
+  // group of two held two tiles and no numeral, and the top bar's disclosure
+  // was still there — the bag half alone would not have caught it.
+  it.each([
+    { width: 844, height: 390, layout: 'side', seating: 'human-human' },
+    { width: 390, height: 844, layout: 'stack', seating: 'human-human' },
+    // Where the bare link opens [W6-54], with master's estimate room on its board.
+    { width: 844, height: 390, layout: 'side', seating: 'human-master' },
+  ])('[U3-108] [U3-97] [U3-96] [U3-109] changes nothing at $width × $height, $seating', async ({ width, height: tall, layout, seating }) => {
+    const doc = await load(width, tall, `?seed=${SEED}&seating=${seating}`);
+    await settleOn(doc, layout);
+    let multiples = 0;
+    for (const control of picks(doc)) {
+      const name = control.getAttribute('aria-label');
+      expect(control.querySelectorAll('.tile'), `${name}`).toHaveLength(1);
+      expect(control.querySelectorAll('.count'), `${name}`).toHaveLength(counted(control) > 1 ? 1 : 0);
+      if (counted(control) > 1) multiples++;
+    }
+    expect(multiples, 'the deal held no group of more than one').toBeGreaterThan(0);
+    const tables = supplies(doc);
+    expect(tables).toHaveLength(1);
+    const disclosure = tables[0].closest('details');
+    expect(disclosure?.closest('.topbar'), 'the counts are not behind the top bar’s disclosure').toBeTruthy();
+    expect(disclosure!.open).toBe(false);
+    const root = doc.documentElement;
+    expect(root.scrollHeight).toBeLessThanOrEqual(root.clientHeight);
+    expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
   });
 });
 

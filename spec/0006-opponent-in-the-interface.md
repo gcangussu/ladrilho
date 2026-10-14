@@ -6,13 +6,15 @@ status: implemented
 intent:
   - 0003 — Computer opponent
   - 0010 — Playing the opponent we trained
+  - 0012 — How the opponent sees it
 prefix: W6
 depends-on: 0001 — Engine core, 0003 — Web interface, 0004 — Computer opponent
 summary: >
   Where the opponent runs and what the player sees while it thinks: choosing an
   opponent, the worker that hosts the search, the thinking state, and what
-  happens to the controls during a turn that is not yours. Amends 0003 — Web
-  interface, which said it would need amending.
+  happens to the controls during a turn that is not yours; and, for intent 0012,
+  the one thing shown of what it reckoned — its estimate, after each of its
+  moves. Amends 0003 — Web interface, which said it would need amending.
 ---
 
 # Opponent in the interface
@@ -20,8 +22,8 @@ summary: >
 ## Scope
 
 Covers the changes to `packages/ui`: the opponent selector, the worker seam, the thinking state,
-the turn loop that asks for a move and submits it, and what the board does while a search is in
-flight.
+the turn loop that asks for a move and submits it, what the board does while a search is in
+flight, and the estimate shown after the computer moves (*The estimate*, [W6-55] onward).
 
 Does not cover how a move is chosen (*0004 — Computer opponent*), how good it is (*0005 — Opponent
 strength*), or the rules (*0001 — Engine core*).
@@ -62,6 +64,13 @@ That is also intent 0003's *Not in scope* — "Explaining its moves to the playe
 `Choice` of [0004 B4-40] carries a value, a depth and a node count; [W6-24] forbids showing any of
 them as a judgement.
 
+*(Amended for intent 0012.)* One of them is now shown, and only one: the value, as the
+**estimate** of [W6-55] — after the computer's move, about the position its move left, attributed
+to the opponent that produced it, in that opponent's own terms. It is not a judgement of a move:
+nothing is shown before a move is made ([0003 U3-30] is untouched), nothing is shown of a
+person's move, and nothing is computed to produce it. The interface still does not rank, explain
+or suggest a move; it relays one number the opponent already reported, as the opponent's.
+
 ## Definitions
 
 Terms from *0003* — the view model, `submit`, `publish`, the state module — carry their meaning
@@ -73,6 +82,8 @@ there. Terms from *0004* — tier, `Choice`, `curtailed` — carry theirs.
 | **Request** | One `(position, options)` sent to the worker, and the `Choice` it returns. |
 | **Generation** | A counter incremented whenever a game is dealt or the seating changes. A response whose generation is not current is stale ([W6-16]). |
 | **Thinking** | A request is outstanding. The view model says so ([W6-19]); nothing else infers it. |
+| **Estimator** | The seat whose request produced the current `lastChoice`, and the level that seat held when the request was made ([W6-56]). |
+| **Estimate** | The published reading of the estimator's `lastChoice.value`, per seat ([W6-55]). |
 
 ## Data model
 
@@ -95,9 +106,16 @@ interface ViewModel {
   // …every field 0003 declares, unchanged…
   seating: Seating;                 // [W6-2]
   thinking: Thinking;               // [W6-19]
-  /** The last search's own report, for [W6-25] only. Never rendered as a judgement. */
+  /** The last search's own report. Read by the state module alone, to derive `estimate` [W6-25]. */
   lastChoice: Choice | ExpertChoice | MasterChoice | null;  // [W6-25]
+  /** What the last computer to move reckoned, per seat; the only rendering of `lastChoice` [W6-55]. */
+  estimate: Estimate | null;        // [W6-55]
 }
+
+/** *(Added for intent 0012.)* Indexed by seat: `[p]` is seat `p`'s side of it. */
+type Estimate =
+  | { kind: 'chance'; by: Player; level: 'expert' | 'master'; chance: [number, number] }
+  | { kind: 'lead'; by: Player; level: Tier; lead: [number, number]; decided: Player | null };
 ```
 
 The worker protocol, both directions structurally cloneable ([0001 E1-52], [0004 B4-40]):
@@ -348,15 +366,23 @@ chose, not one dealt on the way to it.*
   the player's way out of a long think, and [W6-13] MUST terminate the worker when it is used.
   *(Amended by [W6-49]: the control opens the new-game sheet, and the sheet's **Deal** control is
   the one that deals. Both stay available mid-search, and [W6-13] applies to Deal.)*
-- **[W6-24]** The interface MUST NOT show the chosen move's value, the depth reached, or any
-  ranking or commentary on a move — the bot's or the player's. Intent 0003 rules out explaining
-  moves; [0003 U3-30] already rules out judging one before it is made, and this extends it to after.
-- **[W6-25]** `lastChoice` MAY be published for diagnostics and MUST NOT be rendered in the
-  interface. If it is shown at all it is behind something the shipped client does not offer.
+- **[W6-24]** The interface MUST NOT show the depth reached, a node count, a simulation or root-visit
+  count, or any ranking or commentary on a move — the bot's or the player's. A choice's value
+  MUST NOT be shown except as the estimate of [W6-55], in the form [W6-58] gives it. Intent 0003
+  rules out explaining moves; [0003 U3-30] already rules out judging one before it is made, and
+  this extends it to after. *(Amended for intent 0012: the value was forbidden outright; the
+  estimate is now its one permitted rendering, and it is about the position the computer's move
+  left, never about a move.)*
+- **[W6-25]** `lastChoice` MAY be published, and MUST NOT be rendered except through `estimate`
+  ([W6-55]): no module under `src/components/` may read `lastChoice` at all. Every other field of
+  a `Choice`, `ExpertChoice` or `MasterChoice` stays unrendered ([W6-24]).
 
   *(Unchanged by [0008 A8-33], and now covering `ExpertChoice.value` too: a number in [-1, 1] from
   the seat's perspective rather than points, which is if anything easier to mistake for a verdict
   on a move. And by [0012 T12-24], `MasterChoice.value`, which is the same kind of number.)*
+  *(Amended for intent 0012: both values now reach the screen, but only as [W6-56] reads them —
+  a chance for those two, a lead in points for a tier — and only through the state module, so a
+  component cannot reach a depth or a visit count by the same road.)*
 
 ### Responsiveness
 
@@ -371,6 +397,100 @@ chose, not one dealt on the way to it.*
 - **[W6-27]** A ply submitted from a worker response MUST reach the next paint within the same
   budget a person's ply has ([0003 U3-67], 50 ms) — measured from the response, not from the
   request.
+
+### The estimate
+
+*Added for intent 0012 — How the opponent sees it. Every opponent rates the position before it
+moves and the interface threw the rating away; now it shows it, after the move, as the opponent's.
+Nothing new is computed: the value already crosses the boundary in `lastChoice`, and these
+requirements are about reading it honestly.*
+
+- **[W6-55]** The view model MUST carry `estimate: Estimate | null`, of the shape in *Data model*,
+  indexed by seat: `chance[p]` and `lead[p]` are seat `p`'s side of the estimate, so each board
+  reads its own entry and no component negates or subtracts anything. `by` is the estimator's seat
+  and `level` the level it held; `kind` is decided by that level alone — `'chance'` for `expert`
+  and `master`, `'lead'` for a tier of `bot` — and never by the shape of the reply.
+- **[W6-56]** `estimate` MUST be derived in the state module from `lastChoice.value` and the
+  estimator, and from nothing else. The estimator's seat and level MUST be captured from the
+  request when it is made — the seat is the position's `currentPlayer`, the level is its `tier` —
+  and MUST NOT be re-derived when the reply arrives, when the move is submitted or when a later
+  view is built. With `v` the value and `s` the estimator's seat:
+  - **chance** (`expert`, `master`; `v` in [-1, 1] for the seat to move, a draw valued as 0):
+    `chance[s] = clamp(round(50 × (v + 1)), 0, 100)`, rounding halves up, and
+    `chance[1 − s] = 100 − chance[s]`. The other seat's is derived, never rounded on its own.
+  - **lead** (`easy`, `steady`, `sharp`; `v` in points for the seat to move, [0004 B4-11]): when
+    `|v| < WIN / 2` ([0004 B4-13]), `lead[s]` is `v` rounded to a whole point, halves away from
+    zero, and `decided` is `null`. When `|v| ≥ WIN / 2` the search has reached a finished game and
+    `v` is `±WIN` plus the margin it foresees: `decided` is the seat whose win it foresaw — `s`
+    when `v > 0`, `1 − s` when `v < 0` — and `lead[s]` is that margin, `v − WIN` or `v + WIN`,
+    rounded the same way. In both, `lead[1 − s] = −lead[s]`, and a zero is
+    `0`, never `-0`. `WIN` is `bot`'s constant; the state module may not import `bot` ([W6-31]),
+    so it holds a copy that a test pins to `bot`'s.
+  - A chance MUST NOT be converted into points, nor a lead into a chance.
+- **[W6-57]** `estimate` MUST change only on the publish that carries a computer's ply — the
+  `submit` of a reply's action ([W6-8]) — and MUST then describe that reply. Every other publish
+  MUST carry the estimate it found: a person's ply, the publish that marks `thinking`, a round
+  transition, the end of the game, and a failed reply ([W6-15]). Every deal MUST clear it, whatever
+  starts the deal ([W6-3], [W6-49], [W6-52]), and a stale reply ([W6-16]) MUST NOT set it. So:
+  null until the first computer move of a game; never set in a game of two people; and with two
+  computers, each move brings its mover's own estimate, in its own kind.
+
+  *A person's move leaves it standing because nothing has rated the position since — and rating it
+  would mean thinking on the person's turn, which intent 0012 rules out.*
+- **[W6-58]** While `estimate` is set, each board MUST show its own seat's side of it beside that
+  board's score, in the board's header, in these words:
+
+  | Kind | Seat's entry | Shown |
+  | --- | --- | --- |
+  | chance | `c` | `c% to win` |
+  | lead, not decided | `l > 0` / `l < 0` / `0` | `Ahead by l` / `Behind by −l` / `Even`, with `point` or `points` |
+  | lead, decided | the seat is `decided` / is not | `A win by l` / `A loss by −l`, with `point(s)`; `A win on the tie-break` / `A loss on the tie-break` when `l` is 0, which only the engine's tie-break on completed rows can decide ([0001 E1-39]) |
+
+  and, on both boards, an attribution saying whose estimate it is and when it was taken: `as
+  <name> saw it on its move`, where `<name>` is the estimator's level in the board's own words
+  (`gentle`, `steady`, `ruthless`, `expert`, `master`, as `LABELS` names them) — prefixed
+  `Player N's` when both seats are computers, so two `master`s are told apart. Nothing else of the
+  choice is shown ([W6-24]).
+
+  That sentence — the seat's side and the attribution — MUST be the estimate's text on every
+  board in every arrangement, for assistive technology ([W6-59]). What is **drawn** depends on the
+  room the arrangement gives the board ([0003 U3-95], [0003 U3-103]), in one of two forms, and a
+  board shown small draws neither:
+
+  | Board | Drawn |
+  | --- | --- |
+  | `wide` | The sentence itself, whole, on a line under the header's row. |
+  | docked (`side`, `stack`) | Two short lines in the row's free room beside the score: the **short value** over the estimator's **short name**. |
+  | shown small (`side`, `stack`) | Nothing. The sentence is the board's text, visually hidden, and takes no room in the row, whose name, pill and score are drawn exactly as they were before the estimate existed. |
+
+  The short value is `c%` for a chance; `+l pt`, `−l pt` or `even` for a lead; `win` or `loss`
+  for a decided one — `pt` because the header already shows the round's score change as a bare
+  signed number ([0003 U3-43]), and a lead must not be read as one. The short name is the level's
+  word (`ruthless`, `master`), or `P1 master` / `P2 master` when both seats are computers. The
+  compact form MUST be hidden from assistive technology, since the sentence is already there; and
+  neither drawn form MAY wrap, end in an ellipsis, or overflow its header, at 390 × 844 and
+  844 × 390 as at any other size.
+
+  *A small board's row is its player's name, and the name is worth more there than a number: the
+  docked board beside it carries the estimate for both seats, from its own side.*
+
+  *Whose and when, every time, because a chance beside a score is otherwise easy to read as a fact
+  about the position, or as a second score. The decided form is the tier's own reading of
+  [0004 B4-13]: `WIN` is a flag its search raises on reaching a finished game, and showing it as a
+  lead of a million points would be a number nobody reckoned.*
+- **[W6-59]** The estimate MUST be plain text inside its board's region, read with the board as
+  the score is: no `role="status"`, no `aria-live`, and no part of [0003 U3-56]'s announcement.
+  A board in the shown configuration ([0003 U3-91]) shows it the same way, and it MUST NOT be or
+  contain a control.
+- **[W6-60]** In a game with a computer seat, each `wide` and docked board MUST hold room for the
+  estimate from the deal on, so that its appearing, changing and clearing never changes the size
+  of the board ([0003 U3-99]'s discipline for the strip beneath it). A board shown small MUST hold
+  none: [W6-58] draws nothing there. In a game of two people no board holds that room, and nothing
+  of the estimate is rendered.
+- **[W6-61]** Showing the estimate MUST cost the game nothing: no request is issued for it, the
+  requests and replies are exactly [W6-14]'s, the same deal and seating produce the same requests
+  as before it existed, and nothing in `bot`, `ai-bot`, `alphazero-bot` or either worker changes
+  for it.
 
 ## Amendments to 0003
 
@@ -393,6 +513,8 @@ widened requirement is edited in place and a genuinely new one takes the next fr
 | [0003 U3-72] | Extend the throwing-stub list to permit the worker construction of [0003 U3-8] as widened, and nothing else. |
 | [0003 U3-73] | Extend the browser lane with [W6-30]: the real worker, in a real browser. |
 | [0003 U3-47] | Unchanged; [W6-3] and [W6-23] both route through it. |
+| [0003 U3-6] | *(For intent 0012.)* Extend the view model with `estimate` ([W6-55]). |
+| [0003 U3-30] | *(For intent 0012.)* Unchanged. A note says the estimate of [W6-55] is about a position after a computer's move and never about a move not yet made. |
 
 - **[W6-28]** These amendments MUST land in `spec/0003-web-interface.md` in the same change as the
   code that needs them. A spec that describes a client that no longer exists is worse than no spec.
@@ -407,6 +529,13 @@ widened requirement is edited in place and a genuinely new one takes the next fr
   uninterrupted task stays within [W6-27]'s budget.
 - **[W6-36]** The state module has been advanced only by `apply`, from one `newGame`, exactly as
   [0003 U3-65] requires — the opponent changes who calls `submit`, not what a ply is.
+- **[W6-62]** Whenever `estimate` is set: of kind `chance`, both entries are integers in
+  [0, 100] and `chance[0] + chance[1] === 100`; of kind `lead`, both are integers,
+  `lead[0] + lead[1] === 0`, and neither is `-0`.
+- **[W6-63]** `estimate` is null in every view model of a game in which no computer has yet moved
+  — every view model of a game of two people included.
+- **[W6-64]** Whenever `estimate` is set, `estimate.level === seating.players[estimate.by]`, and
+  the last ply submitted from a worker reply was `estimate.by`'s.
 
 ## Verification
 
@@ -565,11 +694,93 @@ seat, and a worker that a game without it never builds.*
   and each of [W6-52]'s three offers. Tests that dealt by pressing the new-game control, or by
   changing a seat selector, deal through the sheet instead.
 
+### The estimate
+
+*Added for intent 0012. The estimate is a new reader of `lastChoice` and of `publish`, and both
+of the bugs that shaped this document's turn loop ([0003 U3-42] lost to a second publish,
+[W6-42]'s crossed replies) were in an old seam that gained a reader. So the tests below are about
+the seam as much as the number: on which publish it changes, and on which it must not.*
+
+- **[W6-65]** The fast suite MUST assert, through the injected seam of [W6-18] answering with
+  chosen values and through the rendered boards:
+  - [W6-56]'s arithmetic on both kinds and from **both** seats — a computer on seat 0 and one on
+    seat 1, with a value whose two sides differ (not 0, not a chance of 50) — including the
+    rounding edges (`v = ±1`, a chance landing on a half, a lead of a half point, a lead rounding
+    to zero from below), and a decided lead each way;
+  - [W6-57] in the configuration it reads: the estimate is null at the deal and through the
+    computer's first `thinking` publish; set on exactly the publish that submits the reply; equal
+    on the person's following ply; equal across a round transition made by the person's ply and
+    across one made by the computer's, the transition itself still published ([0003 U3-42]); left
+    standing by a failed reply; not set by a stale one; cleared by every kind of deal;
+  - a game of two people, played through a round transition, in which `estimate` is null in every
+    published view model and no board renders any of it or holds room for it ([W6-60], [W6-63]);
+  - two computers with different kinds — a tier and `master` — where each ply's estimate is the
+    mover's, in the mover's kind, attributed with `Player N's` ([W6-58]);
+  - [W6-59], by finding the estimate inside each board's region by its text, outside every
+    `role="status"` and `aria-live` element, and absent from the announcement;
+  - [W6-61], by counting exactly one request per computer ply and none on a person's ply over a
+    whole game, and by checking each `ToWorker`'s key set against *Data model* — a tier's and a
+    `master`'s, `simulations` included;
+  - a failed reply from the **other** computer, of the other kind, leaving the standing estimate
+    as it was ([W6-57]) — from the same seat and level, a failure that wrote the estimator back
+    could not be told from one that left it alone;
+  - [W6-62] and [W6-64] over whole games in [W6-29]'s property test, at every published view;
+  - [W6-25], by a source check that no module under `src/components/` mentions `lastChoice`;
+  - that the state module's copy of `WIN` equals `bot`'s ([W6-56]).
+
+  [W6-60]'s size half MUST be asserted in the browser lane of [0003 U3-73]: a board's box
+  measured before the computer's first move and after it is the same. So MUST [W6-58]'s drawn
+  forms: at 390 × 844 and 844 × 390, with one computer and with two (then the small board is
+  thinking, its pill at its widest), the docked board draws the compact form, on one line per
+  part, inside its own box, inside the header, overlapping nothing drawn there and with no text
+  wider than its box — on the real estimate and on the widest text the form carries — and the
+  small board draws nothing of the estimate, holds no place in its row, and draws its player's
+  name.
+- **[W6-66]** Each test of [W6-65] that guards a **sign**, a **perspective** or the **standing**
+  rule MUST have been seen to fail, under the rules in `CLAUDE.md` (the anchor confirmed to match,
+  the mutation made in a scratch copy, the copy's suite run), and each mutation is recorded here
+  as [0007 S7-31] records them — the function and the edit, and the test that went red. At least:
+  the seat taken from the reply's time rather than the request's; `chance[s]` and `chance[1 − s]`
+  exchanged; the lead not negated for the other seat; `WIN` subtracted with the wrong sign; the
+  estimate recomputed or cleared on a person's ply; and the estimate cleared on a transition.
+
+  Re-run 2026-10-14 after [W6-58] settled on two drawn forms, against a copy of the worktree
+  under this agent's own scratch directory: each anchor asserted to match exactly once and the
+  mutation read back from the copy before the run; the fast lane runs `test/estimate.test.tsx`
+  and `test/opponent.test.tsx`, the browser lane `test/browser/opponent.test.ts`. Unmutated, the
+  copy is green in both (62 passed, 1 skipped; 11 passed, 1 skipped), and its `src` is identical
+  to the tree's afterwards. Test names are abbreviated to their identifiers and first words.
+
+  | Mutation (function: edit) | Test that went red |
+  | --- | --- |
+  | `game.ts` `nextView`: the estimator's seat read when the view is built (`state.currentPlayer`), not captured with the request | `estimate.test.tsx`: [W6-56] [W6-58] *takes the seat from the request*; [W6-57] [W6-63] [W6-58] *is set on the ply…*; [W6-57] [W6-61] [W6-62] [W6-64] *stands across round transitions…*; [W6-57] *stands through a failed reply*; [W6-57] *…from the other seat, of the other kind*; [W6-57] *is not set by a stale reply*; [W6-58] [W6-62] [W6-64] *with two computers…*; [W6-59] *is plain text…*. `opponent.test.tsx`: [W6-29] … *plays through against easy* and *against master* (10 red) |
+  | `game.ts` `estimateOf`: `chance[s]` and `chance[1 − s]` exchanged | [W6-55] [W6-56] *gives master and expert a chance…*; [W6-58] *says each kind in its own words*; [W6-57] [W6-63] [W6-58] *is set on the ply…*; [W6-59] *is plain text…* (4 red) |
+  | `game.ts` `estimateOf`: `lead[1 − s] = lead[s]`, the lead not negated | [W6-55] [W6-56] *gives a tier a lead…*; [W6-56] *reads a tier that reached the end…*; [W6-58] *says each kind…*; [W6-56] [W6-58] *takes the seat from the request*; [W6-57] [W6-61] [W6-62] [W6-64] *stands across round transitions…*; the stale-reply test and both failed-reply tests; [W6-58] [W6-62] [W6-64] *with two computers…* (9 red) |
+  | `game.ts` `estimateOf`: `margin = value + WIN`, `WIN` with the wrong sign | [W6-56] *reads a tier that reached the end…*; [W6-58] *says each kind…* (2 red) |
+  | `game.ts` `submit`: the estimate cleared on a person's ply (`estimator = null` when the mover is no computer) | [W6-57] [W6-63] [W6-58] *is set on the ply…, and stands on the person's next*; [W6-57] [W6-61] [W6-62] [W6-64] *stands across round transitions…*; [W6-57] *stands through a failed reply*; [W6-29] *plays through against easy* and *against master* (5 red) |
+  | `game.ts` `submit`: the estimate cleared on a round transition (`estimator = null` beside `lastScoring`) | [W6-57] [W6-61] [W6-62] [W6-64] *stands across round transitions…*; [W6-29] *plays through against easy* and *against master* (3 red) |
+  | `game.ts` `dispatch`: `estimator = asker` before the `ok` check, so a failed reply records its asker | [W6-57] *stands through a failed reply from the other seat, of the other kind* (1 red). The person-against-`easy` failed-reply test stays green under it, and could not do otherwise: its failed request is the same seat and level as the standing estimate, so the write is of an identical value. That is why the two-computer test exists |
+  | `game.ts` `dispatch`: `estimator = null` in the failure branch | both failed-reply tests (2 red) |
+  | `App.tsx` `board`: each board handed the other seat's side (`estimateWords(e, 1 − seat, …)`) | [W6-56] [W6-58] *takes the seat from the request*; [W6-57] [W6-63] [W6-58] *is set on the ply…*; [W6-59] *is plain text…* (3 red) |
+  | `game.ts` `estimateOf`: the kind read off the value (a tier's value in [-1, 1] taken for a chance) | [W6-55] [W6-56] *gives a tier a lead…*; [W6-56] *reads a tier that reached the end…*; [W6-58] *says each kind…* (3 red) |
+  | `App.tsx` `board`: room held in a game of two people too (`estimateRoom={true}`) | [W6-60] [W6-63] *shows nothing, and holds no room, in a game of two people* (1 red) |
+  | `Estimate.tsx` `estimateWords`: a lead's short value without its unit (`+1`, not `+1 pt`) — the docked board's short value | [W6-58] *says each kind in its own words* (1 red) |
+  | `PlayerBoard.tsx`: room held only once an estimate is set (`when={props.estimateRoom && props.estimate}`), browser lane | [W6-60] *keeps every board the same size…* at 1280 px (1 red). At 390 × 844 it stays green: there the docked form sits within the row's own height, and a small board holds no room to lose |
+  | `styles.css`: both small-board rules removed, so a small board draws the compact form as a docked one does, browser lane | [W6-58] [W6-60] *draws the docked form whole, and nothing on a small board…*, all four cases (4 red) |
+  | `styles.css`: the small board's estimate left in the row's flow, unclipped (its rule emptied), browser lane | the same, all four cases (4 red). Its box is empty there — the sentence is clipped by its own rule and the compact form not displayed — so what it takes is a gap's worth of the row; the test asks that it be out of the flow, which is what holding no room means for a flex row |
+
+  Two mutations [W6-66] names have no observable form, and are recorded as such rather than
+  claimed. Taking the seat when the **reply arrives**, in `dispatch` before `submit`, gives the
+  same seat as the request — `state.currentPlayer` has not moved yet — so it is an equivalent
+  mutant; the first row takes it at the next point it differs, when the view is built. And
+  dropping the deal's `estimator = null` changes nothing, because the deal also clears
+  `lastChoice` and the estimate needs both.
+
 ### Traceability exemptions
 
 | Requirement | Why it is not testable |
 | --- | --- |
-| [W6-24], [W6-25] | The absence of any commentary anywhere, unbounded as stated — 0003 exempts [U3-30] for the same reason, and [W6-31]'s source check covers the decidable part. |
+| [W6-24] | The absence of any commentary anywhere, unbounded as stated — 0003 exempts [U3-30] for the same reason. [W6-31]'s source check and [W6-25]'s cover the decidable part, and [W6-58]'s tests pin the one permitted rendering. |
 | [W6-27] | A budget, non-gating for the reason [0003 U3-67] is. |
 | [W6-28] | A process promise about what lands in which commit. |
 
@@ -592,6 +803,7 @@ seat, and a worker that a game without it never builds.*
 ## References
 
 - Intent [0003 — Computer opponent](../intent/0003-computer-opponent.md)
+- Intent [0012 — How the opponent sees it](../intent/0012-how-the-opponent-sees-it.md) — the estimate, [W6-55] onward
 - Spec [0001 — Engine core](0001-engine-core.md)
 - Spec [0003 — Web interface](0003-web-interface.md) — amended here
 - Spec [0004 — Computer opponent](0004-computer-opponent.md)

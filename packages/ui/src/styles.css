@@ -773,11 +773,6 @@ input {
   pointer-events: none;
 }
 
-/* Just under the ring where the table is round, in place of the key hints. */
-.app[data-layout='wide'] .table-note {
-  top: 24.3rem;
-}
-
 .table.paused .keys {
   visibility: hidden;
 }
@@ -831,6 +826,252 @@ input {
   left: 50%;
   top: 50%;
   transform: translate(-50%, -46%);
+}
+
+/* ------------------------------------------------------------------ */
+/* The table on a wide screen [U3-105] through [U3-109]               */
+/* ------------------------------------------------------------------ */
+
+/*
+ * What `side` and `stack` draw is untouched here — the upright tablet's ring
+ * among them keeps one tile and a count [U3-97], and the bag stays in the top
+ * bar [U3-96]. The arrangement rules are scoped to `data-layout='wide'`; the
+ * rest reach only markup that exists in `wide` alone: `.pick.loose` (and its
+ * `data-span`, emitted for factory plates only) and `.supply-panel`, which
+ * `Displays` and `App` render only there.
+ *
+ * Order matters once: the wide ring's plate and centre placements override the
+ * `data-table='ring'` ones above at equal specificity, by coming after them.
+ * Move this block above those rules and the round ring wins.
+ *
+ * The ring is reshaped for the loose centre, not for the bag [U3-95]: three
+ * plates in an arc above the centre and two in an arc below, all one size, and
+ * between the arcs a band the ring's full width, tall enough for the largest
+ * centre a round can make — fifteen tiles and the marker, in four rows of
+ * controls at the narrowest `wide` table [U3-106]. The plates are placed for
+ * that band and never for what the centre holds, so none moves as it fills
+ * [U3-81].
+ */
+.app[data-layout='wide'] {
+  --ring-w: min(27.5rem, 100cqw);
+  --plate: 7.25rem;
+  --arc-drop: 2.2rem;
+  --ring-gap: 0.5rem;
+  /* The label, four rows of 44px controls and their gaps, and the padding. */
+  --pool-h: calc(1.5rem + 4 * 44px + 3 * 4px + 0.5rem);
+  --pool-top: calc(var(--arc-drop) + var(--plate) + var(--ring-gap));
+  --ring-h: calc(var(--pool-top) + var(--pool-h) + var(--ring-gap) + var(--plate));
+}
+
+/* The ring above, and under it the key hints and the bag side by side. */
+.app[data-layout='wide'] .table {
+  display: grid;
+  /* Two halves of the column, fixed by its width and not by what is in them:
+     the hints end and the bag starts on the centre line, and the note that
+     takes the hints' place while a computer chooses cannot widen its half and
+     slide the bag along. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-areas:
+    'ring ring'
+    'keys bag';
+  justify-content: center;
+  align-content: start;
+  column-gap: 2.5rem;
+  row-gap: 0.9rem;
+}
+
+.app[data-layout='wide'] .displays {
+  grid-area: ring;
+  justify-self: center;
+  width: var(--ring-w);
+  height: var(--ring-h);
+}
+
+.app[data-layout='wide'] [data-group='factories'] .display {
+  width: var(--plate);
+  height: var(--plate);
+}
+
+.app[data-layout='wide'] [data-group='factories'] .display:nth-child(1) {
+  left: calc((var(--ring-w) - var(--plate)) / 2);
+  top: 0;
+}
+
+.app[data-layout='wide'] [data-group='factories'] .display:nth-child(2) {
+  left: calc(var(--ring-w) - var(--plate) - 0.25rem);
+  top: var(--arc-drop);
+}
+
+.app[data-layout='wide'] [data-group='factories'] .display:nth-child(3) {
+  left: calc(var(--ring-w) - var(--plate) - 4.4rem);
+  top: calc(var(--pool-top) + var(--pool-h) + var(--ring-gap));
+}
+
+.app[data-layout='wide'] [data-group='factories'] .display:nth-child(4) {
+  left: 4.4rem;
+  top: calc(var(--pool-top) + var(--pool-h) + var(--ring-gap));
+}
+
+.app[data-layout='wide'] [data-group='factories'] .display:nth-child(5) {
+  left: 0.25rem;
+  top: var(--arc-drop);
+}
+
+/* The centre's band: the pool sits in its middle, as large as what it holds. */
+.app[data-layout='wide'] .centre {
+  left: 0;
+  top: var(--pool-top);
+  width: var(--ring-w);
+  height: var(--pool-h);
+  transform: none;
+  display: grid;
+  place-items: center;
+}
+
+/* The pool is as large as what it holds, up to the band, and wraps inside it. */
+.app[data-layout='wide'] .centre > .roving-group {
+  max-width: 100%;
+}
+
+.app[data-layout='wide'] .centre .display {
+  /* Flex, not the plates' grid: a grid track is as wide as its content's
+     longest line, and a large group would push the pool past the ring rather
+     than wrap inside it. */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  max-width: 100%;
+  min-width: 13rem;
+  min-height: calc(44px + 2.2rem);
+  padding: 1.5rem 0.75rem 0.5rem;
+}
+
+.app[data-layout='wide'] .centre .display-tiles {
+  max-width: none;
+  gap: 4px 0.6rem;
+}
+
+/*
+ * A loose control: its tiles side by side inside it, close together, and a
+ * wider gap to the next group, so a colour reads as one handful [U3-106].
+ * Never under 44 × 44 [U3-59]; a group wider than its row wraps within its
+ * own control.
+ */
+.pick.loose {
+  width: auto;
+  height: auto;
+  min-width: 44px;
+  min-height: 44px;
+  max-width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: center;
+  justify-content: center;
+  gap: 4px var(--tile-gap);
+}
+
+.pick.loose .tile {
+  --tile: 2rem;
+}
+
+/*
+ * A factory plate holds two columns of cells, two rows high: a lone tile takes
+ * a cell, a group of two or three a row, four the whole plate. Packed densely,
+ * so two lone tiles share a row whichever side of a pair they come in colour
+ * order — the order the controls are in, and the keys move in, is unchanged
+ * [U3-108].
+ */
+.app[data-layout='wide'] [data-group='factories'] .display-tiles {
+  grid-template-columns: repeat(2, 3.2rem);
+  grid-auto-rows: 44px;
+  grid-auto-flow: row dense;
+  gap: 4px;
+}
+
+[data-group='factories'] .pick.loose[data-span='row'] {
+  grid-column: 1 / -1;
+}
+
+[data-group='factories'] .pick.loose[data-span='plate'] {
+  grid-column: 1 / -1;
+  grid-row: span 2;
+  display: grid;
+  grid-template-columns: repeat(2, var(--tile));
+  place-content: center;
+}
+
+/* The plate's number moves to its corner, out of the rows of tiles. */
+.app[data-layout='wide'] [data-group='factories'] .display-name {
+  top: 0.55rem;
+  left: 0.7rem;
+  transform: none;
+}
+
+/* The group in hand: every tile of it lifts, not only the one pressed [U3-107]. */
+.pick.loose.selected .tile {
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 0 0 4px var(--ink),
+    0 8px 12px rgba(0, 0, 0, 0.24);
+}
+
+/* The bag and the lid, in view beside the key hints [U3-105]. */
+.app[data-layout='wide'] .keys {
+  grid-area: keys;
+  flex-direction: column;
+  align-items: flex-start;
+  align-self: center;
+  /* The pair meets in the middle, under the centre: the ring spans both
+     columns and widens them. */
+  justify-self: end;
+  gap: 0.45rem;
+}
+
+.app[data-layout='wide'] .supply-panel {
+  grid-area: bag;
+  justify-self: start;
+}
+
+.supply-panel .supply {
+  position: static;
+  width: auto;
+  max-width: none;
+  padding: 0.35rem 0.6rem;
+  border-radius: 1.2rem;
+  background: var(--surface);
+  box-shadow: 0 2px 0 var(--rule);
+  font-size: 0.8rem;
+}
+
+.supply-panel .supply th,
+.supply-panel .supply td {
+  padding: 0.12rem 0.5rem;
+}
+
+.supply-panel .supply td {
+  min-width: 2.4rem;
+}
+
+.supply-panel .supply .tile {
+  --tile: 1.3rem;
+}
+
+/*
+ * While a computer chooses, the note takes the key hints' place — inside their
+ * column, wrapping to its width, so nothing beside it moves [U3-105].
+ */
+.app[data-layout='wide'] .table-note {
+  grid-area: keys;
+  position: static;
+  align-self: center;
+  justify-self: end;
+  translate: none;
+  max-width: 100%;
+  height: auto;
+  padding: 0.45rem 0.8rem;
+  white-space: normal;
+  text-wrap: balance;
+  line-height: 1.25;
 }
 
 /*
@@ -2487,4 +2728,115 @@ input {
   border: 2px solid var(--ink);
   background: var(--surface);
   padding: 0 0.6rem;
+}
+
+/* ===================================================================== */
+/* The estimate [0006 W6-58]..[0006 W6-60] — intent 0012.                */
+/* Two drawn forms of one line, chosen here; the full sentence is always */
+/* the line's text for a screen reader, the compact form is aria-hidden. */
+/*   wide   — the full sentence, on a line of its own under the row,     */
+/*            where the board has height to spare.                       */
+/*   docked — the short value over the estimator's name, two short lines */
+/*            in the row's own height, in the free room beside the score.*/
+/*   small  — nothing drawn, no room taken: the sentence is read only.   */
+/* Present from the deal on in a game with a computer seat and the same  */
+/* box filled or empty, so a board never moves when an estimate lands    */
+/* [W6-60]. Nothing here wraps or ends in an ellipsis.                   */
+/* ===================================================================== */
+
+.estimate {
+  flex: 0 0 auto;
+  margin-left: auto;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.estimate + .score {
+  margin-left: 0;
+}
+
+/* Out of sight, still read: the clip used for every visually hidden text. */
+.estimate-full {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.estimate-compact {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  height: 2.2rem;
+  font-size: 0.72rem;
+  line-height: 1.05rem;
+}
+
+.estimate-short {
+  font-weight: 700;
+}
+
+.estimate-name {
+  color: var(--dim);
+}
+
+/* Wide: the full sentence under the row; the compact form is not drawn. */
+.app[data-layout='wide'] .player-header:has(.estimate) {
+  position: relative;
+  margin-bottom: 1.3rem;
+}
+
+.app[data-layout='wide'] .estimate {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: 1.3rem;
+  font-size: 0.72rem;
+  line-height: 1.3rem;
+}
+
+.app[data-layout='wide'] .estimate-full {
+  position: static;
+  width: auto;
+  height: auto;
+  clip-path: none;
+}
+
+.app[data-layout='wide'] .estimate-value {
+  font-weight: 700;
+}
+
+.app[data-layout='wide'] .estimate-by {
+  color: var(--dim);
+}
+
+.app[data-layout='wide'] .estimate-compact {
+  display: none;
+}
+
+.app[data-layout='wide'] .estimate + .score {
+  margin-left: auto;
+}
+
+/* Small: nothing drawn and no room taken — the row is the name's, as it
+   was. The sentence stays the board's text for a screen reader, out of the
+   flow, and the score keeps the margin its arrangement gives it. */
+.player-board.mini .estimate {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.player-board.mini .estimate-compact {
+  display: none;
+}
+
+.player-board.mini .estimate + .score {
+  margin-left: auto;
 }

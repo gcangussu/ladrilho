@@ -123,10 +123,10 @@ Required fields: `title`, `author`, `date`, `status`, `intent`, `prefix`, `summa
 | --- | --- | --- | --- |
 | [0001 — Engine core](0001-engine-core.md) | implemented | 0001 — Rules engine | State, action encoding, rules, scoring, determinism, observation vector |
 | [0002 — Engine conformance vectors](0002-engine-conformance-vectors.md) | implemented | 0001 — Rules engine | How the engine is proven correct against the reference implementation |
-| [0003 — Web interface](0003-web-interface.md) | implemented | 0002, 0005 | The hot-seat client: turn interaction, board presentation and layout, the engine seam, accessibility |
+| [0003 — Web interface](0003-web-interface.md) | implemented | 0002, 0005, 0011, 0013 | The hot-seat client: turn interaction, board presentation and layout, the engine seam, accessibility |
 | [0004 — Computer opponent](0004-computer-opponent.md) | implemented | 0003 — Computer opponent | The player: the information barrier, evaluation, search, difficulty tiers, determinism |
 | [0005 — Opponent strength](0005-opponent-strength.md) | implemented | 0003 — Computer opponent | How we know it plays well: the arena, the reference opponents, the ladder, the blunder audit |
-| [0006 — Opponent in the interface](0006-opponent-in-the-interface.md) | implemented | 0003, 0010 | Where it runs and what you see: seating, the worker, the thinking state; amends 0003 |
+| [0006 — Opponent in the interface](0006-opponent-in-the-interface.md) | implemented | 0003, 0010, 0012 | Where it runs and what you see: seating, the worker, the thinking state, the estimate shown after it moves; amends 0003 |
 | [0007 — Scoring explained](0007-scoring-explained.md) | implemented | 0004 — Scoring explained | How the engine reports the way it scored a round: the second entry point, the record, the invariants; amends 0001 and 0003 |
 | [0008 — Expert opponent](0008-expert-opponent.md) | implemented | 0006 — A learned opponent | The fourth difficulty: a port of a published trained player — encoding, network, search, per-game session — its parity fixtures and its gate; amends 0001, 0003, 0005 and 0006 |
 | [0009 — Engine in Rust](0009-engine-in-rust.md) | implemented | 0007 — Rules engine in Rust | A second, synchronous implementation in Rust: which requirements of 0001, 0002 and 0007 it adopts and how each reads, its own randomness, the vectors replayed in place, the allocation and throughput gates |

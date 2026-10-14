@@ -31,9 +31,11 @@ import {
   workerThinker,
   type Choice,
   type ExpertChoice,
+  type Level,
   type MasterChoice,
   type Seating,
   type Thinker,
+  type Tier,
   type ToWorker,
 } from './opponent.js';
 
@@ -47,6 +49,69 @@ export interface Transition {
 
 /** A search is in flight for this seat [W6-19]. */
 export type Thinking = { seat: Player } | null;
+
+/**
+ * What the last computer to move reckoned, from each seat's side [W6-55]:
+ * `chance[p]` and `lead[p]` are seat `p`'s, so a board reads its own entry and
+ * negates nothing. `by` is the seat whose search produced it, and `level` the
+ * level that seat held when it was asked.
+ *
+ * Two kinds, decided by the level and never converted into each other
+ * [W6-56]: a chance of winning for the two that think in one, a lead in points
+ * for `bot`'s tiers, which think in points. `decided` is the seat whose win a
+ * tier's search foresaw, when it reached the end of the game [0004 B4-13].
+ */
+export type Estimate =
+  | { kind: 'chance'; by: Player; level: 'expert' | 'master'; chance: [number, number] }
+  | { kind: 'lead'; by: Player; level: Tier; lead: [number, number]; decided: Player | null };
+
+/**
+ * `bot`'s `WIN` [0004 B4-13], copied: the state module may not import `bot`
+ * [W6-31]. `test/estimate.test.tsx` pins it to `bot`'s own [W6-56].
+ */
+export const WIN = 1_000_000;
+
+/** A whole number, halves away from zero, and never `-0` [W6-56], [W6-62]. */
+function wholePoints(points: number): number {
+  const rounded = Math.sign(points) * Math.round(Math.abs(points));
+  return rounded === 0 ? 0 : rounded;
+}
+
+/**
+ * Read a search's value as its own kind of estimate [W6-56].
+ *
+ * `value` is from `seat`'s side, the seat that was to move when the request
+ * was made, and `level` is what that seat held then — both captured with the
+ * request, never re-derived from whatever is current when this runs.
+ */
+export function estimateOf(value: number, seat: Player, level: Level): Estimate {
+  const other = (1 - seat) as Player;
+  if (level === 'expert' || level === 'master') {
+    // A draw is worth 0 to the search, so it counts as half here. The other
+    // seat's share is derived, never rounded on its own, so the two make 100.
+    const mine = Math.min(100, Math.max(0, Math.round(50 * (value + 1))));
+    const chance: [number, number] = [0, 0];
+    chance[seat] = mine;
+    chance[other] = 100 - mine;
+    return { kind: 'chance', by: seat, level, chance };
+  }
+  // A tier that reached the end of the game reports ±WIN plus the margin it
+  // foresees [0004 B4-13]: a flag and a margin, not a lead of a million.
+  let decided: Player | null = null;
+  let margin = value;
+  if (value >= WIN / 2) {
+    decided = seat;
+    margin = value - WIN;
+  } else if (value <= -WIN / 2) {
+    decided = other;
+    margin = value + WIN;
+  }
+  const mine = wholePoints(margin);
+  const lead: [number, number] = [0, 0];
+  lead[seat] = mine;
+  lead[other] = mine === 0 ? 0 : -mine;
+  return { kind: 'lead', by: seat, level, lead, decided };
+}
 
 /** Everything a component may read that derives from the game state [U3-6]. */
 export interface ViewModel {
@@ -70,6 +135,12 @@ export interface ViewModel {
    * [0003 U3-30] already rules out judging one before it is made.
    */
   lastChoice: Choice | ExpertChoice | MasterChoice | null;
+  /**
+   * The last computer move's estimate, or `null` before one this game
+   * [W6-55]. The only rendering `lastChoice` has [W6-25]; it changes on the
+   * publish that submits a reply and on no other [W6-57].
+   */
+  estimate: Estimate | null;
   /**
    * How the engine scored the most recent round [U3-82], or `null` before the
    * first one has scored.
@@ -117,11 +188,16 @@ let generation = 0;
 let thinking: Thinking = null;
 
 /**
- * The last choice, for [W6-25] only. Never rendered [W6-24] — which now
- * covers `ExpertChoice.value` and `MasterChoice.value` as well, numbers in
- * [-1, 1] rather than points.
+ * The last choice [W6-25]. Rendered only as the estimate [W6-24], [W6-55].
  */
 let lastChoice: Choice | ExpertChoice | MasterChoice | null = null;
+
+/**
+ * The seat whose request produced `lastChoice`, and the level it held when it
+ * was asked [W6-56]. Set beside `lastChoice` and nowhere else, so the estimate
+ * moves on exactly the ply the reply is submitted on [W6-57].
+ */
+let estimator: { seat: Player; level: Level } | null = null;
 
 /**
  * The most recent `RoundScoring`, or `null` [U3-82]. Replaced only by a later
@@ -266,6 +342,10 @@ function nextView(): ViewModel {
     seating,
     thinking,
     lastChoice,
+    estimate:
+      lastChoice !== null && estimator !== null
+        ? estimateOf(lastChoice.value, estimator.seat, estimator.level)
+        : null,
     scoring: lastScoring,
     lastMoves,
   };
@@ -289,6 +369,7 @@ function deal(seed: number): ViewModel {
   generation++;
   thinking = null;
   lastChoice = null;
+  estimator = null;
   // [U3-83]. Without this a new game shows the previous game's workings until
   // its first round scores, which the sticky lifetime of [U3-82] makes minutes
   // rather than a frame — and which no single-game test can see.
@@ -381,6 +462,10 @@ function pendingRequest(): ToWorker | null {
  * The search itself never runs here [W6-10]; this only asks.
  */
 function dispatch(request: ToWorker): void {
+  // Who is asking, and as what, taken now [W6-56]: the request is the record
+  // of it, and by the time the reply lands the current player is someone else
+  // once the move is submitted.
+  const asker = { seat: request.position.currentPlayer as Player, level: request.tier };
   void seam()
     .think(request)
     .then((reply) => {
@@ -396,6 +481,7 @@ function dispatch(request: ToWorker): void {
         throw new Error(`the opponent failed to choose a move: ${reply.message}`);
       }
       lastChoice = reply.choice;
+      estimator = asker;
       // A curtailed search still played a legal move [W6-17]; it is a shortened
       // search, not an error.
       submit(reply.choice.action);

@@ -3,6 +3,7 @@ import type { AzulJSONPlayer, Placement } from 'engine';
 import { CENTER, FLOOR, NUM_COLORS, NUM_ROWS, decodeAction } from 'engine';
 import { Repeat, Show } from 'solid-js';
 import { Destinations } from './Destinations.jsx';
+import { EstimateLine, type EstimateWords } from './Estimate.jsx';
 import { type Pick, factoryName } from './Displays.jsx';
 import { FloorLine } from './FloorLine.jsx';
 import { PatternLines } from './PatternLines.jsx';
@@ -161,6 +162,13 @@ export function PlayerBoard(props: {
   placements?: readonly Placement[] | null;
   /** How the arrangement shows this board, where it shows one small [U3-103]. */
   role?: 'dock' | 'mini' | null;
+  /**
+   * The game has a computer seat, so the header holds room for the estimate
+   * from the deal on [W6-60]. A game of two people renders none of it.
+   */
+  estimateRoom?: boolean;
+  /** This seat's side of the last computer move's estimate, in words [W6-58]. */
+  estimate?: EstimateWords | null;
 }): JSX.Element {
   return (
     <section
@@ -197,6 +205,9 @@ export function PlayerBoard(props: {
             </span>
           </Show>
         </p>
+        <Show when={props.estimateRoom}>
+          <EstimateLine words={props.estimate ?? null} />
+        </Show>
         <p class="score">
           <span class="score-label">Score</span> <span class="score-num">{props.player.score}</span>
           <Show when={props.scoreDelta !== null}>
