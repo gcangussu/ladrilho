@@ -17,6 +17,28 @@ export interface EstimateWords {
   name: string;
 }
 
+/**
+ * A signed whole number: `+7`, `−3` with U+2212, `0`. One form for every
+ * signed number a component writes — a round's score change [0003 U3-43], a
+ * bonus total in the record, a lead axis's labels.
+ */
+export function signed(n: number): string {
+  return n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0';
+}
+
+/**
+ * Whose estimate, by [W6-58]'s rule: the level's word, prefixed `Player N’s`
+ * when both seats are computers, so two `master`s are told apart.
+ */
+export function estimatorName(
+  by: Player,
+  level: Level,
+  players: readonly [Level | null, Level | null],
+): string {
+  const both = players[0] !== null && players[1] !== null;
+  return both ? `Player ${by + 1}’s ${levelName(level)}` : levelName(level);
+}
+
 function points(n: number): string {
   return n === 1 ? '1 point' : `${n} points`;
 }
@@ -55,7 +77,7 @@ export function estimateWords(
   const level = levelName(estimate.level);
   return {
     value,
-    by: `as ${both ? `Player ${estimate.by + 1}’s ${level}` : level} saw it on its move`,
+    by: `as ${estimatorName(estimate.by, estimate.level, players)} saw it on its move`,
     short,
     name: both ? `P${estimate.by + 1} ${level}` : level,
   };

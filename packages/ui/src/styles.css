@@ -2730,6 +2730,87 @@ input {
   padding: 0 0.6rem;
 }
 
+/* ------------------------------------------------------------------ */
+/* The game's record [0006 W6-70]..[0006 W6-79] — intent 0014          */
+/* A sheet like the new-game one, as wide as the screen allows; the     */
+/* table scrolls inside it both ways and never moves the document.      */
+/* ------------------------------------------------------------------ */
+
+/* The control: its word where the top bar has room, a list where it has not —
+   the word, made .sr-only there, is still its name. */
+.record-icon {
+  display: none;
+}
+
+.app:not([data-layout='wide']) .record-icon {
+  display: inline-grid;
+  gap: 3px;
+  width: 1.1rem;
+}
+
+.record-icon i {
+  display: block;
+  height: 2px;
+  border-radius: 1px;
+  background: currentColor;
+}
+
+.sheet.record {
+  width: min(100%, 60rem);
+  overflow: hidden;
+}
+
+/* The heading row is outside the scroller, so Close never scrolls away. */
+.record-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.record-empty {
+  color: var(--dim);
+}
+
+.record-log {
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.record-log caption {
+  text-align: left;
+  font-weight: 700;
+  padding-bottom: 0.4rem;
+}
+
+.record-log th,
+.record-log td {
+  padding: 0.3rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--rule);
+}
+
+.record-log thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  color: var(--dim);
+  font-weight: 700;
+}
+
+.record-log tbody th {
+  font-weight: 700;
+  text-align: right;
+}
+
+.record-round td {
+  background: var(--sunk);
+  font-weight: 700;
+}
+
 /* ===================================================================== */
 /* The estimate [0006 W6-58]..[0006 W6-60] — intent 0012.                */
 /* Two drawn forms of one line, chosen here; the full sentence is always */
@@ -2839,4 +2920,86 @@ input {
 
 .player-board.mini .estimate + .score {
   margin-left: auto;
+}
+
+/*
+ * The estimate graph [W6-85] through [W6-94]. Neutral ink only: no accent,
+ * which means "you can act here", and no tile's colour. The two series are
+ * told apart by line, marker and label as well as by shade [W6-89]. Drawn at
+ * its own size and never scaled down; a narrower dialog scrolls [W6-94].
+ */
+.estimate-graphs {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.estimate-graph {
+  margin: 0;
+}
+
+.estimate-graph-svg {
+  display: block;
+  width: 40rem;
+  height: 16rem;
+  max-width: none;
+  flex: none;
+}
+
+.estimate-graph-svg text {
+  fill: var(--dim);
+  font-family: var(--font-body);
+}
+
+.estimate-graph-svg .graph-title,
+.estimate-graph-svg .graph-end-label {
+  fill: var(--text);
+  font-weight: 600;
+}
+
+.graph-grid,
+.graph-axis-tick {
+  stroke: var(--rule);
+  stroke-width: 1;
+}
+
+.graph-reference {
+  stroke: var(--faint);
+  stroke-width: 1;
+}
+
+.graph-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.graph-series-0 .graph-line {
+  stroke: var(--ink);
+}
+
+.graph-series-1 .graph-line {
+  stroke: var(--dim);
+}
+
+.graph-marker-0 {
+  fill: var(--ink);
+}
+
+.graph-marker-1 {
+  fill: var(--surface);
+  stroke: var(--dim);
+  stroke-width: 1.5;
+}
+
+.estimate-graph-caption,
+.estimate-graph-empty {
+  margin: 0.25rem 0 0;
+  color: var(--dim);
+  font-size: 0.875rem;
+}
+
+/* Above the drawing, so it is read before the lines it qualifies [W6-90]. */
+.estimate-graph-caption {
+  margin: 0 0 0.25rem;
 }

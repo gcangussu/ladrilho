@@ -32,6 +32,7 @@ import { createMasterSeat } from '../src/masters.js';
 import { simulationsLabel } from '../src/components/Seating.jsx';
 import { choiceNames, choices, commit, deal, editSeat, openSheet } from './sheet-helpers.js';
 import { holdsInvariants } from './estimate-helpers.js';
+import { holdsRecordInvariants } from './record-helpers.js';
 import {
   EXPERT_AVAILABLE,
   LEVELS,
@@ -772,7 +773,7 @@ describe('a whole game with a computer opponent [W6-29]', () => {
   // unexercised through the rendered interface.
   // And once with the master [W6-43], whose requests carry a setting [W6-44].
   it.for(['easy', 'expert', 'master'] as const)(
-    '[W6-29] [W6-32] [W6-34] [W6-41] [W6-62] [W6-64] plays through against %s, one request at a time',
+    '[W6-29] [W6-32] [W6-34] [W6-41] [W6-62] [W6-64] [W6-82] plays through against %s, one request at a time',
     { timeout: 60_000 },
     async (level, { skip }) => {
       // `expert` is only a seating the URL accepts while the committed gate
@@ -807,6 +808,8 @@ describe('a whole game with a computer opponent [W6-29]', () => {
       if (answered === 0) expect(estimate).toBeNull();
       else expect(estimate).toMatchObject({ by: 1, level });
       holdsInvariants(state.view());
+      // [W6-82]: the record, a record per ply, agreeing with the rest of the view.
+      holdsRecordInvariants(state, state.view(), plies);
 
       if (state.view().thinking !== null) {
         // [W6-32]: never more than one request outstanding.
@@ -827,6 +830,7 @@ describe('a whole game with a computer opponent [W6-29]', () => {
     }
 
     expect(state.view().game.isTerminal).toBe(true);
+    holdsRecordInvariants(state, state.view(), plies);
     expect(answered).toBeGreaterThan(10);
     // The requests really did name the level under test.
     expect(harness.pending[0].tier).toBe(level);

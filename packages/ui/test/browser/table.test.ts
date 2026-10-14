@@ -394,3 +394,89 @@ describe('the docked board and the curtain [U3-103]', () => {
     expect(small).toEqual([]);
   });
 });
+
+/**
+ * [W6-73]: the record's control sits in the top bar at every size, and a
+ * closed record changes nothing else — the page still does not scroll. Open,
+ * it fits the screen and scrolls within itself, and the page beneath still
+ * does not ([W6-71]).
+ */
+describe("the record's control at a real size [W6-73]", () => {
+  it.each([
+    { width: 1280, height: 800, layout: 'wide' },
+    { width: 844, height: 390, layout: 'side' },
+    { width: 390, height: 844, layout: 'stack' },
+  ])('[W6-73] [W6-71] keeps the page still with the Record control in the top bar, at $width × $height',
+    async ({ width, height: tall, layout }) => {
+      const doc = await load(width, tall, '?seed=909&seating=human-easy');
+      await settleOn(doc, layout);
+      const root = doc.documentElement;
+      const buttons = [...doc.querySelectorAll<HTMLButtonElement>('.topbar button')];
+      const record = buttons.find((b) => b.textContent?.trim() === 'Record');
+      const newGame = buttons.find((b) => b.textContent?.trim() === 'New game');
+      expect(record, 'no Record control in the top bar').toBeDefined();
+      // Beside New game, on its line, and a finger's target [U3-59].
+      const r = record!.getBoundingClientRect();
+      const n = newGame!.getBoundingClientRect();
+      expect(Math.round(r.top)).toBe(Math.round(n.top));
+      expect(r.height).toBeGreaterThanOrEqual(44);
+      expect(r.width).toBeGreaterThanOrEqual(44);
+      expect(r.left).toBeGreaterThanOrEqual(0);
+      expect(n.right).toBeLessThanOrEqual(width);
+      expect(record!.scrollWidth, 'the text overflows the control').toBeLessThanOrEqual(record!.clientWidth);
+      expect(root.scrollHeight, 'scrolls vertically with the record closed').toBeLessThanOrEqual(root.clientHeight);
+      expect(root.scrollWidth, 'scrolls sideways with the record closed').toBeLessThanOrEqual(root.clientWidth);
+
+      // After the computer has moved, open: inside the screen, the page still.
+      await playAPly(doc);
+      const deadline = Date.now() + 10_000;
+      while (doc.querySelector('.thinking') && Date.now() < deadline) await tick(50);
+      record!.click();
+      await tick(80);
+      const dialog = doc.querySelector<HTMLElement>('[role="dialog"][aria-labelledby="record-title"]');
+      expect(dialog, 'the record did not open').not.toBeNull();
+      // The log, by its caption: the graph's data table sits beside it [W6-79].
+      const log = [...dialog!.querySelectorAll('table')].find(
+        (t) => t.caption?.textContent === 'Every move of this game',
+      );
+      expect(log, 'no log in the record').toBeDefined();
+      expect(log!.querySelectorAll('tbody tr').length).toBeGreaterThanOrEqual(2);
+      const box = dialog!.getBoundingClientRect();
+      expect(box.top).toBeGreaterThanOrEqual(0);
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.bottom).toBeLessThanOrEqual(tall);
+      expect(box.right).toBeLessThanOrEqual(width);
+      expect(root.scrollHeight, 'the open record scrolls the page').toBeLessThanOrEqual(root.clientHeight);
+      expect(root.scrollWidth, 'the open record scrolls the page sideways').toBeLessThanOrEqual(root.clientWidth);
+
+      // [W6-71]: scrolled right and down, Close is still on screen and on top.
+      // Whatever in the dialog scrolls, scrolled to its far corner — the
+      // dialog itself included, so a heading inside the scroller is caught.
+      const scrollers = [dialog!, ...dialog!.querySelectorAll<HTMLElement>('*')].filter(
+        (el) => el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight,
+      );
+      for (const el of scrollers) {
+        el.scrollLeft = el.scrollWidth;
+        el.scrollTop = el.scrollHeight;
+      }
+      await tick(50);
+      if (width === 390) {
+        expect(scrollers.some((el) => el.scrollLeft > 0), 'nothing scrolled right on a phone').toBe(true);
+        // The content scrolls sideways rather than shrinking: the graph is
+        // drawn at its full 640 px ([W6-94]), and the dialog's scroller is
+        // narrower than what it holds.
+        const body = dialog!.querySelector<HTMLElement>('.record-body')!;
+        expect(body.scrollWidth, 'the record does not scroll sideways').toBeGreaterThan(body.clientWidth);
+        const svg = dialog!.querySelector('svg');
+        expect(svg, 'no graph drawn, though the computer has an estimate').not.toBeNull();
+        expect(Math.round(svg!.getBoundingClientRect().width)).toBe(640);
+      }
+      const close = [...dialog!.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.trim() === 'Close')!;
+      const c = close.getBoundingClientRect();
+      expect(c.left).toBeGreaterThanOrEqual(0);
+      expect(c.top).toBeGreaterThanOrEqual(0);
+      expect(c.right).toBeLessThanOrEqual(width);
+      expect(c.bottom).toBeLessThanOrEqual(tall);
+      expect(doc.elementFromPoint(c.left + c.width / 2, c.top + c.height / 2)?.closest('button'), 'Close is covered').toBe(close);
+    });
+});
