@@ -2998,3 +2998,8 @@ input {
   color: var(--dim);
   font-size: 0.875rem;
 }
+
+/* Above the drawing, so it is read before the lines it qualifies [W6-90]. */
+.estimate-graph-caption {
+  margin: 0 0 0.25rem;
+}

@@ -234,20 +234,32 @@ describe('the estimate graph', () => {
     }
     expect(first.querySelector('.graph-title')?.textContent).toBe('chance to win, %');
     expect(second.querySelector('.graph-title')?.textContent).toBe('lead, points');
-    expect(first.querySelector('figcaption')?.textContent).toBe('as Player 2’s master saw it');
-    expect(second.querySelector('figcaption')?.textContent).toBe('as Player 1’s ruthless saw it');
+    expect(first.querySelector('figcaption')?.textContent).toBe(
+      'Each point is an estimate by Player 2’s master, made on its own move.',
+    );
+    expect(second.querySelector('figcaption')?.textContent).toBe(
+      'Each point is an estimate by Player 1’s ruthless, made on its own move.',
+    );
     for (const fig of [first, second]) {
+      // Read above the drawing it qualifies, not under the x axis's title.
+      expect(fig.firstElementChild?.tagName).toBe('FIGCAPTION');
       expect(fig.querySelector('.graph-axis-title')?.textContent).toBe('move');
     }
   });
 
   it('[W6-90] names one computer by its level, and two of one kind by seat', () => {
     const one = render(() => <EstimateGraph history={masterGame()} seating={seating(null, 'master')} />);
-    expect(figures(one.container)[0].querySelector('figcaption')?.textContent).toBe('as master saw it');
+    expect(figures(one.container)[0].querySelector('figcaption')?.textContent).toBe(
+      'Each point is an estimate by master, made on its own move.',
+    );
     const both = [ply(1, 0, chance(0, 58)), ply(2, 1, chance(1, 45)), ply(3, 0, chance(0, 61))];
     const two = render(() => <EstimateGraph history={both} seating={seating('master', 'master')} />);
     expect(figures(two.container)[0].querySelector('figcaption')?.textContent).toBe(
-      'as Player 1’s master and Player 2’s master saw it',
+      'Each point is an estimate by Player 1’s master or Player 2’s master, made on its own move.',
+    );
+    // The accessible name keeps the short form, its names joined by "and" [W6-92].
+    expect(figures(two.container)[0].querySelector('svg')?.getAttribute('aria-label')).toMatch(
+      /, as Player 1’s master and Player 2’s master saw it$/,
     );
   });
 
@@ -365,7 +377,9 @@ describe('the estimate graph', () => {
       'Chance to win over 12 moves; latest: Player 1 38%, Player 2 62%, as master saw it',
     );
     const table = figures(chanceView.container)[0].querySelector('table') as HTMLTableElement;
-    expect(table.classList.contains('sr-only')).toBe(true);
+    // Hidden by a wrapper: sr-only on a table leaves its caption drawn.
+    expect(table.classList.contains('sr-only')).toBe(false);
+    expect(table.parentElement?.classList.contains('sr-only')).toBe(true);
     expect(table.caption?.textContent).toBe('Chance to win, by move');
     const rows = [...table.rows].map((r) => [...r.cells].map((c) => c.textContent));
     expect(rows[0]).toEqual(['move', 'Player 1', 'Player 2']);
