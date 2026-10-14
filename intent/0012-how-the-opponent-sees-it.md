@@ -2,7 +2,7 @@
 title: How the opponent sees it
 author: Gabriel Cangussu
 date: 2026-10-14
-status: pending
+status: done
 depends-on: 0003 — Computer opponent; 0010 — Playing the opponent we trained
 summary: >
   After each move the computer makes, show what it reckoned its chances were as
@@ -56,7 +56,8 @@ telling you what to do.
 - It is readable by a screen reader like the score is, and it does not interrupt play to be
   read out.
 - The opponent plays exactly the moves it played before, exactly as quickly. The same deal
-  against the same opponent shows the same numbers every time.
+  against the same opponent shows the same numbers every time, as surely as it plays the same
+  moves: only a machine too slow to finish its thinking can change either.
 
 ## Constraints
 
@@ -76,7 +77,7 @@ telling you what to do.
 - Explaining a move, suggesting one, or marking a person's move. The opponents still do not
   explain themselves.
 - An estimate on every ply, which would mean thinking on the person's turn and slowing the
-  computer's reply. If people want the bar to move after their own move too, that is its own
+  computer's reply. If people want the number to move after their own move too, that is its own
   intent.
 - Analysing a game between two people, or an opponent that watches without playing.
 - A setting to hide it. If someone finds it discouraging, that is a small follow-up, and we would

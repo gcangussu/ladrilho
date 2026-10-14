@@ -2,7 +2,7 @@
 title: The table on a wide screen
 author: Gabriel Cangussu
 date: 2026-10-14
-status: pending
+status: done
 depends-on: 0011 — A table, not a page
 summary: >
   On a screen wide enough for both boards to sit either side of the table,
