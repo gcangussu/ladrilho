@@ -104,7 +104,8 @@ function PickButton(props: {
   onChoose: (pick: Pick) => void;
   /** Every tile of the group, and no numeral — the wide table [U3-106]. */
   loose: boolean;
-  span: Span;
+  /** Where it sits on a factory plate; the centre has no plate grid. */
+  span: Span | undefined;
 }): JSX.Element {
   return (
     <button
@@ -164,6 +165,8 @@ function Picks(props: {
   tabIndex: (index: number) => number;
   onChoose: (pick: Pick) => void;
   loose: boolean;
+  /** Whether these are a factory plate's, which places them by `data-span`. */
+  plate: boolean;
 }): JSX.Element {
   return (
     <For each={props.picks} keyed={false}>
@@ -176,7 +179,7 @@ function Picks(props: {
           tabIndex={props.tabIndex(index)}
           onChoose={props.onChoose}
           loose={props.loose}
-          span={spanOf(pick(), props.picks)}
+          span={props.plate ? spanOf(pick(), props.picks) : undefined}
         />
       )}
     </For>
@@ -228,6 +231,7 @@ function Display(props: {
           tabIndex={props.tabIndex}
           onChoose={props.onChoose}
           loose={props.loose}
+          plate={!!props.group}
         />
         <Show when={props.picks.length === 0}>
           <span class="display-empty">empty</span>

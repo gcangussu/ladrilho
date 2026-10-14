@@ -675,9 +675,8 @@ next to the tiles that earned them.
 
   The table is the five factory displays and the centre: in a ring about the centre in `wide`
   *(amended by [U3-106]: in `wide` the ring is three plates in an arc above the centre and two in
-  an arc below it, the plates all one size, and the centre a pool the ring's full width between
-  the arcs, sized for its largest content — because a centre that draws every tile needs more
-  room than the middle of a round ring has; the bag and lid counts did not ask for it)*, and
+  an arc below it, the plates all one size, and the centre's room a band the ring's full width
+  between the arcs, sized for its largest content)*, and
   in `stack` where the main element is at least 40 root ems wide and the screen at least 56 tall —
   a tablet held upright; elsewhere as three displays over two with the centre beneath. A display in
   the rows is as wide as a third of the table allows, to 7.25rem. With nothing expanded — no
@@ -686,6 +685,10 @@ next to the tiles that earned them.
   Where nothing can be measured the arrangement is `wide`. *(Amended by [U3-105] and [U3-106]: in
   `wide` the bag and lid counts sit in the table's column beneath the ring, and every tile on the
   table is drawn.)*
+
+  *The ring changed shape in `wide` for the loose centre of [U3-106], which draws every tile and
+  needs more room than the middle of a round ring has. The bag and lid counts of [U3-105] did not
+  ask for it; they sit beneath the ring.*
 
   *Side by side only in landscape: on an upright screen wide enough for `side` — a tablet, a tall
   window — the three columns strand the height and squeeze the table, where stacking uses it.*
@@ -780,7 +783,9 @@ are in view for the whole game, and every tile on the table is drawn as a tile. 
   once in the document in every arrangement: in `wide` the top bar carries no disclosure for it.
   It MUST sit out of the play area: in the table's column, beneath the ring and beside the key
   hints, overlapping no factory display, the centre, either board or either board's workings.
-  Counts by colour remain all that is shown ([0001 E1-55]).
+  It and every display MUST stay where they are while a computer chooses a move: the note of
+  [0006 W6-20] takes the key hints' place and displaces nothing. Counts by colour remain all that
+  is shown ([0001 E1-55]).
 
   *Beneath the ring because that is where 1280 × 800 has room: the boards' columns are taken,
   from the first round on, by their workings ([U3-102]), and the top bar has width but not the
@@ -844,13 +849,14 @@ are in view for the whole game, and every tile on the table is drawn as a tile. 
   viewport and overlapping nothing [U3-105] names; tiles inside their own control's box and
   control boxes disjoint ([U3-106]); the centre at every split of exactly
   `NUM_FACTORIES * (FACTORY_SIZE - 1)` tiles among the five colours, with the marker, each posed as
-  a view, overlapping no factory display ([U3-106]) — the smaller pools resting on [U3-106]'s
-  argument that a control only narrows as a pool shrinks, and not on a check of their own; and no scroll ([U3-109]). And at 844 × 390 and
-  390 × 844 it asserts that nothing changed: the disclosure present and closed, one tile and a
+  a view, overlapping no factory display ([U3-106]); and no scroll ([U3-109]). And at 844 × 390
+  and 390 × 844 it asserts that nothing changed: the disclosure present and closed, one tile and a
   numeral per control.
 
   *A posed view, as [U3-44] and [U3-45] are posed: the largest centre is reachable but random play
-  does not reach it, and a view is not a state ([0001 E1-5]).*
+  does not reach it, and a view is not a state ([0001 E1-5]). Only the largest is posed; the smaller
+  pools rest on [U3-106]'s argument that a control only narrows as a pool shrinks, not on a check
+  of their own.*
 
 ## Invariants
 
@@ -1027,7 +1033,8 @@ assertions in `test/browser/layout.test.ts`. Re-run them when the code they name
 | `Status`: `bag` defaulting to `false` | [U3-34] in `board.test` | — |
 | `PickButton`: `selected` withheld from a loose control | [U3-107] | — |
 | `--pool-h`: four rows of controls → three | — | the largest centre, both widths: "4,11,0,0,0: the centre covers 2 display(s)" first |
-| the counts' grid areas `'keys bag'` → `'keys keys' 'bag bag'` | — | [U3-105] "off screen", and nothing else |
+| the counts' grid areas `'keys bag'` → `'keys keys' 'bag bag'` | — | every [U3-105] in-view check, "off screen", and nothing else |
+| the table's columns `repeat(2, minmax(0, 1fr))` → `auto auto` (the thinking note widens the hints' column) | — | [U3-105] moves nothing: the bag at x 705 while master thinks, against 636 |
 | `.supply-panel`: `grid-area: bag` dropped | — | **nothing**, correctly: auto-placement fills the same cell |
 
 The ninth row is why [U3-105]'s test asserts the counts inside the viewport and does not lean on
