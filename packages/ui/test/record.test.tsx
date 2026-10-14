@@ -257,13 +257,15 @@ describe('the record in the view model [W6-67], [W6-68]', () => {
  * moves no focus ([W6-71]).
  */
 describe('a whole game with the record open', () => {
-  it('[W6-67] [W6-69] [W6-70] [W6-71] [W6-82] grows by one record per ply, transitions still published, focus kept', async () => {
+  it('[W6-67] [W6-69] [W6-70] [W6-71] [W6-79] [W6-82] grows by one record per ply, transitions still published, focus kept', async () => {
     const { screen, state, harness } = await mount('?seed=42&seating=human-easy');
     const control = screen.getByRole('button', { name: 'Record' });
     const dialog = await openRecord(screen);
     const close = within(dialog).getByRole('button', { name: 'Close' });
     expect(document.activeElement).toBe(close);
     expect(within(dialog).getByText('No moves yet')).toBeTruthy();
+    const { announcement } = await import('../src/components/Announcer.jsx');
+    const live = screen.container.querySelector('[role="status"][aria-live]') as HTMLElement;
 
     let answered = 0;
     let plies = 0;
@@ -306,6 +308,8 @@ describe('a whole game with the record open', () => {
       holdsRecordInvariants(state, after, plies);
       // Focus stays where it was, in the dialog [W6-71].
       expect(document.activeElement).toBe(close);
+      // [W6-79]: the announcement is the view's own, nothing of the record in it.
+      expect(live.textContent).toBe(announcement(after));
     }
     expect(state.view().game.isTerminal).toBe(true);
     expect(transitions.person).toBeGreaterThan(0);
