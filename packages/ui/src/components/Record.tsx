@@ -3,7 +3,7 @@ import type { RoundScoring } from 'engine';
 import { For, Show } from 'solid-js';
 import type { Estimate, PlyRecord } from '../game.js';
 import type { Choice, ExpertChoice, Level, MasterChoice, Seating } from '../opponent.js';
-import { estimateWords } from './Estimate.jsx';
+import { estimateWords, signed } from './Estimate.jsx';
 import { EstimateGraph } from './Graph.jsx';
 import { lastMoveText } from './PlayerBoard.jsx';
 import { levelName } from './Seating.jsx';
@@ -62,11 +62,6 @@ export function estimateCell(estimate: Estimate, players: readonly [Level | null
     return estimate.kind === 'chance' ? words.short : words.value;
   });
   return sides.join(' / ');
-}
-
-/** `+12`, `−3`, `0`: a bonus total as the record states it. */
-function signed(n: number): string {
-  return n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0';
 }
 
 /**

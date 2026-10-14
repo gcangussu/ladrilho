@@ -3,7 +3,7 @@ import type { AzulJSONPlayer, Placement } from 'engine';
 import { CENTER, FLOOR, NUM_COLORS, NUM_ROWS, decodeAction } from 'engine';
 import { Repeat, Show } from 'solid-js';
 import { Destinations } from './Destinations.jsx';
-import { EstimateLine, type EstimateWords } from './Estimate.jsx';
+import { EstimateLine, type EstimateWords, signed } from './Estimate.jsx';
 import { type Pick, factoryName } from './Displays.jsx';
 import { FloorLine } from './FloorLine.jsx';
 import { PatternLines } from './PatternLines.jsx';
@@ -14,11 +14,6 @@ import { Wall } from './Wall.jsx';
 export interface DestinationApi {
   available: (dest: number) => boolean;
   onChoose: (dest: number) => void;
-}
-
-/** A signed delta, so `+7` reads as a gain and `-3` as a loss [U3-43]. */
-function signed(n: number): string {
-  return n > 0 ? `+${n}` : `${n}`;
 }
 
 /** Where a pick came from, in the words a board uses for it. */

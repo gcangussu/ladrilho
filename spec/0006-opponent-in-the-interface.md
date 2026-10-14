@@ -753,8 +753,9 @@ computes nothing.*
   <caption>`, where `<Kind>` is `Chance to win` or `Lead in points`, `<N>` is `history.length`,
   `<v0>` and `<v1>` are each seat's short value ([W6-58]: `62%`, `+4 pt`, `−4 pt`, `even`,
   `win`, `loss`) at the graph's last point, and `<caption>` is [W6-90]'s. Beside the `<svg>`, in
-  its `<figure>`, a visually hidden `<table>` MUST hold the graph's data: a header row `move`,
-  `Player 1`, `Player 2`, then one row per plotted ply, in ply order, giving the ply and each
+  its `<figure>`, a visually hidden `<table>` MUST hold the graph's data: a `<caption>` of
+  `<Kind>, by move` (`Chance to win, by move`, `Lead in points, by move`), which tells it from the
+  record's log, a header row `move`, `Player 1`, `Player 2`, then one row per plotted ply, in ply order, giving the ply and each
   seat's value in [W6-58]'s sentence for that seat (`62% to win`, `Ahead by 4 points`). The
   `<svg>`'s own text is therefore presentation and the table the data.
 - **[W6-93]** The same props MUST render the same markup, byte for byte: no `id` attribute
