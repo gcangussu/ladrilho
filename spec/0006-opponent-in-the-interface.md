@@ -885,9 +885,30 @@ tests and the mutations below are about.*
   estimate drawn as a point; a series interpolated across a person's ply; the empty state wrong
   for a game of two people; a non-deterministic id.
 
+  Run 2026-10-14 against `git archive HEAD` of this branch under the agent's scratch directory:
+  each anchor asserted to match exactly once and the mutation read back from the copy before the
+  run, the file restored and compared after it; the lane is `test/graph.test.tsx` (14 tests).
+  Unmutated, the copy is green before and after (14 passed), and its `src` is identical to the
+  tree's. Test names are abbreviated to their identifiers and first words.
+
   | Mutation (function: edit) | Test that went red |
   | --- | --- |
-  | *To be filled when the tests exist.* | |
+  | `Graph.tsx` `graphOf`: the series swapped — each seat's points read from the other seat's entry | [W6-86] [W6-88] *plots each seat its own chance…*; [W6-86] [W6-87] [W6-88] *plots a lead…*; [W6-87] [W6-88] [W6-90] *gives two graphs…*; [W6-87] [W6-88] *spans the whole game…*; [W6-89] *tells the series apart…*; [W6-89] *moves the end labels apart…* (6 red) |
+  | `Graph.tsx` `graphOf`: a lead plotted on the chance axis — the chance graph's filter takes every estimate, whatever its kind | [W6-86] [W6-87] [W6-88] *plots a lead…*; [W6-87] [W6-88] [W6-90] *gives two graphs…*; [W6-87] *keeps the lead axis at least ±5…*; [W6-92] *names each graph…* (4 red) |
+  | `Graph.tsx` `graphOf`: a ply without an estimate drawn as a point, at the reference rule | [W6-86] [W6-88] *plots each seat its own chance…*; [W6-86] [W6-87] [W6-88] *plots a lead…*; [W6-87] [W6-88] *spans the whole game…*; [W6-85] *follows the record…* (4 red) |
+  | `Graph.tsx` `graphOf`: the path interpolated across a person's ply — a vertex at every ply between two estimates, on the straight line, so the drawing is unchanged | [W6-86] [W6-88] *plots each seat its own chance…*; [W6-86] [W6-87] [W6-88] *plots a lead…*; [W6-87] [W6-88] [W6-90] *gives two graphs…*; [W6-85] *follows the record…* (4 red) |
+  | `Graph.tsx` `EstimateGraph`: the two empty sentences exchanged, so a game of two people says `No estimates yet.` | [W6-91] *says there is nothing to draw…*; [W6-85] *follows the record…* (2 red) |
+  | `Graph.tsx` `GraphFigure`: a random id on each figure (`` id={`graph-${Math.random()}`} ``) | [W6-93] *renders the same history to the same markup…* (1 red) |
+  | `Graph.tsx` `GraphFigure`: a deterministic id on each figure (`` id={`graph-${g().kind}`} ``) | [W6-93] *renders the same history…*, by its no-id half (1 red) |
+  | `Graph.tsx` `graphOf`: the end labels never moved apart (`if (false)`) | [W6-89] *moves the end labels apart…* (1 red) |
+  | `Graph.tsx` `graphOf`: the lead axis fixed at ±5, not grown with the data | [W6-86] [W6-87] [W6-88] *plots a lead…*; [W6-87] *keeps the lead axis at least ±5…* (2 red) |
+  | `Graph.tsx` `graphOf`: the x range ended at the last estimate's ply, not `history.length` | [W6-87] [W6-88] *spans the whole game…*; [W6-87] *ticks the moves…*; [W6-92] *names each graph…* (3 red) |
+  | `Graph.tsx` `layout`: the lead graph first | [W6-87] [W6-88] [W6-90] *gives two graphs…* (1 red) |
+  | `Graph.tsx` `GraphFigure`: seat 1's line not dashed | [W6-89] *tells the series apart…* (1 red) |
+  | `styles.css`: seat 1's line stroked with `var(--accent)` | [W6-89] [W6-94] *draws in neutral ink…* (1 red) |
+  | `Graph.tsx` `caption`: two computers named by level alone (`both = false`) | [W6-87] [W6-88] [W6-90] *gives two graphs…*; [W6-90] *names one computer…, and two of one kind by seat* (2 red) |
+  | `Graph.tsx` `graphOf`: the accessible name's latest point taken from the first estimate | [W6-92] *names each graph…* (1 red) |
+  | `Graph.tsx` `graphOf`: a multiple of 10 within 3 of `N` keeps its label | [W6-87] *ticks the moves…* (1 red) |
 
 ### Traceability exemptions
 
