@@ -589,13 +589,16 @@ section owns the field, the control, the dialog and the log.*
     else;
   - the game beneath carries on: a computer to move keeps thinking and may move, the log gains
     that ply's row while the dialog is open, and a ply arriving while it is open MUST NOT move
-    focus ([0003 U3-57] is about the page beneath, which is inert);
+    focus;
   - it holds the graph (*The estimate graph*, [W6-85] onward) above the log, and nothing
     else but its heading and Close.
 
   It is bounded by the viewport and MAY scroll within itself in both directions; the document
   beneath MUST NOT scroll because it is open. Its heading and **Close** MUST stay in view at
   every scroll position: only the content beneath the heading row scrolls, in either axis.
+
+  *Focus stays put because [0003 U3-57] is about the page beneath, which is inert while the
+  dialog is open: a ply there has no control of the dialog's to take focus from.*
 - **[W6-72]** The record MUST be closed by default, every game, and opening it MUST NOT be kept:
   it is closed when the page loads and whenever a game is dealt, by whatever route. Whether it is
   open MUST NOT be part of the view model, the URL or storage ([0003 U3-15]).
@@ -647,9 +650,12 @@ section owns the field, the control, the dialog and the log.*
   ([0004 B4-11]) from the mover's side: a whole number as itself, grouped; any other to one
   decimal place; with `+` before a positive value and `−` (U+2212) before a negative one, and no
   sign on a value shown as zero. A decided search's value is shown raw too, `WIN` and all
-  ([0004 B4-13]): the `Estimate` cell beside it gives the decided reading, and the record is where
-  the number itself is read. An `expert` or `master` value is not repeated here: the `Estimate`
-  cell is its reading, and [W6-56] is exact for both.
+  ([0004 B4-13]). An `expert` or `master` value is not repeated here.
+
+  *The raw value, a million and all, because the `Estimate` cell beside it already gives the
+  decided reading, and the record is where the number itself is read. An `expert` or `master`
+  value needs no second showing: the `Estimate` cell is its reading, and [W6-56] is exact for
+  both.*
 - **[W6-77]** A row for a person's ply MUST leave its `Estimate` and `Search` cells empty. So
   MUST every row of a game of two people, whose log still has a row per ply and the round rows of
   [W6-78].
@@ -758,7 +764,6 @@ computes nothing.*
 - **[W6-94]** Each `<svg>` MUST have the `viewBox` `0 0 640 256` and be drawn at `40rem × 16rem`
   — one unit a sixteenth of a rem — and MUST NOT be scaled down to fit: a narrower container
   scrolls, as the record's dialog does. Its text MUST be at least 12 units high.
-
 
 ## Amendments to 0003
 

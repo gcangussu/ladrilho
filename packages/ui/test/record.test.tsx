@@ -347,7 +347,7 @@ describe('the control and the dialog [W6-70], [W6-71], [W6-72]', () => {
     expect(control.closest('.topbar')).not.toBeNull();
     // Closed by default: no dialog, and nothing of it in the document.
     expect(screen.queryByRole('dialog')).toBeNull();
-    expect(screen.container.querySelector('.record, .record-log, .graph')).toBeNull();
+    expect(screen.container.querySelector('.record, .record-log, .estimate-graph, .estimate-graph-empty')).toBeNull();
 
     const closers: [string, (dialog: HTMLElement) => void][] = [
       ['Close', (d) => within(d).getByRole('button', { name: 'Close' }).click()],
@@ -381,7 +381,10 @@ describe('the control and the dialog [W6-70], [W6-71], [W6-72]', () => {
     // The interface offers no deal while it is open; this deal is code's.
     state.startNewGame();
     flush();
+    await Promise.resolve();
     expect(screen.queryByRole('dialog', { name: 'Game record' })).toBeNull();
+    // Closed as Close closes it: focus back on the control [W6-71].
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Record' }));
     screen.unmount();
 
     const again = await mount('?seed=42&seating=human-human');

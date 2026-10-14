@@ -2737,7 +2737,7 @@ input {
 /* ------------------------------------------------------------------ */
 
 /* The control: its word where the top bar has room, a list where it has not —
-   the word is still its name. */
+   the word, made .sr-only there, is still its name. */
 .record-icon {
   display: none;
 }
@@ -2753,14 +2753,6 @@ input {
   height: 2px;
   border-radius: 1px;
   background: currentColor;
-}
-
-.app:not([data-layout='wide']) .record-word {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
 }
 
 .sheet.record {

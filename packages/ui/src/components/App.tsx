@@ -238,7 +238,8 @@ export function App(): JSX.Element {
   createEffect(
     () => view().history.length === 0,
     (empty) => {
-      if (empty && untrack(recording)) setRecording(false);
+      // Closed as Close closes it, so focus goes back to the control [W6-71].
+      if (empty && untrack(recording)) closeRecord();
     },
   );
 
@@ -447,7 +448,7 @@ export function App(): JSX.Element {
                 <i />
                 <i />
               </span>
-              <span class="record-word">Record</span>
+              <span class={layout() === 'wide' ? undefined : 'sr-only'}>Record</span>
             </button>
             {/* Opens the sheet, where the seats are and where Deal is [W6-49];
                 available throughout, a search included [W6-23]. */}
