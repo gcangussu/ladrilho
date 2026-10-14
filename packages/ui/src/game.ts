@@ -113,6 +113,25 @@ export function estimateOf(value: number, seat: Player, level: Level): Estimate 
   return { kind: 'lead', by: seat, level, lead, decided };
 }
 
+/**
+ * One ply of this game, for the record of intent 0014. Plain data, replaced
+ * never mutated. `choice` is the computer's report as it crossed the seam,
+ * `null` for a person; `estimate` is [W6-56]'s reading of it; `scoring` is
+ * the round's record when this ply resolved a round.
+ */
+export interface PlyRecord {
+  /** 1-based. */
+  ply: number;
+  /** The engine's round index when the ply was played. */
+  round: number;
+  seat: Player;
+  action: number;
+  level: Level | null;
+  choice: Choice | ExpertChoice | MasterChoice | null;
+  estimate: Estimate | null;
+  scoring: RoundScoring | null;
+}
+
 /** Everything a component may read that derives from the game state [U3-6]. */
 export interface ViewModel {
   game: AzulJSON;
