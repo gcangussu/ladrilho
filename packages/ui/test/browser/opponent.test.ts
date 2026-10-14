@@ -127,11 +127,12 @@ describe('the opponent against a real worker [W6-30]', () => {
   });
 
   /**
-   * [W6-58]'s compact forms fit the room they are drawn in: on a phone and on
-   * a phone on its side, the docked board's short value over the estimator's
-   * name and the small board's short value alone — each on one line, inside
-   * its header, overlapping nothing, the player's name beside it included.
-   * Checked on the real estimate, then on the widest text each form can carry
+   * [W6-58]'s drawn forms on a phone and on a phone on its side: the docked
+   * board's short value over the estimator's name fits the room it is drawn
+   * in — each on one line, inside its header, overlapping nothing, the
+   * player's name beside it included — and the small board draws nothing of
+   * the estimate, its player's name drawn whole as it always was. Checked on
+   * the real estimate, then on the widest text the compact form can carry
    * (`−12 pt`, `100%`, `P1 ruthless`) written into the same boxes, since the
    * real one is whatever this deal gives.
    */
@@ -140,10 +141,10 @@ describe('the opponent against a real worker [W6-30]', () => {
     [844, 390, 'sharp-human'],
     [390, 844, 'sharp-sharp'],
     [844, 390, 'sharp-sharp'],
-  ] as const)('[W6-58] [W6-60] draws each compact form whole in the room it has, at %i × %i, %s', { timeout: 60_000 }, async ([width, height, seating]) => {
-    // Two computers as well as one: then the small board is the one thinking
-    // the moment the first estimate lands, its pill at its widest, and the
-    // docked board's name carries its seat.
+  ] as const)('[W6-58] [W6-60] draws the docked form whole, and nothing on a small board, at %i × %i, %s', { timeout: 60_000 }, async ([width, height, seating]) => {
+    // Two computers as well as one: then the docked board's name carries its
+    // seat, and the small board is the one thinking the moment the first
+    // estimate lands, its pill at its widest.
     const { doc, win } = await load(seating, width, height);
     await until(
       () => /saw it on its move/.test(doc.querySelector('.player-board .estimate')?.textContent ?? ''),
@@ -167,8 +168,15 @@ describe('the opponent against a real worker [W6-30]', () => {
         if (header.scrollWidth > header.clientWidth) out.push(`${which}: the header overflows`);
         const shown = [...line.querySelectorAll<HTMLElement>('.estimate-short, .estimate-name, .estimate-full')].filter(drawn);
         const names = shown.map((el) => el.className).sort();
-        const expected = which === 'small' ? ['estimate-short'] : ['estimate-name', 'estimate-short'];
-        if (names.join() !== expected.join()) out.push(`${which}: draws ${names.join(', ')}`);
+        const expected = which === 'small' ? [] : ['estimate-name', 'estimate-short'];
+        if (names.join() !== expected.join()) out.push(`${which}: draws ${names.join(', ') || 'nothing'}`);
+        // No room on a small board, not even a gap's worth: out of the row's
+        // flow, and nothing of it wider than the clip that hides it.
+        if (which === 'small' && (win.getComputedStyle(line).position !== 'absolute' || line.getBoundingClientRect().width > 1)) {
+          out.push('small: the estimate holds room in the row');
+        }
+        const name = header.querySelector<HTMLElement>('h2')!;
+        if (!drawn(name) || name.getBoundingClientRect().width === 0) out.push(`${which}: the player's name is not drawn`);
         const own = line.getBoundingClientRect();
         for (const el of shown) {
           const r = el.getBoundingClientRect();

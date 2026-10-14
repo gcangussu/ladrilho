@@ -67,12 +67,13 @@ export function estimateWords(
  * so a shown board may carry it [0003 U3-91].
  *
  * Its text is always the full sentence. Where the row has no room for it — a
- * docked board, a board shown small — the stylesheet draws a compact form
- * instead, hidden from assistive technology, and keeps the sentence out of
- * sight but read.
+ * docked board — the stylesheet draws a compact form instead, hidden from
+ * assistive technology, and keeps the sentence out of sight but read. A board
+ * shown small draws nothing of it: its row is its player's name.
  *
  * Rendered from the deal on in any game with a computer, empty until the
- * computer has moved, so that its arriving never resizes the board [W6-60].
+ * computer has moved, so that its arriving never resizes a wide or docked
+ * board [W6-60].
  */
 export function EstimateLine(props: { words: EstimateWords | null }): JSX.Element {
   return (

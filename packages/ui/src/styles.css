@@ -2491,13 +2491,13 @@ input {
 
 /* ===================================================================== */
 /* The estimate [0006 W6-58]..[0006 W6-60] — intent 0012.                */
-/* Three forms of one line, chosen here; the full sentence is always the */
-/* line's text for a screen reader, the compact forms are aria-hidden.   */
+/* Two drawn forms of one line, chosen here; the full sentence is always */
+/* the line's text for a screen reader, the compact form is aria-hidden. */
 /*   wide   — the full sentence, on a line of its own under the row,     */
 /*            where the board has height to spare.                       */
 /*   docked — the short value over the estimator's name, two short lines */
 /*            in the row's own height, in the free room beside the score.*/
-/*   small  — the short value alone, in a box of fixed width.            */
+/*   small  — nothing drawn, no room taken: the sentence is read only.   */
 /* Present from the deal on in a game with a computer seat and the same  */
 /* box filled or empty, so a board never moves when an estimate lands    */
 /* [W6-60]. Nothing here wraps or ends in an ellipsis.                   */
@@ -2580,29 +2580,22 @@ input {
   margin-left: auto;
 }
 
-/* Small: the short value alone, in a fixed box, so a header that wraps
-   (side by side) wraps the same way filled or empty. */
+/* Small: nothing drawn and no room taken — the row is the name's, as it
+   was. The sentence stays the board's text for a screen reader, out of the
+   flow, and the score keeps the margin its arrangement gives it. */
 .player-board.mini .estimate {
-  width: 2.6rem;
-}
-
-.player-board.mini .estimate-compact {
-  height: 1.6rem;
-  font-size: 0.62rem;
-}
-
-.player-board.mini .estimate-name {
-  display: none;
-}
-
-/* Stacked, the small board's row has no room for a value beside its name,
-   pill and score; its seat's number is already on the badge, so the name
-   is kept for a screen reader and not drawn. */
-.app[data-layout='stack'] .player-board.mini .player-header:has(.estimate) h2 {
   position: absolute;
   width: 1px;
   height: 1px;
+  margin: 0;
   overflow: hidden;
   clip-path: inset(50%);
-  white-space: nowrap;
+}
+
+.player-board.mini .estimate-compact {
+  display: none;
+}
+
+.player-board.mini .estimate + .score {
+  margin-left: auto;
 }
