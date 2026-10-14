@@ -2,7 +2,7 @@
 title: The game's record, for the curious
 author: Gabriel Cangussu
 date: 2026-10-14
-status: pending
+status: done
 depends-on: 0012 — How the opponent sees it
 summary: >
   Behind a control that is closed by default, keep a move-by-move record of
