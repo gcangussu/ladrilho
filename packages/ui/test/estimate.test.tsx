@@ -25,8 +25,9 @@ import { flush } from 'solid-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { WIN as BOT_WIN } from 'bot';
 import type { Player } from 'engine';
-import type { Estimate, ViewModel } from '../src/game.js';
+import type { Estimate } from '../src/game.js';
 import type { FromWorker, Thinker, ToWorker } from '../src/opponent.js';
+import { holdsInvariants } from './estimate-helpers.js';
 
 type StateModule = typeof import('../src/game.js');
 
@@ -137,25 +138,6 @@ function valueFor(request: ToWorker, n: number): number {
   return isChance ? wobble / 10 + 0.03 : wobble * 1.7 + 0.3;
 }
 
-/** [W6-62]: each kind's two sides make the whole. */
-function holdsInvariants(view: ViewModel): void {
-  const e = view.estimate;
-  if (e === null) return;
-  const sides = e.kind === 'chance' ? e.chance : e.lead;
-  for (const side of sides) {
-    expect(Number.isInteger(side)).toBe(true);
-    expect(Object.is(side, -0), 'a side of the estimate is -0').toBe(false);
-  }
-  if (e.kind === 'chance') {
-    for (const side of e.chance) expect(side >= 0 && side <= 100).toBe(true);
-    expect(e.chance[0] + e.chance[1]).toBe(100);
-  } else {
-    expect(e.lead[0] + e.lead[1]).toBe(0);
-  }
-  // [W6-64]: the level it was taken as is the level that seat holds.
-  expect(e.level).toBe(view.seating.players[e.by]);
-}
-
 beforeEach(() => {
   vi.resetModules();
 });
@@ -220,17 +202,19 @@ describe('reading a value as its own kind [W6-56]', () => {
       value: '38% to win',
       by: 'as master saw it on its move',
       short: '38%',
+      name: 'master',
     });
     expect(estimateWords(estimateOf(0.24, 1, 'master'), 1, one).value).toBe('62% to win');
     const tier = [null, 'sharp'] as const;
     expect(estimateWords(estimateOf(4, 1, 'sharp'), 1, tier)).toEqual({
       value: 'Ahead by 4 points',
       by: 'as ruthless saw it on its move',
-      short: '+4',
+      short: '+4 pt',
+      name: 'ruthless',
     });
     expect(estimateWords(estimateOf(4, 1, 'sharp'), 0, tier)).toMatchObject({
       value: 'Behind by 4 points',
-      short: '−4',
+      short: '−4 pt',
     });
     expect(estimateWords(estimateOf(1, 1, 'sharp'), 1, tier).value).toBe('Ahead by 1 point');
     expect(estimateWords(estimateOf(0.2, 1, 'sharp'), 0, tier)).toMatchObject({ value: 'Even', short: 'even' });
@@ -242,9 +226,13 @@ describe('reading a value as its own kind [W6-56]', () => {
     expect(estimateWords(estimateOf(-BOT_WIN, 1, 'sharp'), 0, tier).value).toBe('A win on the tie-break');
     expect(estimateWords(estimateOf(-BOT_WIN, 1, 'sharp'), 1, tier).value).toBe('A loss on the tie-break');
     // Two computers: the attribution names the seat, so two masters differ.
-    expect(estimateWords(estimateOf(0, 0, 'master'), 1, ['master', 'master']).by).toBe(
-      'as Player 1’s master saw it on its move',
-    );
+    expect(estimateWords(estimateOf(0, 0, 'master'), 1, ['master', 'master'])).toMatchObject({
+      by: 'as Player 1’s master saw it on its move',
+      name: 'P1 master',
+    });
+    // A lead's short form says points, so it is not read as the round's score
+    // change beside it [0003 U3-43]; a chance's short form is its percentage.
+    expect(estimateWords(estimateOf(1, 0, 'easy'), 0, [null, 'easy']).short).toBe('+1 pt');
   });
 });
 
@@ -370,6 +358,42 @@ describe('when it changes, and when it stands [W6-57]', () => {
     flush();
     expect(rejections.length).toBe(1);
     expect(state.view().estimate).toEqual(standing);
+  });
+
+  /**
+   * The failed request is the *other* computer's, of the other kind, so an
+   * estimator written on failure would show: one written back from the same
+   * seat and level as the standing one could not be told from leaving it.
+   */
+  it('[W6-57] stands through a failed reply from the other seat, of the other kind', async () => {
+    const { state, harness } = await load('?seed=42&seating=easy-master');
+    await harness.answer(0, 4);
+    const standing = state.view().estimate;
+    expect(standing).toMatchObject({ kind: 'lead', by: 0, level: 'easy', lead: [4, -4] });
+    expect(harness.pending[1]).toMatchObject({ tier: 'master' });
+    const rejections: unknown[] = [];
+    const capture = (reason: unknown): void => {
+      rejections.push(reason);
+    };
+    process.on('unhandledRejection', capture);
+    try {
+      harness.fail(1);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    } finally {
+      process.off('unhandledRejection', capture);
+    }
+    flush();
+    expect(rejections.length).toBe(1);
+    expect(state.view().estimate).toEqual(standing);
+  });
+
+  it('[W6-61] asks master with exactly the fields Data model declares, simulations included', async () => {
+    const { state, harness } = await load('?seed=42&seating=master-human');
+    expect(Object.keys(harness.pending[0]).sort()).toEqual(['generation', 'position', 'simulations', 'tier']);
+    await harness.answer(0, 0.1);
+    personPlays(state);
+    expect(harness.pending.length).toBe(2);
+    expect(Object.keys(harness.pending[1]).sort()).toEqual(['generation', 'position', 'simulations', 'tier']);
   });
 
   it('[W6-57] is not set by a stale reply', async () => {
