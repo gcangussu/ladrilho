@@ -4,6 +4,7 @@ import { Show, createEffect, createSignal, onCleanup, untrack } from 'solid-js';
 import { computerSeat, replayDeal, startNewGame, startWithSeating, submit, view, type ViewModel } from '../game.js';
 import { Announcer, announcement } from './Announcer.jsx';
 import { Displays, type Pick } from './Displays.jsx';
+import { estimateWords } from './Estimate.jsx';
 import { GameOver } from './GameOver.jsx';
 import { PlayerBoard } from './PlayerBoard.jsx';
 import { Scoring } from './Scoring.jsx';
@@ -333,6 +334,11 @@ export function App(): JSX.Element {
       lastMove={view().lastMoves[seat]}
       placements={view().scoring?.players[seat].placements ?? null}
       role={roleOf(seat)}
+      estimateRoom={!hotSeat()}
+      estimate={(() => {
+        const e = view().estimate;
+        return e === null ? null : estimateWords(e, seat, view().seating.players);
+      })()}
     />
   );
 

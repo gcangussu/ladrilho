@@ -164,7 +164,8 @@ type Selection = { source: number; color: Color } | null;
 - **[U3-6]** Every value a component reads **that derives from the game state** MUST be a declared
   field of the view model. It gains `seating`, `thinking` and `lastChoice` with the computer
   opponent ([0006 W6-2], [0006 W6-19], [0006 W6-25]), `scoring` with the workings
-  ([U3-82]), and `lastMoves` with the table ([U3-101]). *(Extended by [0006 W6-28].)* The exceptions are the current selection and the stateless engine
+  ([U3-82]), `lastMoves` with the table ([U3-101]), and `estimate` with intent 0012
+  ([0006 W6-55]). *(Extended by [0006 W6-28].)* The exceptions are the current selection and the stateless engine
   functions of [U3-4]. A component that needs anything else gets a new view-model field, computed
   at publish time.
 
@@ -300,6 +301,9 @@ type Selection = { source: number; color: Color } | null;
   warning, no confirmation step, no ranking, no preview of the resulting position. *(A floor
   line's current penalty is still shown as part of the board, [U3-38]; what is forbidden is
   attaching a judgement to a move not yet made. [U3-25] pins the half a test can see.)*
+  *(Untouched by [0006 W6-55]: the estimate shown since intent 0012 is the computer's reading of
+  the position its own move left, shown after that move, and never about a move a person is
+  considering.)*
 - **[U3-31]** `submit` MUST take an action and nothing else, and MUST NOT read anything
   identifying **how** the move was chosen. A move from a person and a move from a program are the
   same call.

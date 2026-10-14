@@ -774,7 +774,7 @@ every simulation.*
 | New, [0006 W6-40] | The worker MUST hold at most one `Expert` per seat, created on the first `expert` request for that seat, and MUST NOT let one outlive the worker. [0006 W6-13]'s termination on a new game or seating change is therefore also what ends every session. The per-seat logic MUST live in a module importable without a `Worker`. |
 | New, [0006 W6-41] | The fast suite MUST assert [0006 W6-40] with an `expert` on **both** seats: each seat's session is asked only about its own seat's positions, and a new game starts with none. [0006 W6-29]'s property test MUST also run with one seat `expert`. |
 | [0006 W6-15] | Extend: a throw from `createExpert` or `choose` is caught and reported the same way. |
-| [0006 W6-24], [0006 W6-25] | Unchanged, and they now cover `ExpertChoice.value`, which MUST NOT be rendered. |
+| [0006 W6-24], [0006 W6-25] | Unchanged, and they now cover `ExpertChoice.value`, which MUST NOT be rendered. *(Since intent 0012 it is rendered, as a chance and only as [0006 W6-55] through [0006 W6-58] read it.)* |
 | [0006 W6-26], [0006 W6-35] | Unchanged, and applying to `expert`: the page stays responsive however long it thinks. This is intent 0006's one performance promise. |
 | [0006 W6-30] | Extend: the browser lane also plays one complete game against a real worker running `expert`. |
 | [0004 B4-47], [0004 B4-48] | Not amended. These are `bot`'s budgets and do not apply to `expert`; intent 0006 exempts it from intent 0003's "a couple of seconds at most". |

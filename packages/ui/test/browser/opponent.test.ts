@@ -32,10 +32,10 @@ afterEach(() => {
 });
 
 /** Load the client with a seating, and resolve on its rendered board. */
-function load(seating: string): Promise<{ doc: Document; win: Window }> {
+function load(seating: string, width = 1280, height = 800): Promise<{ doc: Document; win: Window }> {
   const el = document.createElement('iframe');
   frame = el;
-  el.style.cssText = 'width:1280px;height:800px;border:0;position:fixed;left:0;top:0';
+  el.style.cssText = `width:${width}px;height:${height}px;border:0;position:fixed;left:0;top:0`;
   el.src = `/index.html?seed=${SEED}&seating=${seating}`;
   const ready = new Promise<{ doc: Document; win: Window }>((resolve, reject) => {
     const deadline = Date.now() + 20_000;
@@ -96,6 +96,35 @@ describe('the opponent against a real worker [W6-30]', () => {
     await until(() => tilesLeft(doc) < before, 20_000, 'the opponent to move');
     expect(tilesLeft(doc)).toBeLessThan(before);
   }, 60_000);
+
+  /**
+   * [W6-60]: the estimate's arrival does not move a board. Measured while
+   * `sharp` thinks — its search is long enough to measure the board before
+   * the reply — and again once the estimate has landed, on a wide screen and
+   * on a phone, where one board is shown small ([0003 U3-103]).
+   */
+  it.for([
+    [1280, 800],
+    [390, 844],
+  ] as const)('[W6-60] keeps every board the same size when the estimate arrives, at %i px', { timeout: 60_000 }, async ([width, height]) => {
+    const { doc } = await load('sharp-human', width, height);
+    const boxes = (): string[] =>
+      [...doc.querySelectorAll('.player-board')].map((board) => {
+        const box = board.getBoundingClientRect();
+        return `${box.width.toFixed(1)}×${box.height.toFixed(1)}`;
+      });
+    const said = (): string => doc.querySelector('.player-board .estimate')?.textContent ?? '';
+    await until(
+      () => /thinking/i.test(doc.querySelector('.status')?.textContent ?? ''),
+      5_000,
+      'the thinking indicator',
+    );
+    expect(said()).toBe('');
+    const before = boxes();
+    expect(before).toHaveLength(2);
+    await until(() => /saw it on its move/.test(said()), 20_000, 'the estimate');
+    expect(boxes()).toEqual(before);
+  });
 
   /**
    * [W6-26], [W6-35], [W6-10]: the page stays alive while the search runs.
