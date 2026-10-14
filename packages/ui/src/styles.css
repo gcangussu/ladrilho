@@ -773,11 +773,6 @@ input {
   pointer-events: none;
 }
 
-/* Just under the ring where the table is round, in place of the key hints. */
-.app[data-layout='wide'] .table-note {
-  top: 24.3rem;
-}
-
 .table.paused .keys {
   visibility: hidden;
 }
@@ -838,9 +833,16 @@ input {
 /* ------------------------------------------------------------------ */
 
 /*
- * Every rule here is scoped to `data-layout='wide'`: `side` and `stack` — the
- * upright tablet's ring among them — keep one tile and a count [U3-97] and the
- * bag in the top bar [U3-96].
+ * What `side` and `stack` draw is untouched here — the upright tablet's ring
+ * among them keeps one tile and a count [U3-97], and the bag stays in the top
+ * bar [U3-96]. The arrangement rules are scoped to `data-layout='wide'`; the
+ * rest reach only markup that exists in `wide` alone: `.pick.loose` (and its
+ * `data-span`, emitted for factory plates only) and `.supply-panel`, which
+ * `Displays` and `App` render only there.
+ *
+ * Order matters once: the wide ring's plate and centre placements override the
+ * `data-table='ring'` ones above at equal specificity, by coming after them.
+ * Move this block above those rules and the round ring wins.
  *
  * The ring is reshaped for the loose centre, not for the bag [U3-95]: three
  * plates in an arc above the centre and two in an arc below, all one size, and
@@ -864,7 +866,11 @@ input {
 /* The ring above, and under it the key hints and the bag side by side. */
 .app[data-layout='wide'] .table {
   display: grid;
-  grid-template-columns: auto auto;
+  /* Two halves of the column, fixed by its width and not by what is in them:
+     the hints end and the bag starts on the centre line, and the note that
+     takes the hints' place while a computer chooses cannot widen its half and
+     slide the bag along. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-template-areas:
     'ring ring'
     'keys bag';
@@ -1050,13 +1056,22 @@ input {
   --tile: 1.3rem;
 }
 
-/* While a computer chooses, the note takes the key hints' place. */
+/*
+ * While a computer chooses, the note takes the key hints' place — inside their
+ * column, wrapping to its width, so nothing beside it moves [U3-105].
+ */
 .app[data-layout='wide'] .table-note {
   grid-area: keys;
   position: static;
   align-self: center;
   justify-self: end;
   translate: none;
+  max-width: 100%;
+  height: auto;
+  padding: 0.45rem 0.8rem;
+  white-space: normal;
+  text-wrap: balance;
+  line-height: 1.25;
 }
 
 /*
