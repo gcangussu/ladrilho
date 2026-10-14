@@ -118,9 +118,18 @@ async function openRecord(screen: ReturnType<typeof render>): Promise<HTMLElemen
   return screen.getByRole('dialog', { name: 'Game record' });
 }
 
+/**
+ * The log, by its caption [W6-79]: the dialog holds a second table, the
+ * graph's data, and only the name tells them apart.
+ */
+const LOG = 'Every move of this game';
+function logOf(dialog: HTMLElement): HTMLElement {
+  return within(dialog).getByRole('table', { name: LOG });
+}
+
 /** The log's body rows as their cells' text. */
 function rows(dialog: HTMLElement): string[][] {
-  const table = within(dialog).getByRole('table');
+  const table = logOf(dialog);
   return [...table.querySelectorAll('tbody tr')].map((tr) =>
     [...tr.querySelectorAll('th, td')].map((cell) => (cell.textContent ?? '').trim()),
   );
@@ -389,7 +398,7 @@ describe('the log [W6-74] through [W6-79]', () => {
     const { lastMoveText } = await import('../src/components/PlayerBoard.jsx');
     const dialog = await openRecord(screen);
 
-    const table = within(dialog).getByRole('table', { name: 'Every move of this game' });
+    const table = logOf(dialog);
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
       'Ply',
       'Round',
@@ -465,18 +474,18 @@ describe('the log [W6-74] through [W6-79]', () => {
     while (state.view().scoring === null) personPlays(state);
     const plies = state.view().history.length;
     const dialog = await openRecord(screen);
-    const log = rows(dialog);
-    expect(log).toHaveLength(plies + 1);
-    for (const row of log.slice(0, plies)) {
+    const logged = rows(dialog);
+    expect(logged).toHaveLength(plies + 1);
+    for (const row of logged.slice(0, plies)) {
       expect(row[2]).toMatch(/^Player [12] \(Person\)$/);
       expect(row[4]).toBe('');
       expect(row[5]).toBe('');
     }
     // The round row comes after the ply that scored it, one cell across.
-    expect(log[plies]).toEqual([roundWords(state.view().scoring!)]);
-    const cell = within(dialog).getByRole('table').querySelector('tbody tr:last-child td') as HTMLTableCellElement;
+    expect(logged[plies]).toEqual([roundWords(state.view().scoring!)]);
+    const cell = logOf(dialog).querySelector('tbody tr:last-child td') as HTMLTableCellElement;
     expect(cell.colSpan).toBe(6);
-    expect(log[plies][0]).toMatch(/^Round 1 scored: Player 1: 0 to \d+; Player 2: 0 to \d+$/);
+    expect(logged[plies][0]).toMatch(/^Round 1 scored: Player 1: 0 to \d+; Player 2: 0 to \d+$/);
   });
 });
 
