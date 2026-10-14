@@ -2488,3 +2488,107 @@ input {
   background: var(--surface);
   padding: 0 0.6rem;
 }
+
+/* ===================================================================== */
+/* The estimate [0006 W6-58]..[0006 W6-60] — intent 0012.                */
+/* Present from the deal on in a game with a computer seat, empty until  */
+/* the computer's first move, and the same box either way, so the board  */
+/* neither grows nor shifts when an estimate lands [W6-60].              */
+/* Docked and small boards: in the header's own row, beside the score,   */
+/* in the free room the row already had — two short lines, no taller     */
+/* than the row. Wide: a line of its own under the row, where the board  */
+/* has height to spare and its row has no width to spare.                */
+/* ===================================================================== */
+
+.estimate {
+  flex: 1 1 0;
+  min-width: 0;
+  margin-left: auto;
+  height: 2.2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  font-size: 0.72rem;
+  line-height: 1.1rem;
+  text-align: right;
+}
+
+.estimate > span {
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.estimate-value {
+  font-weight: 700;
+}
+
+.estimate-by {
+  color: var(--dim);
+}
+
+.estimate + .score {
+  margin-left: 0;
+}
+
+/* The estimate gives way, never the player's name. */
+.player-header:has(.estimate) > .who {
+  flex-shrink: 0;
+}
+
+.player-board.mini .estimate {
+  height: 1.8rem;
+  font-size: 0.62rem;
+  line-height: 0.9rem;
+}
+
+.app[data-layout='wide'] .player-header:has(.estimate) {
+  position: relative;
+  margin-bottom: 1.3rem;
+}
+
+.app[data-layout='wide'] .player-header:has(.estimate) > .who {
+  flex-shrink: 1;
+}
+
+.app[data-layout='wide'] .estimate {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: 1.3rem;
+  flex-direction: row;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.app[data-layout='wide'] .estimate + .score {
+  margin-left: auto;
+}
+
+.estimate-short {
+  display: none;
+}
+
+/* A board shown small: the short form for the eye, and the full words still
+   its text for a screen reader [W6-58], [W6-59]. */
+.player-board.mini .estimate {
+  flex: 0 0 auto;
+}
+
+.player-board.mini .estimate-value,
+.player-board.mini .estimate-by {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.player-board.mini .estimate-short {
+  display: block;
+  font-weight: 700;
+}

@@ -432,7 +432,8 @@ These requirements were proposals for *0006*, in the manner of [0008 A8-33]. Eac
   configuration of the same seam, so it gets a case in that configuration.*
 
 - **[T12-24]** *(Folded into [0006 W6-24] and [0006 W6-25].)* `MasterChoice.value` is covered by [0006 W6-24] and
-  [0006 W6-25]: published in `lastChoice` at most, and never rendered.
+  [0006 W6-25]: published in `lastChoice` at most, and never rendered. *(Since intent 0012 it
+  is rendered, as a chance and only as [0006 W6-55] through [0006 W6-58] read it.)*
 
 ### Performance
 
