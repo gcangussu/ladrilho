@@ -9,6 +9,7 @@ import { PlayerBoard } from './PlayerBoard.jsx';
 import { Scoring } from './Scoring.jsx';
 import { NewGameSheet, seatLabel } from './Seating.jsx';
 import { Status } from './Status.jsx';
+import { Supply } from './Supply.jsx';
 
 /**
  * How the table is arranged [U3-95]: both boards full size beside the table,
@@ -380,6 +381,7 @@ export function App(): JSX.Element {
             seed={view().seed}
             names={names()}
             thinking={view().thinking}
+            bag={layout() !== 'wide'}
           />
           <div class="top-actions">
             <Show when={layout() !== 'wide' && view().scoring !== null}>
@@ -427,6 +429,7 @@ export function App(): JSX.Element {
             selection={selection()}
             available={pickAvailable}
             onChoose={choosePick}
+            loose={layout() === 'wide'}
           />
           <Show when={layout() === 'wide'}>
             <p class="keys" aria-hidden="true">
@@ -449,6 +452,11 @@ export function App(): JSX.Element {
                 <kbd>Esc</kbd> put back
               </span>
             </p>
+            {/* The bag and the lid in plain view, beside the key hints and out
+                of the play area [U3-105]. */}
+            <div class="supply-panel">
+              <Supply game={game()} names={names()} />
+            </div>
           </Show>
         </div>
 
