@@ -2491,66 +2491,60 @@ input {
 
 /* ===================================================================== */
 /* The estimate [0006 W6-58]..[0006 W6-60] — intent 0012.                */
-/* Present from the deal on in a game with a computer seat, empty until  */
-/* the computer's first move, and the same box either way, so the board  */
-/* neither grows nor shifts when an estimate lands [W6-60].              */
-/* Docked and small boards: in the header's own row, beside the score,   */
-/* in the free room the row already had — two short lines, no taller     */
-/* than the row. Wide: a line of its own under the row, where the board  */
-/* has height to spare and its row has no width to spare.                */
+/* Three forms of one line, chosen here; the full sentence is always the */
+/* line's text for a screen reader, the compact forms are aria-hidden.   */
+/*   wide   — the full sentence, on a line of its own under the row,     */
+/*            where the board has height to spare.                       */
+/*   docked — the short value over the estimator's name, two short lines */
+/*            in the row's own height, in the free room beside the score.*/
+/*   small  — the short value alone, in a box of fixed width.            */
+/* Present from the deal on in a game with a computer seat and the same  */
+/* box filled or empty, so a board never moves when an estimate lands    */
+/* [W6-60]. Nothing here wraps or ends in an ellipsis.                   */
 /* ===================================================================== */
 
 .estimate {
-  flex: 1 1 0;
-  min-width: 0;
+  flex: 0 0 auto;
   margin-left: auto;
-  height: 2.2rem;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: center;
-  font-size: 0.72rem;
-  line-height: 1.1rem;
-  text-align: right;
-}
-
-.estimate > span {
-  max-width: 100%;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.estimate-value {
-  font-weight: 700;
-}
-
-.estimate-by {
-  color: var(--dim);
+  text-align: right;
 }
 
 .estimate + .score {
   margin-left: 0;
 }
 
-/* The estimate gives way, never the player's name. */
-.player-header:has(.estimate) > .who {
-  flex-shrink: 0;
+/* Out of sight, still read: the clip used for every visually hidden text. */
+.estimate-full {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
 }
 
-.player-board.mini .estimate {
-  height: 1.8rem;
-  font-size: 0.62rem;
-  line-height: 0.9rem;
+.estimate-compact {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  height: 2.2rem;
+  font-size: 0.72rem;
+  line-height: 1.05rem;
 }
 
+.estimate-short {
+  font-weight: 700;
+}
+
+.estimate-name {
+  color: var(--dim);
+}
+
+/* Wide: the full sentence under the row; the compact form is not drawn. */
 .app[data-layout='wide'] .player-header:has(.estimate) {
   position: relative;
   margin-bottom: 1.3rem;
-}
-
-.app[data-layout='wide'] .player-header:has(.estimate) > .who {
-  flex-shrink: 1;
 }
 
 .app[data-layout='wide'] .estimate {
@@ -2559,36 +2553,56 @@ input {
   left: 0;
   right: 0;
   height: 1.3rem;
-  flex-direction: row;
-  justify-content: flex-end;
-  align-items: baseline;
-  gap: 0.35rem;
+  font-size: 0.72rem;
+  line-height: 1.3rem;
+}
+
+.app[data-layout='wide'] .estimate-full {
+  position: static;
+  width: auto;
+  height: auto;
+  clip-path: none;
+}
+
+.app[data-layout='wide'] .estimate-value {
+  font-weight: 700;
+}
+
+.app[data-layout='wide'] .estimate-by {
+  color: var(--dim);
+}
+
+.app[data-layout='wide'] .estimate-compact {
+  display: none;
 }
 
 .app[data-layout='wide'] .estimate + .score {
   margin-left: auto;
 }
 
-.estimate-short {
+/* Small: the short value alone, in a fixed box, so a header that wraps
+   (side by side) wraps the same way filled or empty. */
+.player-board.mini .estimate {
+  width: 2.6rem;
+}
+
+.player-board.mini .estimate-compact {
+  height: 1.6rem;
+  font-size: 0.62rem;
+}
+
+.player-board.mini .estimate-name {
   display: none;
 }
 
-/* A board shown small: the short form for the eye, and the full words still
-   its text for a screen reader [W6-58], [W6-59]. */
-.player-board.mini .estimate {
-  flex: 0 0 auto;
-}
-
-.player-board.mini .estimate-value,
-.player-board.mini .estimate-by {
+/* Stacked, the small board's row has no room for a value beside its name,
+   pill and score; its seat's number is already on the badge, so the name
+   is kept for a screen reader and not drawn. */
+.app[data-layout='stack'] .player-board.mini .player-header:has(.estimate) h2 {
   position: absolute;
   width: 1px;
   height: 1px;
   overflow: hidden;
   clip-path: inset(50%);
-}
-
-.player-board.mini .estimate-short {
-  display: block;
-  font-weight: 700;
+  white-space: nowrap;
 }
