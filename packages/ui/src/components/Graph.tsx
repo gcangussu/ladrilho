@@ -61,6 +61,7 @@ interface Graph {
   name: string;
   /** The hidden table's caption, which tells it from the record's log [W6-92]. */
   tableCaption: string;
+  /** The figure's caption, above the drawing: whose estimates these are [W6-90]. */
   caption: string;
   yTicks: Tick[];
   reference: number;
@@ -87,8 +88,8 @@ function xTicks(last: number): number[] {
   return at;
 }
 
-/** Whose estimates these are, in [W6-58]'s names [W6-90]. */
-function caption(plotted: readonly PlyRecord[], players: Players): string {
+/** Whose estimates these are, in [W6-58]'s names and seat order [W6-90]. */
+function estimators(plotted: readonly PlyRecord[], players: Players): string[] {
   const names: string[] = [];
   for (const seat of SEATS) {
     const levels: Level[] = [];
@@ -100,7 +101,7 @@ function caption(plotted: readonly PlyRecord[], players: Players): string {
       names.push(estimatorName(seat, level, players));
     }
   }
-  return `as ${names.join(' and ')} saw it`;
+  return names;
 }
 
 function graphOf(kind: Kind, history: readonly PlyRecord[], players: Players): Graph | null {
@@ -149,7 +150,8 @@ function graphOf(kind: Kind, history: readonly PlyRecord[], players: Players): G
 
   const lastPlotted = plotted[plotted.length - 1].estimate as Estimate;
   const shorts = SEATS.map((seat) => estimateWords(lastPlotted, seat, players).short);
-  const says = caption(plotted, players);
+  const names = estimators(plotted, players);
+  const says = `as ${names.join(' and ')} saw it`;
   const title = kind === 'chance' ? 'Chance to win' : 'Lead in points';
   const moves = count === 1 ? '1 move' : `${count} moves`;
 
@@ -158,7 +160,7 @@ function graphOf(kind: Kind, history: readonly PlyRecord[], players: Players): G
     title: kind === 'chance' ? 'chance to win, %' : 'lead, points',
     name: `${title} over ${moves}; latest: Player 1 ${shorts[0]}, Player 2 ${shorts[1]}, ${says}`,
     tableCaption: `${title}, by move`,
-    caption: says,
+    caption: `Each point is an estimate by ${names.join(' or ')}, made on its own move.`,
     yTicks: [low, middle, high].map((v, i) => ({ at: yOf(v), label: yLabels[i] })),
     reference: yOf(middle),
     xTicks: xTicks(count).map((ply) => ({
@@ -211,6 +213,7 @@ function GraphFigure(props: { graph: Graph }): JSX.Element {
   const g = (): Graph => props.graph;
   return (
     <figure class="estimate-graph" data-kind={g().kind}>
+      <figcaption class="estimate-graph-caption">{g().caption}</figcaption>
       <svg
         class="estimate-graph-svg"
         role="img"
@@ -269,28 +272,31 @@ function GraphFigure(props: { graph: Graph }): JSX.Element {
           )}
         </For>
       </svg>
-      <table class="sr-only">
-        <caption>{g().tableCaption}</caption>
-        <thead>
-          <tr>
-            <th scope="col">move</th>
-            <th scope="col">Player 1</th>
-            <th scope="col">Player 2</th>
-          </tr>
-        </thead>
-        <tbody>
-          <For each={g().rows}>
-            {(row) => (
-              <tr>
-                <th scope="row">{row.ply}</th>
-                <td>{row.values[0]}</td>
-                <td>{row.values[1]}</td>
-              </tr>
-            )}
-          </For>
-        </tbody>
-      </table>
-      <figcaption class="estimate-graph-caption">{g().caption}</figcaption>
+      {/* Hidden by a wrapper, not on the table itself: a table's clip and
+          overflow stop at its grid, and its caption is drawn outside it. */}
+      <div class="sr-only">
+        <table>
+          <caption>{g().tableCaption}</caption>
+          <thead>
+            <tr>
+              <th scope="col">move</th>
+              <th scope="col">Player 1</th>
+              <th scope="col">Player 2</th>
+            </tr>
+          </thead>
+          <tbody>
+            <For each={g().rows}>
+              {(row) => (
+                <tr>
+                  <th scope="row">{row.ply}</th>
+                  <td>{row.values[0]}</td>
+                  <td>{row.values[1]}</td>
+                </tr>
+              )}
+            </For>
+          </tbody>
+        </table>
+      </div>
     </figure>
   );
 }

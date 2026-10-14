@@ -738,12 +738,16 @@ computes nothing.*
   contains none.
 - **[W6-90]** Each graph MUST be labelled with its kind and unit: `chance to win, %` or
   `lead, points` as its y axis's title, drawn horizontally above the plot, and `move` as the x
-  axis's title. Its `<figcaption>` MUST say whose estimates these are: `as <names> saw it`, where
-  `<names>` lists, in seat order and joined by ` and `, each distinct estimator (`by`, `level`)
-  among that graph's points, named as [W6-58] names it — the level's word (`master`), prefixed
-  `Player N's` when both seats of `seating.players` are computers. So `as master saw it`, and with
-  two computers `as Player 1's ruthless saw it` or `as Player 1's master and Player 2's master saw
-  it`.
+  axis's title. Its `<figcaption>`, the figure's first child so that it is read above the
+  drawing it qualifies, MUST say in a sentence whose estimates these are: `Each point is an
+  estimate by <names>, made on its own move.`, where `<names>` lists, in seat order and joined by
+  ` or `, each distinct estimator (`by`, `level`) among that graph's points, named as [W6-58]
+  names it — the level's word (`master`), prefixed `Player N's` when both seats of
+  `seating.players` are computers. So `Each point is an estimate by master, made on its own
+  move.`, and with two computers `… by Player 1's ruthless, …` or `… by Player 1's master or
+  Player 2's master, …`. (It was once the fragment `as <names> saw it`, below the drawing,
+  under the x axis's title, where it read as part of the axis rather than as a sentence about
+  the lines.)
 - **[W6-91]** When no record of `history` has an estimate, the component MUST render no `<svg>`,
   and instead one paragraph: `No estimates in a game of two people.` when both of
   `seating.players` are `null`, and `No estimates yet.` otherwise — an empty history, or a game
@@ -752,8 +756,14 @@ computes nothing.*
   span and the latest point: `<Kind> over <N> move(s); latest: Player 1 <v0>, Player 2 <v1>,
   <caption>`, where `<Kind>` is `Chance to win` or `Lead in points`, `<N>` is `history.length`,
   `<v0>` and `<v1>` are each seat's short value ([W6-58]: `62%`, `+4 pt`, `−4 pt`, `even`,
-  `win`, `loss`) at the graph's last point, and `<caption>` is [W6-90]'s. Beside the `<svg>`, in
-  its `<figure>`, a visually hidden `<table>` MUST hold the graph's data: a `<caption>` of
+  `win`, `loss`) at the graph's last point, and `<caption>` is `as <names> saw it`, with
+  `<names>` [W6-90]'s list joined by ` and ` (`as master saw it`, `as Player 1's master and
+  Player 2's master saw it`). Beside the `<svg>`, in its `<figure>`, a visually hidden `<table>`
+  MUST hold the graph's data. It is hidden by a wrapping element that carries `sr-only`, not by
+  `sr-only` on the `<table>`: a table's clip and overflow apply to its grid, and its `<caption>`
+  is drawn outside the grid, so a hidden table's caption was drawn on top of the figcaption and,
+  positioned against the dialog rather than its scroller, stayed there as the record scrolled.
+  The table has a `<caption>` of
   `<Kind>, by move` (`Chance to win, by move`, `Lead in points, by move`), which tells it from the
   record's log, a header row `move`, `Player 1`, `Player 2`, then one row per plotted ply, in ply order, giving the ply and each
   seat's value in [W6-58]'s sentence for that seat (`62% to win`, `Ahead by 4 points`). The
@@ -1165,9 +1175,13 @@ tests and the mutations below are about.*
   - [W6-89]: the solid and dashed lines, the circle and square markers, each end label at its own
     series' last point, the two labels apart when the series meet at the reference rule, and,
     by a check of `Graph.tsx` and its block of `styles.css`, no accent, tile or `--loss` token;
-  - [W6-90]'s titles and caption, with one computer and with two, of one kind and of two;
+  - [W6-90]'s titles and caption, with one computer and with two, of one kind and of two, and
+    the caption the figure's first child;
   - [W6-91]'s two sentences, decided from `seating.players`, and no `<svg>`;
-  - [W6-92]'s accessible name on both kinds, a decided lead included, and the hidden table's rows;
+  - [W6-92]'s accessible name on both kinds, a decided lead included, the hidden table's rows,
+    and `sr-only` on the table's wrapper rather than the table. The escaped caption is drawn by
+    WebKit and not by Chromium, so the browser lane, which runs Chromium alone, cannot see it,
+    and the check is of the markup;
   - [W6-93] by rendering the same history twice into separate roots and comparing `innerHTML`, and
     by finding no `id` attribute;
   - [W6-94]'s `viewBox`, and the stylesheet's size for the graph.
@@ -1201,8 +1215,10 @@ tests and the mutations below are about.*
   | `Graph.tsx` `layout`: the lead graph first | [W6-87] [W6-88] [W6-90] *gives two graphs…* (1 red) |
   | `Graph.tsx` `GraphFigure`: seat 1's line not dashed | [W6-89] *tells the series apart…* (1 red) |
   | `styles.css`: seat 1's line stroked with `var(--accent)` | [W6-89] [W6-94] *draws in neutral ink…* (1 red) |
-  | `Estimate.tsx` `estimatorName`, which `Graph.tsx` `caption` calls: two computers named by level alone (`both = false`) | [W6-87] [W6-88] [W6-90] *gives two graphs…*; [W6-90] *names one computer…, and two of one kind by seat* (2 red) |
+  | `Estimate.tsx` `estimatorName`, which `Graph.tsx` `estimators` calls: two computers named by level alone (`both = false`) | [W6-87] [W6-88] [W6-90] *gives two graphs…*; [W6-90] *names one computer…, and two of one kind by seat* (2 red) |
   | `Graph.tsx` `graphOf`: the hidden table's caption emptied | [W6-92] *names each graph…* (1 red) |
+  | `Graph.tsx` `GraphFigure`: `sr-only` moved from the wrapper back onto the `<table>` | [W6-92] *names each graph…* (1 red) |
+  | `Graph.tsx` `GraphFigure`: the figcaption moved after the hidden table, below the drawing | [W6-87] [W6-88] [W6-90] *gives two graphs…* (1 red) |
   | `Graph.tsx` `graphOf`: the accessible name's latest point taken from the first estimate | [W6-92] *names each graph…* (1 red) |
   | `Graph.tsx` `graphOf`: a multiple of 10 within 3 of `N` keeps its label | [W6-87] *ticks the moves…* (1 red) |
 
