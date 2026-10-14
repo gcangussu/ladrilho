@@ -492,6 +492,85 @@ requirements are about reading it honestly.*
   as before it existed, and nothing in `bot`, `ai-bot`, `alphazero-bot` or either worker changes
   for it.
 
+### The estimate graph
+
+*Added for intent 0014 — The game's record, for the curious. The record's graph draws the
+estimates the record already holds, one per computer ply ([W6-55], [W6-56]): it reads them and
+computes nothing.*
+
+- **[W6-85]** The graph MUST be `EstimateGraph(props: { history: readonly PlyRecord[]; seating:
+  Seating })` in `src/components/Graph.tsx`, and MUST be a function of those props alone. Of a
+  record it reads `ply` and `estimate`, and of the seating only `players`; it MUST NOT import the
+  state module except for types, issue a request, or convert an estimate's kind ([W6-56]). Its
+  only words for a value are 0012's ([W6-58]).
+- **[W6-86]** For each kind `k` present in `history`, the graph of kind `k` MUST plot, for each
+  seat `p`, one point per record whose `estimate` is non-null and of kind `k`, at
+  `(record.ply, estimate.chance[p])` for a chance and `(record.ply, estimate.lead[p])` for a lead
+  — the seat's own entry, negated by nothing ([W6-55]). A record whose `estimate` is null, or of
+  the other kind, MUST contribute no point to it. A decided lead ([W6-56]) is plotted at its
+  margin, like any other.
+- **[W6-87]** A history whose estimates are all of one kind MUST give one graph; one with both
+  MUST give two, the chance graph first. Each is its own `<figure>` holding its own `<svg>`, and
+  each graph's axes are its kind's:
+
+  | Kind | y range | y ticks labelled | Reference rule |
+  | --- | --- | --- | --- |
+  | chance | `[0, 100]`, fixed | `0`, `50`, `100` | at 50 |
+  | lead | `[−M, M]`, `M` the smallest multiple of 5 that is at least 5 and at least every plotted `|lead|` | `−M`, `0`, `+M` (`−` is U+2212) | at 0 |
+
+  The x range MUST be `[1, max(2, N)]`, `N = history.length` — the game so far, persons' plies
+  included — with a tick at `1`, at every multiple of 10 up to `N`, and at `N`, each labelled
+  with its ply, once each (one tick when `N` is 1; `N`'s own when `N` is a multiple of 10). A
+  multiple of 10 that `N` exceeds by 3 or less keeps its tick and loses its label, so that it does
+  not collide with `N`'s.
+- **[W6-88]** Within a graph, each seat's series MUST be one straight-line path whose vertices
+  are exactly that seat's points of [W6-86], in ply order: consecutive computer plies of the kind
+  are joined directly, and no vertex is placed at any other ply — none at a person's ply, carried
+  forward or interpolated. A series of one point has a marker and no line.
+- **[W6-89]** The two series MUST be told apart by more than colour ([0003 U3-36]'s rule, kept
+  for lines):
+
+  | Seat | Line | Marker at each point | End label |
+  | --- | --- | --- | --- |
+  | 0 | solid | filled circle | `Player 1` |
+  | 1 | dashed | hollow square | `Player 2` |
+
+  The end label is drawn to the right of the series' last point, at its height; where the two
+  labels would overlap — at the reference rule, where mirrored series meet — they MUST be moved
+  apart vertically until they do not, the higher series' label above. Strokes, fills and text MUST
+  use the stylesheet's neutral tokens (`--ink`, `--text`, `--dim`, `--faint`, `--rule`,
+  `--surface`) and MUST NOT use the accent (`--accent`, `--accent-soft`), which means "you can act
+  here", a tile's colour (`--tile-*`, `--ghost-*`), or `--loss`. The graph is not a control and
+  contains none.
+- **[W6-90]** Each graph MUST be labelled with its kind and unit: `chance to win, %` or
+  `lead, points` as its y axis's title, drawn horizontally above the plot, and `move` as the x
+  axis's title. Its `<figcaption>` MUST say whose estimates these are: `as <names> saw it`, where
+  `<names>` lists, in seat order and joined by ` and `, each distinct estimator (`by`, `level`)
+  among that graph's points, named as [W6-58] names it — the level's word (`master`), prefixed
+  `Player N's` when both seats of `seating.players` are computers. So `as master saw it`, and with
+  two computers `as Player 1's ruthless saw it` or `as Player 1's master and Player 2's master saw
+  it`.
+- **[W6-91]** When no record of `history` has an estimate, the component MUST render no `<svg>`,
+  and instead one paragraph: `No estimates in a game of two people.` when both of
+  `seating.players` are `null`, and `No estimates yet.` otherwise — an empty history, or a game
+  with a computer before its first move.
+- **[W6-92]** Each `<svg>` MUST carry `role="img"` and an `aria-label` that names the kind, the
+  span and the latest point: `<Kind> over <N> move(s); latest: Player 1 <v0>, Player 2 <v1>,
+  <caption>`, where `<Kind>` is `Chance to win` or `Lead in points`, `<N>` is `history.length`,
+  `<v0>` and `<v1>` are each seat's short value ([W6-58]: `62%`, `+4 pt`, `−4 pt`, `even`,
+  `win`, `loss`) at the graph's last point, and `<caption>` is [W6-90]'s. Beside the `<svg>`, in
+  its `<figure>`, a visually hidden `<table>` MUST hold the graph's data: a header row `move`,
+  `Player 1`, `Player 2`, then one row per plotted ply, in ply order, giving the ply and each
+  seat's value in [W6-58]'s sentence for that seat (`62% to win`, `Ahead by 4 points`). The
+  `<svg>`'s own text is therefore presentation and the table the data.
+- **[W6-93]** The same props MUST render the same markup, byte for byte: no `id` attribute
+  anywhere in the component's output, nothing drawn from a random source or the clock, and every
+  coordinate written with at most one decimal place. Dashes and markers are drawn as attributes
+  and shapes, not as `<marker>` or `<pattern>` definitions that would need ids.
+- **[W6-94]** Each `<svg>` MUST have the `viewBox` `0 0 640 256` and be drawn at `40rem × 16rem`
+  — one unit a sixteenth of a rem — and MUST NOT be scaled down to fit: a narrower container
+  scrolls, as the record's dialog does. Its text MUST be at least 12 units high.
+
 ## Amendments to 0003
 
 Each row is an edit to `spec/0003-web-interface.md`. Identifiers there are append-only, so a
@@ -775,6 +854,40 @@ the seam as much as the number: on which publish it changes, and on which it mus
   mutant; the first row takes it at the next point it differs, when the view is built. And
   dropping the deal's `estimator = null` changes nothing, because the deal also clears
   `lastChoice` and the estimate needs both.
+
+### The estimate graph
+
+*Added for intent 0014. The graph is rendered directly, with hand-made records: what it may get
+wrong is which entry it reads, where it draws, and what it draws between — and those are what the
+tests and the mutations below are about.*
+
+- **[W6-95]** `test/graph.test.tsx` MUST render `EstimateGraph` directly from hand-made
+  `PlyRecord[]` and assert:
+  - [W6-86] and [W6-88], with values whose two sides differ (no chance of 50, no lead of 0): each
+    seat's path's vertices are exactly that seat's entries at the estimate plies, mapped through
+    the axes; no vertex at a person's ply; a series of one point has no line;
+  - [W6-87] for each kind alone and for both — the two-graph order, the chance range fixed, the
+    lead range growing with the data and including 0 — and the x range over `history.length`,
+    persons' plies included, and the single-ply history;
+  - [W6-89]: the solid and dashed lines, the circle and square markers, each end label at its own
+    series' last point, the two labels apart when the series meet at the reference rule, and,
+    by a check of `Graph.tsx` and its block of `styles.css`, no accent, tile or `--loss` token;
+  - [W6-90]'s titles and caption, with one computer and with two, of one kind and of two;
+  - [W6-91]'s two sentences, decided from `seating.players`, and no `<svg>`;
+  - [W6-92]'s accessible name on both kinds, a decided lead included, and the hidden table's rows;
+  - [W6-93] by rendering the same history twice into separate roots and comparing `innerHTML`, and
+    by finding no `id` attribute;
+  - [W6-94]'s `viewBox`, and the stylesheet's size for the graph.
+
+  Each test that guards a seat, a kind, a vertex set or the empty state MUST have been seen to
+  fail, under the rules in `CLAUDE.md`, and each mutation is recorded here as [W6-66] records
+  them. At least: the two series swapped; a lead plotted on the chance axis; a ply without an
+  estimate drawn as a point; a series interpolated across a person's ply; the empty state wrong
+  for a game of two people; a non-deterministic id.
+
+  | Mutation (function: edit) | Test that went red |
+  | --- | --- |
+  | *To be filled when the tests exist.* | |
 
 ### Traceability exemptions
 

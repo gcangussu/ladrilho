@@ -2840,3 +2840,80 @@ input {
 .player-board.mini .estimate + .score {
   margin-left: auto;
 }
+
+/*
+ * The estimate graph [W6-85] through [W6-94]. Neutral ink only: no accent,
+ * which means "you can act here", and no tile's colour. The two series are
+ * told apart by line, marker and label as well as by shade [W6-89]. Drawn at
+ * its own size and never scaled down; a narrower dialog scrolls [W6-94].
+ */
+.estimate-graphs {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.estimate-graph {
+  margin: 0;
+}
+
+.estimate-graph-svg {
+  display: block;
+  width: 40rem;
+  height: 16rem;
+  max-width: none;
+  flex: none;
+}
+
+.estimate-graph-svg text {
+  fill: var(--dim);
+  font-family: var(--font-body);
+}
+
+.estimate-graph-svg .graph-title,
+.estimate-graph-svg .graph-end-label {
+  fill: var(--text);
+  font-weight: 600;
+}
+
+.graph-grid,
+.graph-axis-tick {
+  stroke: var(--rule);
+  stroke-width: 1;
+}
+
+.graph-reference {
+  stroke: var(--faint);
+  stroke-width: 1;
+}
+
+.graph-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.graph-series-0 .graph-line {
+  stroke: var(--ink);
+}
+
+.graph-series-1 .graph-line {
+  stroke: var(--dim);
+}
+
+.graph-marker-0 {
+  fill: var(--ink);
+}
+
+.graph-marker-1 {
+  fill: var(--surface);
+  stroke: var(--dim);
+  stroke-width: 1.5;
+}
+
+.estimate-graph-caption,
+.estimate-graph-empty {
+  margin: 0.25rem 0 0;
+  color: var(--dim);
+  font-size: 0.875rem;
+}
