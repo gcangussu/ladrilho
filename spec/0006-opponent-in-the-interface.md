@@ -1119,11 +1119,14 @@ on the same `setView`.*
   kept open across a deal; the round row reading the other seat's figures; and a report field left
   out of the `Search` cell.
 
-  Run 2026-10-14 against an archive of the commit that built the record, unpacked under this
+  Re-run 2026-10-14 against an archive of the tree merged with the real graph ([W6-85] onward),
+  after the log came to be found by its caption — before that, two of the tests below were red
+  with no mutation at all, and a table recorded against them proved nothing. Unpacked under this
   agent's scratch directory: each anchor asserted to match exactly once and the mutated file read
   back before the run, the original written back and read back after it. The fast lane runs
-  `test/record.test.tsx` and `test/opponent.test.tsx` (62 tests, 1 skipped); unmutated the copy is
-  green, and its `src` is identical to the tree's afterwards. Test names are abbreviated to their
+  `test/record.test.tsx` and `test/opponent.test.tsx` (62 tests, 1 skipped), the browser lane
+  `test/browser/table.test.ts`'s [W6-73] cases; unmutated the copy is green in both, and its
+  `src` is identical to the tree's afterwards. Test names are abbreviated to their
   identifiers and first words; *whole game* is `record.test.tsx`'s game with the record open, and
   *property* is [W6-29]'s, against `easy` and against `master`.
 
@@ -1134,6 +1137,8 @@ on the same `setView`.*
   | `game.ts` `submit`: the record's estimate read from the other seat (`1 − mover` for the asker's seat) | the same six (6 red) |
   | `game.ts` `deal`: the record not cleared (`history = []` removed) | [W6-67] *is unchanged by a failed reply and by a stale one*; [W6-67] *is cleared by every kind of deal*; [W6-72] *closes on a deal made while it is open…* (3 red) |
   | `App.tsx`: the dialog kept open across a deal (the effect on `history` emptying made a no-op) | [W6-72] *closes on a deal made while it is open, and is closed on a fresh mount* (1 red) |
+  | `App.tsx`: the dialog closed on a deal without returning focus (`setRecording(false)` for `closeRecord()`) | the same (1 red) |
+  | `styles.css`: the heading row scrolling with the content (the dialog itself the scroller, `.record-body` not), browser lane | [W6-73] [W6-71] *keeps the page still…* at 844 × 390 and 390 × 844: Close off the left edge after scrolling right (2 red). At 1280 × 800 nothing scrolls sideways, so it stays green |
   | `Record.tsx` `roundWords`: each seat's figures read from the other seat's entry (`players[1 − seat]`) | [W6-78] *says each seat's round from its own entry…* (1 red). The rendered round row of *logs a game of two people* stays green under it: it compares the row with `roundWords` itself, and its pattern allows any score. The unit test's seats differ, which is what catches it |
   | `Record.tsx` `searchWords`: a tier's `depth` left out | [W6-74] [W6-75] [W6-76] [W6-79] *reads each kind of computer row…*; [W6-76] *words a tier's value…, and each report form* (2 red) |
   | `Record.tsx` `searchWords`: the expert's `rootVisits` left out | [W6-76] *words a tier's value…, and each report form* (1 red) |
