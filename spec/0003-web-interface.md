@@ -7,6 +7,7 @@ intent:
   - 0002 — Web interface
   - 0005 — A board that holds still, and lines beside its wall
   - 0011 — A table, not a page
+  - 0013 — The table on a wide screen
 prefix: U3
 depends-on: 0001 — Engine core, 0002 — Engine conformance vectors
 summary: >
@@ -668,13 +669,19 @@ next to the tiles that earned them.
   | `side` | ≥ 50, on a screen at least as wide as it is tall | the docked board, the table, and the small board, side by side |
   | `stack` | otherwise | the small board above the table, the docked board below it |
 
-  The table is the five factory displays and the centre: in a ring about the centre in `wide`, and
+  The table is the five factory displays and the centre: in a ring about the centre in `wide`
+  *(amended by [U3-106]: in `wide` the ring is three plates in an arc above the centre and two in
+  an arc below it, the plates all one size, and the centre a pool the ring's full width between
+  the arcs, sized for its largest content — because a centre that draws every tile needs more
+  room than the middle of a round ring has; the bag and lid counts did not ask for it)*, and
   in `stack` where the main element is at least 40 root ems wide and the screen at least 56 tall —
   a tablet held upright; elsewhere as three displays over two with the centre beneath. A display in
   the rows is as wide as a third of the table allows, to 7.25rem. With nothing expanded — no
   disclosure open and no sheet raised — the document MUST NOT scroll vertically at 1280 × 800,
   844 × 390 and 390 × 844 at the default root font-size, in addition to [U3-58]'s horizontal rule.
-  Where nothing can be measured the arrangement is `wide`.
+  Where nothing can be measured the arrangement is `wide`. *(Amended by [U3-105] and [U3-106]: in
+  `wide` the bag and lid counts sit in the table's column beneath the ring, and every tile on the
+  table is drawn.)*
 
   *Side by side only in landscape: on an upright screen wide enough for `side` — a tablet, a tall
   window — the three columns strand the height and squeeze the table, where stacking uses it.*
@@ -688,12 +695,15 @@ next to the tiles that earned them.
   seating in the new-game sheet of [0006 W6-49], which the top bar's new-game control opens.
   *(They sat above the factories, in the play area, though changing one ends the game. The
   seating spent one change behind a disclosure of its own, dealing at every change, before
-  [0006 W6-49] gathered it into the sheet.)*
+  [0006 W6-49] gathered it into the sheet.)* *(Amended by [U3-105]: the bag's disclosure is the
+  arrangement in `side` and `stack` only. In `wide` the counts are in view throughout and the top
+  bar carries no disclosure for them. The seating is unchanged in every arrangement.)*
 
 - **[U3-97]** A source control MUST draw its group as **one** tile carrying the group's count as a
   numeral when the count exceeds one, and never as that many tiles. Its accessible name is
   unchanged ([U3-54]). *(A pick is always every tile of its colour, so the control is drawn as the
-  one thing it is.)*
+  one thing it is.)* *(Amended by [U3-106]: in `side` and `stack` only. In `wide` a control draws
+  every tile of its group and no numeral; it is still one control.)*
 
 - **[U3-98]** On the board of the player to move, where its lines are beside its wall, an
   **available** pattern line MUST extend across the wall row it feeds: a press anywhere on wall
@@ -751,6 +761,92 @@ next to the tiles that earned them.
   *[U3-14] shows the seed because "with no undo and nothing surviving a reload, it is the only way
   to see a deal twice" — and until now seeing it twice meant editing the URL. This is the same
   promise, kept from inside the page.*
+
+### The table on a wide screen
+
+Serves *intent 0013 — The table on a wide screen*. Where both boards sit either side of the table —
+the `wide` arrangement of [U3-95], decided by the same rule and by nothing new — the bag and lid
+are in view for the whole game, and every tile on the table is drawn as a tile. `side` and
+`stack` are unchanged, down to their markup.
+
+- **[U3-105]** In `wide` the bag and lid counts of [U3-34] MUST be in view at all times, with nothing
+  to open: no disclosure, no sheet, no control. They MUST be the same table the disclosure holds
+  elsewhere — the same caption, a row per colour headed by its tile, and `Bag` and `Lid` columns —
+  so assistive technology is told the same thing in every arrangement, and it MUST appear exactly
+  once in the document in every arrangement: in `wide` the top bar carries no disclosure for it.
+  It MUST sit out of the play area: in the table's column, beneath the ring and beside the key
+  hints, overlapping no factory display, the centre, either board or either board's workings.
+  Counts by colour remain all that is shown ([0001 E1-55]).
+
+  *Beneath the ring because that is where 1280 × 800 has room: the boards' columns are taken,
+  from the first round on, by their workings ([U3-102]), and the top bar has width but not the
+  height of a six-row table. The table and not a transposed copy of it, because a table that
+  changes its rows and columns with the window says a different thing to a screen reader in each.
+  At the end of a game the result of [U3-44] is laid over the bottom of the table's column and
+  may cover it; there is no move left for the counts to inform.*
+
+- **[U3-106]** In `wide` a source control MUST draw every tile of its group, each a tile carrying
+  [U3-36]'s second cue, and MUST NOT carry a count numeral. It is still **one** control per
+  `(source, colour)` group ([U3-79]) — the tiles are its content, not controls of their own — and:
+
+  - a control's tiles MUST sit side by side within that control's own box, so a group is drawn
+    together and never split between controls or interleaved with another group's tiles; the
+    boxes of two controls MUST NOT overlap;
+  - a factory display MUST draw its controls in at most two rows, within the footprint of
+    [U3-81], which is the same for every display whatever it holds: two by two where its groups
+    allow it, and a group of three as a row of three with the remaining tile beside or beneath
+    it;
+  - the centre MUST draw its groups in the order of [U3-79]'s controls, wrapping as the pool's
+    width requires, a group wider than a row wrapping within its own control, and then the
+    first-player marker. The room the centre is given MUST hold the largest centre a round can
+    produce — `NUM_FACTORIES * (FACTORY_SIZE - 1)` tiles in any split among the colours, and the
+    marker — without overlapping a factory display, so no display moves or is covered as the
+    centre fills ([U3-81]);
+  - every control MUST still be at least 44 × 44 CSS pixels ([U3-59]).
+
+  In `side` and `stack` [U3-97] stands, and their markup is the markup it was.
+
+  *"Two by two where the groups allow it", because a control is a box: four tiles in a square
+  with three of one colour would put the fourth tile inside the three's control, or give the three
+  a box that is not a rectangle. A group of three is the one split that does not allow it.*
+
+  *The worst centre is the largest, and checking it is enough: a group losing a tile or a colour
+  vanishing never makes a wrapped pool need more rows, because every control only narrows.*
+
+- **[U3-107]** Pressing any tile of a group in `wide` MUST be exactly activating that group's
+  control ([U3-22], [U3-26]): it selects the group, or clears it if it is the selection. While a
+  group is the selection, its control MUST carry `aria-pressed="true"` and every tile it draws
+  MUST be shown selected — not only the tile that was pressed.
+
+- **[U3-108]** The arrangement MUST change only what a source control draws and where the bag and
+  lid counts sit. In every arrangement the source controls MUST be the same set ([U3-79]), with the
+  same accessible names ([U3-54]) — `pickName`'s, which states the count in words — in the same
+  roving order within the same two groups ([U3-53]), and the same availability ([U3-29]).
+
+- **[U3-109]** [U3-95]'s rule holds with this content in place: with nothing expanded the document
+  MUST NOT scroll vertically or horizontally at 1280 × 800 at the default root font-size, with the
+  bag and lid counts in view and the centre's room sized for its largest content ([U3-106]); and at
+  844 × 390 and 390 × 844 it holds as before.
+
+- **[U3-110]** Verification is split by what each lane can see, per [U3-73]. In jsdom the
+  arrangement is always `wide` ([U3-95]: nothing can be measured), so the displays and the bag and
+  lid counts MUST each take the arrangement as a value from their caller — a test MUST be able to
+  render either drawing and either placement directly, not only through the measured interface.
+  The fast suite asserts, in both arrangements: the number of tiles inside each control and the
+  presence or absence of the numeral ([U3-97], [U3-106]); identical names and roving order
+  ([U3-108]); selection marking the control and every tile in it ([U3-107]); and the counts'
+  table present exactly once, outside any disclosure in `wide` and inside the top bar's closed one
+  elsewhere ([U3-105]). The [U3-73] lane asserts, at 1280 × 800: the counts on screen, inside the
+  viewport and overlapping nothing [U3-105] names; tiles inside their own control's box and
+  control boxes disjoint ([U3-106]); the centre at every split of exactly
+  `NUM_FACTORIES * (FACTORY_SIZE - 1)` tiles among the five colours, with the marker, each posed as
+  a view, overlapping no factory display ([U3-106]) — the smaller pools resting on [U3-106]'s
+  argument that a control only narrows as a pool shrinks, and not on a check of their own; and no scroll ([U3-109]). And at 844 × 390 and
+  390 × 844 it asserts that nothing changed: the disclosure present and closed, one tile and a
+  numeral per control.
+
+  *A posed view, as [U3-44] and [U3-45] are posed: the largest centre is reachable but random play
+  does not reach it, and a view is not a state ([0001 E1-5]).*
 
 ## Invariants
 
@@ -830,7 +926,8 @@ budget.
   lane also drives a **real worker** — a tier's ply with the main thread watched for a freeze, and
   one complete game from `expert` ([0008 A8-33]) — because jsdom has no `Worker`, no thread to keep
   free, and no way to tell a search that ran off it from one that did not.)* *(Extended by
-  [0012 T12-30]: a complete game with `master` on both seats, against the real master worker.)* Layout requirements need a
+  [0012 T12-30]: a complete game with `master` on both seats, against the real master worker.)* *(Extended by [U3-110]: for the wide table,
+  the layout halves of [U3-105], [U3-106] and [U3-109].)* Layout requirements need a
   layout engine and a reload requirement needs a reload; excusing them because jsdom has neither
   would excuse nine requirements that came straight from an intent.
 - **[U3-74]** The suite MUST assert that `packages/ui`'s `dependencies` are exactly `engine`, `bot`,
@@ -911,6 +1008,31 @@ budget.
   [0005 M5-8]'s lane. A whole-game test wants generous headroom for that reason, and a timing
   measurement wants `uptime` read before it is called a finding.*
 
+**Mutation records for the wide table**, in the manner of [0007 S7-31]: each was applied to a
+`git archive HEAD` copy with its anchor asserted to have matched before the file was written, run,
+and restored; none reached the tree. The browser lane's copy of this table sits beside the
+assertions in `test/browser/layout.test.ts`. Re-run them when the code they name moves.
+
+| Mutation | Fast suite | [U3-73] lane |
+| --- | --- | --- |
+| `PickButton`: one tile inside the control, the rest rendered after it (the one-control, contiguity rule) | [U3-106] tile count, [U3-107] every tile marked | [U3-106] tiles inside their own control |
+| factory `data-span='row'`: `grid-column: 1 / -1` dropped (contiguity in the plate) | — (jsdom has no boxes) | [U3-106]: "a tile of 2 teal tiles, factory 1 lies outside it" |
+| `Displays`: `loose` ignored, always drawn loose (unchanged outside `wide`) | both [U3-97] tests | [U3-108] changes nothing, at 844 × 390 and 390 × 844 |
+| `App`: `loose={layout() === 'wide'}` → `loose={true}` (unchanged outside `wide`) | — (jsdom is always `wide`) | [U3-108] changes nothing, at both sizes |
+| `App`: `bag={layout() !== 'wide'}` → `bag={true}` | [U3-105] exactly once | [U3-105] exactly once |
+| `Status`: `bag` defaulting to `false` | [U3-34] in `board.test` | — |
+| `PickButton`: `selected` withheld from a loose control | [U3-107] | — |
+| `--pool-h`: four rows of controls → three | — | the largest centre, both widths: "4,11,0,0,0: the centre covers 2 display(s)" first |
+| the counts' grid areas `'keys bag'` → `'keys keys' 'bag bag'` | — | [U3-105] "off screen", and nothing else |
+| `.supply-panel`: `grid-area: bag` dropped | — | **nothing**, correctly: auto-placement fills the same cell |
+
+The ninth row is why [U3-105]'s test asserts the counts inside the viewport and does not lean on
+[U3-95]'s scroll check: `.table` scrolls within itself, so content pushed past the bottom of the
+screen leaves the document's height alone and the scroll check green. And the largest-centre check
+found a real defect before any mutation: the factories' two-by-two rule for a group of four
+reached the centre's controls as well, so a centre of fifteen tiles of one colour was drawn two
+tiles wide and ran down over two plates — a split no deal the suite plays reaches.
+
 ### Traceability exemptions
 
 Exemptions are for requirements a test cannot observe — [0002 V2-31]'s categories: process
@@ -971,6 +1093,9 @@ documentation is right and this section is stale.
   — the layout requirements [U3-86] through [U3-92], and the two residues recorded beside them
 - Intent [0011 — A table, not a page](../intent/0011-a-table-not-a-page.md) — the arrangements,
   the board's strip, the rails and the curtain, [U3-95] through [U3-103]
+- Intent [0013 — The table on a wide screen](../intent/0013-the-table-on-a-wide-screen.md) — the
+  bag in view and every tile drawn, where the boards sit either side of the table, [U3-105]
+  through [U3-110]
 - Spec [0001 — Engine core](0001-engine-core.md)
 - Spec [0002 — Engine conformance vectors](0002-engine-conformance-vectors.md) — the traceability
   doctrine [U3-76] mirrors, and [0002 V2-31]'s exemption categories

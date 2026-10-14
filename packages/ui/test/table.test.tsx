@@ -14,8 +14,9 @@ import { CENTER, FLOOR, NUM_ROWS, decodeAction, wallColorAt } from 'engine';
 import type { AzulJSON } from 'engine';
 import { flush } from 'solid-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { factoryName, pickName, picksIn } from '../src/components/Displays.jsx';
+import { Displays, factoryName, pickName, picksIn } from '../src/components/Displays.jsx';
 import { lastMoveText } from '../src/components/PlayerBoard.jsx';
+import { openingGame } from './fixtures.js';
 
 type Screen = ReturnType<typeof render>;
 type Game = typeof import('../src/game.js');
@@ -52,7 +53,9 @@ beforeEach(() => {
 });
 
 describe('settings out of the play area [U3-96]', () => {
-  it('[U3-96] keeps the seats in the new-game sheet and the bag behind a closed disclosure', async () => {
+  // The bag's half is per arrangement since [U3-105], and jsdom is always
+  // `wide`: it is asserted in `wide.test`, where a test can choose.
+  it('[U3-96] keeps the seats in the new-game sheet', async () => {
     const { screen } = await mount();
     // No seat control in the page until the sheet is opened, and none in the
     // play area ever [0006 W6-49].
@@ -64,23 +67,25 @@ describe('settings out of the play area [U3-96]', () => {
     flush();
     const sheet = screen.getByRole('dialog', { name: 'New game' });
     expect(within(sheet).getAllByRole('radio').length).toBeGreaterThan(1);
-
-    const status = screen.getByRole('region', { name: 'Game status' });
-    const bag = within(status).getByRole('table').closest('details');
-    expect(bag, 'the bag counts are not behind a disclosure').not.toBeNull();
-    expect(bag!.open).toBe(false);
   });
 });
 
 describe('a pick drawn as the one thing it is [U3-97]', () => {
   // Seen red, on a copy, with the pick drawn as `<Repeat count>` tiles again:
   // the colour name appeared three times inside one control.
-  it('[U3-97] draws one tile and the count, never a row of tiles', async () => {
-    const { screen, game } = await mount();
-    const names = now(game).colorNames;
+  //
+  // The displays as `side` and `stack` draw them [U3-106]: the measured
+  // interface is always `wide` in jsdom, so the arrangement is handed to the
+  // component, as [U3-110] requires it can be.
+  it('[U3-97] draws one tile and the count, never a row of tiles', () => {
+    const game = openingGame(42);
+    const names = game.colorNames;
+    const screen = render(() => (
+      <Displays game={game} names={names} selection={null} available={() => true} onChoose={() => {}} />
+    ));
     let multiples = 0;
-    for (let source = 0; source < now(game).factories.length; source++) {
-      for (const pick of picksIn(now(game).factories[source], source)) {
+    for (let source = 0; source < game.factories.length; source++) {
+      for (const pick of picksIn(game.factories[source], source)) {
         const control = screen.getByRole('button', { name: pickName(pick, names) });
         expect(within(control).getAllByText(names[pick.color]), pickName(pick, names)).toHaveLength(1);
         if (pick.count > 1) {
