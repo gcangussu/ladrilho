@@ -2730,6 +2730,88 @@ input {
   padding: 0 0.6rem;
 }
 
+/* ------------------------------------------------------------------ */
+/* The game's record [0006 W6-70]..[0006 W6-79] — intent 0014          */
+/* A sheet like the new-game one, as wide as the screen allows; the     */
+/* table scrolls inside it both ways and never moves the document.      */
+/* ------------------------------------------------------------------ */
+
+/* The control: its word where the top bar has room, a list where it has not —
+   the word is still its name. */
+.record-icon {
+  display: none;
+}
+
+.app:not([data-layout='wide']) .record-icon {
+  display: inline-grid;
+  gap: 3px;
+  width: 1.1rem;
+}
+
+.record-icon i {
+  display: block;
+  height: 2px;
+  border-radius: 1px;
+  background: currentColor;
+}
+
+.app:not([data-layout='wide']) .record-word {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.sheet.record {
+  width: min(100%, 60rem);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.record-empty {
+  color: var(--dim);
+}
+
+.record-log {
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.record-log caption {
+  text-align: left;
+  font-weight: 700;
+  padding-bottom: 0.4rem;
+}
+
+.record-log th,
+.record-log td {
+  padding: 0.3rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--rule);
+}
+
+.record-log thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  color: var(--dim);
+  font-weight: 700;
+}
+
+.record-log tbody th {
+  font-weight: 700;
+  text-align: right;
+}
+
+.record-round td {
+  background: var(--sunk);
+  font-weight: 700;
+}
+
 /* ===================================================================== */
 /* The estimate [0006 W6-58]..[0006 W6-60] — intent 0012.                */
 /* Two drawn forms of one line, chosen here; the full sentence is always */
