@@ -1178,7 +1178,9 @@ tests and the mutations below are about.*
   estimate drawn as a point; a series interpolated across a person's ply; the empty state wrong
   for a game of two people; a non-deterministic id.
 
-  Run 2026-10-14 against `git archive HEAD` of this branch under the agent's scratch directory:
+  Run 2026-10-14 against `git archive HEAD` of this branch under the agent's scratch directory,
+  and re-run in full after the merge with the record and the review's changes moved anchors
+  (`estimatorName` into `Estimate.tsx`), with the same results and one row added (the table's caption);
   each anchor asserted to match exactly once and the mutation read back from the copy before the
   run, the file restored and compared after it; the lane is `test/graph.test.tsx` (14 tests).
   Unmutated, the copy is green before and after (14 passed), and its `src` is identical to the
@@ -1199,7 +1201,8 @@ tests and the mutations below are about.*
   | `Graph.tsx` `layout`: the lead graph first | [W6-87] [W6-88] [W6-90] *gives two graphs…* (1 red) |
   | `Graph.tsx` `GraphFigure`: seat 1's line not dashed | [W6-89] *tells the series apart…* (1 red) |
   | `styles.css`: seat 1's line stroked with `var(--accent)` | [W6-89] [W6-94] *draws in neutral ink…* (1 red) |
-  | `Graph.tsx` `caption`: two computers named by level alone (`both = false`) | [W6-87] [W6-88] [W6-90] *gives two graphs…*; [W6-90] *names one computer…, and two of one kind by seat* (2 red) |
+  | `Estimate.tsx` `estimatorName`, which `Graph.tsx` `caption` calls: two computers named by level alone (`both = false`) | [W6-87] [W6-88] [W6-90] *gives two graphs…*; [W6-90] *names one computer…, and two of one kind by seat* (2 red) |
+  | `Graph.tsx` `graphOf`: the hidden table's caption emptied | [W6-92] *names each graph…* (1 red) |
   | `Graph.tsx` `graphOf`: the accessible name's latest point taken from the first estimate | [W6-92] *names each graph…* (1 red) |
   | `Graph.tsx` `graphOf`: a multiple of 10 within 3 of `N` keeps its label | [W6-87] *ticks the moves…* (1 red) |
 
