@@ -452,25 +452,27 @@ requirements are about reading it honestly.*
   `Player N's` when both seats are computers, so two `master`s are told apart. Nothing else of the
   choice is shown ([W6-24]).
 
-  That sentence — the seat's side and the attribution — MUST be the estimate's text in every
-  arrangement, for assistive technology ([W6-59]). What is **drawn** depends on the room the
-  arrangement gives the board ([0003 U3-95], [0003 U3-103]), in one of three forms:
+  That sentence — the seat's side and the attribution — MUST be the estimate's text on every
+  board in every arrangement, for assistive technology ([W6-59]). What is **drawn** depends on the
+  room the arrangement gives the board ([0003 U3-95], [0003 U3-103]), in one of two forms, and a
+  board shown small draws neither:
 
   | Board | Drawn |
   | --- | --- |
   | `wide` | The sentence itself, whole, on a line under the header's row. |
   | docked (`side`, `stack`) | Two short lines in the row's free room beside the score: the **short value** over the estimator's **short name**. |
-  | shown small (`side`, `stack`) | The short value alone. |
+  | shown small (`side`, `stack`) | Nothing. The sentence is the board's text, visually hidden, and takes no room in the row, whose name, pill and score are drawn exactly as they were before the estimate existed. |
 
   The short value is `c%` for a chance; `+l pt`, `−l pt` or `even` for a lead; `win` or `loss`
   for a decided one — `pt` because the header already shows the round's score change as a bare
   signed number ([0003 U3-43]), and a lead must not be read as one. The short name is the level's
-  word (`ruthless`, `master`), or `P1 master` / `P2 master` when both seats are computers. A
+  word (`ruthless`, `master`), or `P1 master` / `P2 master` when both seats are computers. The
   compact form MUST be hidden from assistive technology, since the sentence is already there; and
-  no form MAY wrap, end in an ellipsis, or overflow its header, at 390 × 844 and 844 × 390 as at
-  any other size. Where a stacked small board's row has no room for its player's name beside the
-  short value, the name is not drawn and stays its heading's text; the seat's number is on its
-  badge.
+  neither drawn form MAY wrap, end in an ellipsis, or overflow its header, at 390 × 844 and
+  844 × 390 as at any other size.
+
+  *A small board's row is its player's name, and the name is worth more there than a number: the
+  docked board beside it carries the estimate for both seats, from its own side.*
 
   *Whose and when, every time, because a chance beside a score is otherwise easy to read as a fact
   about the position, or as a second score. The decided form is the tier's own reading of
@@ -480,10 +482,11 @@ requirements are about reading it honestly.*
   the score is: no `role="status"`, no `aria-live`, and no part of [0003 U3-56]'s announcement.
   A board in the shown configuration ([0003 U3-91]) shows it the same way, and it MUST NOT be or
   contain a control.
-- **[W6-60]** In a game with a computer seat, each board MUST hold room for the estimate from the
-  deal on, so that its appearing, changing and clearing never changes the size of the board
-  ([0003 U3-99]'s discipline for the strip beneath it). In a game of two people no board holds
-  that room, and nothing of the estimate is rendered.
+- **[W6-60]** In a game with a computer seat, each `wide` and docked board MUST hold room for the
+  estimate from the deal on, so that its appearing, changing and clearing never changes the size
+  of the board ([0003 U3-99]'s discipline for the strip beneath it). A board shown small MUST hold
+  none: [W6-58] draws nothing there. In a game of two people no board holds that room, and nothing
+  of the estimate is rendered.
 - **[W6-61]** Showing the estimate MUST cost the game nothing: no request is issued for it, the
   requests and replies are exactly [W6-14]'s, the same deal and seating produce the same requests
   as before it existed, and nothing in `bot`, `ai-bot`, `alphazero-bot` or either worker changes
@@ -728,9 +731,11 @@ the seam as much as the number: on which publish it changes, and on which it mus
   [W6-60]'s size half MUST be asserted in the browser lane of [0003 U3-73]: a board's box
   measured before the computer's first move and after it is the same. So MUST [W6-58]'s drawn
   forms: at 390 × 844 and 844 × 390, with one computer and with two (then the small board is
-  thinking, its pill at its widest), each board draws the form its arrangement asks for, on one
-  line per part, inside its own box, inside the header, overlapping nothing drawn there and with
-  no text wider than its box — on the real estimate and on the widest text each form carries.
+  thinking, its pill at its widest), the docked board draws the compact form, on one line per
+  part, inside its own box, inside the header, overlapping nothing drawn there and with no text
+  wider than its box — on the real estimate and on the widest text the form carries — and the
+  small board draws nothing of the estimate, holds no place in its row, and draws its player's
+  name.
 - **[W6-66]** Each test of [W6-65] that guards a **sign**, a **perspective** or the **standing**
   rule MUST have been seen to fail, under the rules in `CLAUDE.md` (the anchor confirmed to match,
   the mutation made in a scratch copy, the copy's suite run), and each mutation is recorded here
@@ -739,7 +744,7 @@ the seam as much as the number: on which publish it changes, and on which it mus
   exchanged; the lead not negated for the other seat; `WIN` subtracted with the wrong sign; the
   estimate recomputed or cleared on a person's ply; and the estimate cleared on a transition.
 
-  Re-run 2026-10-14 after the drawn forms of [W6-58] landed, against a copy of the worktree
+  Re-run 2026-10-14 after [W6-58] settled on two drawn forms, against a copy of the worktree
   under this agent's own scratch directory: each anchor asserted to match exactly once and the
   mutation read back from the copy before the run; the fast lane runs `test/estimate.test.tsx`
   and `test/opponent.test.tsx`, the browser lane `test/browser/opponent.test.ts`. Unmutated, the
@@ -759,11 +764,10 @@ the seam as much as the number: on which publish it changes, and on which it mus
   | `App.tsx` `board`: each board handed the other seat's side (`estimateWords(e, 1 − seat, …)`) | [W6-56] [W6-58] *takes the seat from the request*; [W6-57] [W6-63] [W6-58] *is set on the ply…*; [W6-59] *is plain text…* (3 red) |
   | `game.ts` `estimateOf`: the kind read off the value (a tier's value in [-1, 1] taken for a chance) | [W6-55] [W6-56] *gives a tier a lead…*; [W6-56] *reads a tier that reached the end…*; [W6-58] *says each kind…* (3 red) |
   | `App.tsx` `board`: room held in a game of two people too (`estimateRoom={true}`) | [W6-60] [W6-63] *shows nothing, and holds no room, in a game of two people* (1 red) |
-  | `Estimate.tsx` `estimateWords`: a lead's short value without its unit (`+1`, not `+1 pt`) | [W6-58] *says each kind in its own words* (1 red) |
-  | `PlayerBoard.tsx`: room held only once an estimate is set (`when={props.estimateRoom && props.estimate}`), browser lane | [W6-60] *keeps every board the same size…* at 1280 px, and [W6-58] [W6-60] *draws each compact form whole…* at 390 × 844 with one computer and with two (3 red). At 390 × 844 the size check alone stays green: there the drawn forms sit in the row's own height |
-  | `styles.css`: a small board draws the estimator's name too, browser lane | [W6-58] [W6-60] *draws each compact form whole…*, all four cases (4 red) |
-  | `styles.css`: a small board's box narrowed from 2.6rem to 1.6rem, browser lane | the same, all four cases (4 red) |
-  | `styles.css`: a stacked small board keeps drawing its player's name, browser lane | the same at 390 × 844, one computer and two (2 red) — the name's text is wider than the box the row leaves it |
+  | `Estimate.tsx` `estimateWords`: a lead's short value without its unit (`+1`, not `+1 pt`) — the docked board's short value | [W6-58] *says each kind in its own words* (1 red) |
+  | `PlayerBoard.tsx`: room held only once an estimate is set (`when={props.estimateRoom && props.estimate}`), browser lane | [W6-60] *keeps every board the same size…* at 1280 px (1 red). At 390 × 844 it stays green: there the docked form sits within the row's own height, and a small board holds no room to lose |
+  | `styles.css`: both small-board rules removed, so a small board draws the compact form as a docked one does, browser lane | [W6-58] [W6-60] *draws the docked form whole, and nothing on a small board…*, all four cases (4 red) |
+  | `styles.css`: the small board's estimate left in the row's flow, unclipped (its rule emptied), browser lane | the same, all four cases (4 red). Its box is empty there — the sentence is clipped by its own rule and the compact form not displayed — so what it takes is a gap's worth of the row; the test asks that it be out of the flow, which is what holding no room means for a flex row |
 
   Two mutations [W6-66] names have no observable form, and are recorded as such rather than
   claimed. Taking the seat when the **reply arrives**, in `dispatch` before `submit`, gives the
