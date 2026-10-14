@@ -435,7 +435,12 @@ describe("the record's control at a real size [W6-73]", () => {
       await tick(80);
       const dialog = doc.querySelector<HTMLElement>('[role="dialog"][aria-labelledby="record-title"]');
       expect(dialog, 'the record did not open').not.toBeNull();
-      expect(dialog!.querySelectorAll('tbody tr').length).toBeGreaterThanOrEqual(2);
+      // The log, by its caption: the graph's data table sits beside it [W6-79].
+      const log = [...dialog!.querySelectorAll('table')].find(
+        (t) => t.caption?.textContent === 'Every move of this game',
+      );
+      expect(log, 'no log in the record').toBeDefined();
+      expect(log!.querySelectorAll('tbody tr').length).toBeGreaterThanOrEqual(2);
       const box = dialog!.getBoundingClientRect();
       expect(box.top).toBeGreaterThanOrEqual(0);
       expect(box.left).toBeGreaterThanOrEqual(0);
@@ -443,5 +448,22 @@ describe("the record's control at a real size [W6-73]", () => {
       expect(box.right).toBeLessThanOrEqual(width);
       expect(root.scrollHeight, 'the open record scrolls the page').toBeLessThanOrEqual(root.clientHeight);
       expect(root.scrollWidth, 'the open record scrolls the page sideways').toBeLessThanOrEqual(root.clientWidth);
+
+      // [W6-71]: scrolled right and down, Close is still on screen and on top.
+      const body = dialog!.querySelector<HTMLElement>('.record-body')!;
+      if (width === 390) {
+        expect(body.scrollWidth, 'nothing to scroll sideways on a phone').toBeGreaterThan(body.clientWidth);
+      }
+      body.scrollLeft = body.scrollWidth;
+      body.scrollTop = body.scrollHeight;
+      await tick(50);
+      if (width === 390) expect(body.scrollLeft, 'the content did not scroll right').toBeGreaterThan(0);
+      const close = [...dialog!.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.trim() === 'Close')!;
+      const c = close.getBoundingClientRect();
+      expect(c.left).toBeGreaterThanOrEqual(0);
+      expect(c.top).toBeGreaterThanOrEqual(0);
+      expect(c.right).toBeLessThanOrEqual(width);
+      expect(c.bottom).toBeLessThanOrEqual(tall);
+      expect(doc.elementFromPoint(c.left + c.width / 2, c.top + c.height / 2)?.closest('button'), 'Close is covered').toBe(close);
     });
 });

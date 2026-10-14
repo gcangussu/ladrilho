@@ -123,45 +123,50 @@ export function RecordSheet(props: {
           </button>
         </header>
 
-        <EstimateGraph history={props.history} seating={props.seating} />
+        {/* The heading row stays put; only this scrolls, either way, so Close
+            is in view at every scroll position [W6-71]. Focusable, so the
+            keyboard can scroll it too. */}
+        <div class="record-body" tabindex="0" role="region" aria-label="Record contents">
+          <EstimateGraph history={props.history} seating={props.seating} />
 
-        <Show when={props.history.length > 0} fallback={<p class="record-empty">No moves yet</p>}>
-          <table class="record-log">
-            <caption>Every move of this game</caption>
-            <thead>
-              <tr>
-                <For each={HEADERS}>{(header) => <th scope="col">{header}</th>}</For>
-              </tr>
-            </thead>
-            <tbody>
-              <For each={[...props.history]}>
-                {(record) => (
-                  <>
-                    <tr>
-                      <th scope="row">{record.ply}</th>
-                      <td>{record.round + 1}</td>
-                      <td>{who(record)}</td>
-                      <td>{lastMoveText(record.action, props.names)}</td>
-                      <td>{record.estimate === null ? '' : estimateCell(record.estimate, props.seating.players)}</td>
-                      <td>
-                        {record.choice === null || record.level === null
-                          ? ''
-                          : searchWords(record.choice, record.level)}
-                      </td>
-                    </tr>
-                    <Show when={record.scoring}>
-                      {(scoring) => (
-                        <tr class="record-round">
-                          <td colspan={HEADERS.length}>{roundWords(scoring())}</td>
-                        </tr>
-                      )}
-                    </Show>
-                  </>
-                )}
-              </For>
-            </tbody>
-          </table>
-        </Show>
+          <Show when={props.history.length > 0} fallback={<p class="record-empty">No moves yet</p>}>
+            <table class="record-log">
+              <caption>Every move of this game</caption>
+              <thead>
+                <tr>
+                  <For each={HEADERS}>{(header) => <th scope="col">{header}</th>}</For>
+                </tr>
+              </thead>
+              <tbody>
+                <For each={[...props.history]}>
+                  {(record) => (
+                    <>
+                      <tr>
+                        <th scope="row">{record.ply}</th>
+                        <td>{record.round + 1}</td>
+                        <td>{who(record)}</td>
+                        <td>{lastMoveText(record.action, props.names)}</td>
+                        <td>{record.estimate === null ? '' : estimateCell(record.estimate, props.seating.players)}</td>
+                        <td>
+                          {record.choice === null || record.level === null
+                            ? ''
+                            : searchWords(record.choice, record.level)}
+                        </td>
+                      </tr>
+                      <Show when={record.scoring}>
+                        {(scoring) => (
+                          <tr class="record-round">
+                            <td colspan={HEADERS.length}>{roundWords(scoring())}</td>
+                          </tr>
+                        )}
+                      </Show>
+                    </>
+                  )}
+                </For>
+              </tbody>
+            </table>
+          </Show>
+        </div>
       </section>
     </div>
   );

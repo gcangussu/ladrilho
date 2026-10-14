@@ -594,7 +594,8 @@ section owns the field, the control, the dialog and the log.*
     else but its heading and Close.
 
   It is bounded by the viewport and MAY scroll within itself in both directions; the document
-  beneath MUST NOT scroll because it is open.
+  beneath MUST NOT scroll because it is open. Its heading and **Close** MUST stay in view at
+  every scroll position: only the content beneath the heading row scrolls, in either axis.
 - **[W6-72]** The record MUST be closed by default, every game, and opening it MUST NOT be kept:
   it is closed when the page loads and whenever a game is dealt, by whatever route. Whether it is
   open MUST NOT be part of the view model, the URL or storage ([0003 U3-15]).
@@ -660,8 +661,11 @@ section owns the field, the control, the dialog and the log.*
   `bonuses.scoreAfter`. Each seat's figures MUST be read from that seat's entry, and nothing is
   added, subtracted or compared ([0003 U3-84]). The row is one cell spanning the table and is not
   a ply: the `Ply` numbering does not count it.
-- **[W6-79]** The log MUST be readable by assistive technology as a table: a `table` with a
-  caption, column header cells for [W6-74]'s headers, and each ply row's `Ply` cell a row header.
+- **[W6-79]** The log MUST be readable by assistive technology as a table: a `table` whose
+  caption, `Every move of this game`, is its accessible name, with column header cells for
+  [W6-74]'s headers and each ply row's `Ply` cell a row header. The dialog holds a second table,
+  the graph's data ([W6-92]), so the log is identified by that name and never as the dialog's
+  only table.
   Nothing in the dialog is a live region or carries `role="status"`, and the record is no part of
   [0003 U3-56]'s announcement: a row added while the dialog is open is read when it is reached,
   not announced.
@@ -1089,7 +1093,8 @@ on the same `setView`.*
     round row after its ply, with the seats' figures **different** so a row reading the wrong seat
     cannot pass, and with bonuses on the game's last round; and a game of two people played
     through a round transition;
-  - [W6-79], by finding the log by role as a table with its column and row headers, and nothing in
+  - [W6-79], by finding the log by role and by its caption's name — the graph's data table is
+    beside it — as a table with its column and row headers, and nothing in
     the dialog with `role="status"` or `aria-live`, and the announcement unchanged by a ply made
     while it is open;
   - [W6-80], by a source check that the record's components do not mention `lastChoice`, and that
@@ -1099,7 +1104,9 @@ on the same `setView`.*
   - [W6-82] over whole games in [W6-29]'s property test, at every published view.
 
   [W6-73] MUST be asserted in the browser lane of [0003 U3-73], at 1280 × 800, 844 × 390 and
-  390 × 844, with the `Record` control in the top bar and the record closed.
+  390 × 844, with the `Record` control in the top bar and the record closed; and at 390 × 844,
+  with the record open and its content scrolled right and down, **Close** MUST be found inside
+  the viewport ([W6-71]).
 - **[W6-84]** Each test of [W6-83] that guards a **ply's place** in the record, a **seat**, the
   **clearing** on a deal, or a **field of the report** MUST have been seen to fail, under the rules
   in `CLAUDE.md`, and each mutation is recorded here as [W6-66] records them. At least: a ply
