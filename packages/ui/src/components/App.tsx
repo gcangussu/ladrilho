@@ -7,6 +7,7 @@ import { Displays, type Pick } from './Displays.jsx';
 import { estimateWords } from './Estimate.jsx';
 import { GameOver } from './GameOver.jsx';
 import { PlayerBoard } from './PlayerBoard.jsx';
+import { RecordSheet } from './Record.jsx';
 import { Scoring } from './Scoring.jsx';
 import { NewGameSheet, seatLabel } from './Seating.jsx';
 import { Status } from './Status.jsx';
@@ -212,6 +213,36 @@ export function App(): JSX.Element {
     });
   };
 
+  /**
+   * The game's record [W6-70] through [W6-72]: open or not, held here and
+   * nowhere else — not in the view model, the URL or storage — so it is
+   * closed at every load. Its control gets focus back when it closes.
+   */
+  const [recording, setRecording] = createSignal(false);
+  let recordOpener: HTMLElement | null = null;
+  const openRecord = (event: MouseEvent): void => {
+    recordOpener = event.currentTarget as HTMLElement;
+    closePopovers(null);
+    setRecording(true);
+  };
+  const closeRecord = (): void => {
+    setRecording(false);
+    const back = recordOpener;
+    queueMicrotask(() => back?.isConnected && back.focus());
+  };
+  /**
+   * Closed by every deal [W6-72]: the record empties only when a game is
+   * dealt, so a record that empties after a ply was played closes. The
+   * interface offers no deal while it is open; this is for whatever does.
+   */
+  createEffect(
+    () => view().history.length === 0,
+    (empty) => {
+      // Closed as Close closes it, so focus goes back to the control [W6-71].
+      if (empty && untrack(recording)) closeRecord();
+    },
+  );
+
   /** The last round's workings, as a sheet, where the boards leave no room [U3-102]. */
   const [sheet, setSheet] = createSignal(false);
 
@@ -353,7 +384,10 @@ export function App(): JSX.Element {
       ref={observe}
       // Escape clears a selection wherever focus happens to be [U3-26].
       onKeyDown={(event) => {
-        if (event.key === 'Escape' && dealing()) {
+        if (event.key === 'Escape' && recording()) {
+          // [W6-71]: Escape closes the record and does nothing else.
+          closeRecord();
+        } else if (event.key === 'Escape' && dealing()) {
           // [W6-49]: Escape discards the sheet's choices and nothing else.
           closeSheet();
         } else if (event.key === 'Escape') {
@@ -371,7 +405,7 @@ export function App(): JSX.Element {
       <Announcer message={announcement(view())} />
 
       {/* Everything under the curtain is out of reach while it is up [U3-103]. */}
-      <div class="stage" inert={curtainUp() || dealing() || undefined}>
+      <div class="stage" inert={curtainUp() || dealing() || recording() || undefined}>
         <header class="topbar">
           <h1 class="logo">
             <span class="logo-mark" aria-hidden="true">
@@ -400,6 +434,22 @@ export function App(): JSX.Element {
                 Workings
               </button>
             </Show>
+            {/* The game's record, closed by default every game [W6-70]. */}
+            <button
+              type="button"
+              class="tool record-control"
+              aria-haspopup="dialog"
+              onClick={openRecord}
+            >
+              {/* Where the top bar is narrow the word is drawn as a list
+                  and kept as the name [W6-70]. */}
+              <span class="record-icon" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+              </span>
+              <span class={layout() === 'wide' ? undefined : 'sr-only'}>Record</span>
+            </button>
             {/* Opens the sheet, where the seats are and where Deal is [W6-49];
                 available throughout, a search included [W6-23]. */}
             <button
@@ -509,6 +559,15 @@ export function App(): JSX.Element {
             closeSheet();
             startWithSeating(deal.seating, deal.seed);
           }}
+        />
+      </Show>
+
+      <Show when={recording()}>
+        <RecordSheet
+          history={view().history}
+          seating={view().seating}
+          names={names()}
+          onClose={closeRecord}
         />
       </Show>
 

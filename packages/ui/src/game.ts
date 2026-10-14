@@ -113,6 +113,25 @@ export function estimateOf(value: number, seat: Player, level: Level): Estimate 
   return { kind: 'lead', by: seat, level, lead, decided };
 }
 
+/**
+ * One ply of this game, for the record of intent 0014. Plain data, replaced
+ * never mutated. `choice` is the computer's report as it crossed the seam,
+ * `null` for a person; `estimate` is [W6-56]'s reading of it; `scoring` is
+ * the round's record when this ply resolved a round.
+ */
+export interface PlyRecord {
+  /** 1-based. */
+  ply: number;
+  /** The engine's round index when the ply was played. */
+  round: number;
+  seat: Player;
+  action: number;
+  level: Level | null;
+  choice: Choice | ExpertChoice | MasterChoice | null;
+  estimate: Estimate | null;
+  scoring: RoundScoring | null;
+}
+
 /** Everything a component may read that derives from the game state [U3-6]. */
 export interface ViewModel {
   game: AzulJSON;
@@ -159,6 +178,13 @@ export interface ViewModel {
    * the position and not about who chose the action [U3-31]; dealing clears it.
    */
   lastMoves: [number | null, number | null];
+  /**
+   * Every ply of this game, in order [W6-67]. A fresh array on each ply, so a
+   * view model published earlier still says what it said [U3-21]; dealing
+   * clears it. Read by the record, which is how a report reaches the screen
+   * without anything reading `lastChoice` [W6-25], [W6-80].
+   */
+  history: readonly PlyRecord[];
 }
 
 /**
@@ -208,6 +234,17 @@ let lastScoring: RoundScoring | null = null;
 
 /** Each seat's most recent action this game [U3-101]. Replaced, never mutated [U3-21]. */
 let lastMoves: [number | null, number | null] = [null, null];
+
+/** This game's plies [W6-67]. Replaced by a longer copy each ply, never pushed onto. */
+let history: readonly PlyRecord[] = [];
+
+/**
+ * The reply whose action is being submitted, handed from the turn loop to
+ * `submit` beside the action and taken by it at once [W6-68]. `submit` still
+ * takes an action and learns nothing about who chose it [U3-31]: the record's
+ * `choice` is what the loop says crossed the seam, and `null` when nothing did.
+ */
+let replying: { choice: Choice | ExpertChoice | MasterChoice; asker: { seat: Player; level: Level } } | null = null;
 
 /**
  * The worker seam [W6-18]. Created lazily and replaced only by a test — a
@@ -348,6 +385,7 @@ function nextView(): ViewModel {
         : null,
     scoring: lastScoring,
     lastMoves,
+    history,
   };
   previous = next;
   return next;
@@ -375,6 +413,9 @@ function deal(seed: number): ViewModel {
   // rather than a frame — and which no single-game test can see.
   lastScoring = null;
   lastMoves = [null, null];
+  // A new game starts a new record [W6-67].
+  history = [];
+  replying = null;
   return nextView();
 }
 
@@ -482,6 +523,8 @@ function dispatch(request: ToWorker): void {
       }
       lastChoice = reply.choice;
       estimator = asker;
+      // The record takes the reply as it crossed, beside the action [W6-68].
+      replying = { choice: reply.choice, asker };
       // A curtailed search still played a legal move [W6-17]; it is a shortened
       // search, not an error.
       submit(reply.choice.action);
@@ -563,6 +606,11 @@ export function submit(action: number): void {
   // path `submit` takes [0007 S7-1]. Still synchronous, still the single path,
   // and still learning nothing about who chose the action.
   const mover = state.currentPlayer;
+  const round = state.roundIndex;
+  // Taken now, whatever happens next: a reply is recorded on the ply it was
+  // submitted for and no other.
+  const reply = replying;
+  replying = null;
   const scoring = applyExplained(state, action);
   // A fresh pair rather than an edit, so the view model this replaces still
   // says what it said [U3-21].
@@ -570,5 +618,22 @@ export function submit(action: number): void {
   // A ply that resolved no round returns `null` and leaves the last record
   // standing [U3-82]; a ply that resolved one replaces it.
   if (scoring !== null) lastScoring = scoring;
+  // [W6-67], [W6-68]: one record, in the same publish as the ply, on a fresh
+  // array. The estimate is [W6-56]'s reading of the reply, taken with the
+  // seat and level the request was made for — nothing is computed anew, and
+  // nothing for a person [W6-69].
+  history = [
+    ...history,
+    {
+      ply: history.length + 1,
+      round,
+      seat: mover,
+      action,
+      level: tierAt(seating, mover),
+      choice: reply?.choice ?? null,
+      estimate: reply === null ? null : estimateOf(reply.choice.value, reply.asker.seat, reply.asker.level),
+      scoring,
+    },
+  ];
   publish();
 }

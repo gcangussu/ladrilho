@@ -201,7 +201,7 @@ describe('a round transition', () => {
 
   it('[U3-43] shows a negative change as a loss, not as a gain', () => {
     const { getByRole } = board({ placed, scoreDelta: -3, player: tiled() });
-    expect(getByRole('region', { name: 'Player 1' })).toHaveTextContent('(-3 this round)');
+    expect(getByRole('region', { name: 'Player 1' })).toHaveTextContent('(−3 this round)');
   });
 
   it('[U3-43] the marking clears on a ply that was not a transition', () => {
