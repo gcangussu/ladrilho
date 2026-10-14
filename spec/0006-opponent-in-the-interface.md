@@ -7,6 +7,7 @@ intent:
   - 0003 — Computer opponent
   - 0010 — Playing the opponent we trained
   - 0012 — How the opponent sees it
+  - 0014 — The game's record, for the curious
 prefix: W6
 depends-on: 0001 — Engine core, 0003 — Web interface, 0004 — Computer opponent
 summary: >
@@ -14,7 +15,9 @@ summary: >
   opponent, the worker that hosts the search, the thinking state, and what
   happens to the controls during a turn that is not yours; and, for intent 0012,
   the one thing shown of what it reckoned — its estimate, after each of its
-  moves. Amends 0003 — Web interface, which said it would need amending.
+  moves; and, for intent 0014, the game's record behind a closed control —
+  every ply, and each computer ply's report. Amends 0003 — Web interface,
+  which said it would need amending.
 ---
 
 # Opponent in the interface
@@ -23,7 +26,9 @@ summary: >
 
 Covers the changes to `packages/ui`: the opponent selector, the worker seam, the thinking state,
 the turn loop that asks for a move and submits it, what the board does while a search is in
-flight, and the estimate shown after the computer moves (*The estimate*, [W6-55] onward).
+flight, the estimate shown after the computer moves (*The estimate*, [W6-55] onward), and the
+game's record — the field, its control and dialog, and the log (*The record*, [W6-67] onward). The
+record's graph is specified in its own section.
 
 Does not cover how a move is chosen (*0004 — Computer opponent*), how good it is (*0005 — Opponent
 strength*), or the rules (*0001 — Engine core*).
@@ -71,6 +76,12 @@ nothing is shown before a move is made ([0003 U3-30] is untouched), nothing is s
 person's move, and nothing is computed to produce it. The interface still does not rank, explain
 or suggest a move; it relays one number the opponent already reported, as the opponent's.
 
+*(Amended for intent 0014.)* Behind a control closed by default, the game's **record** relays the
+rest of what each reply reported — depth, nodes, simulations, visits, its flags and the raw
+value — row by row ([W6-67] onward). [W6-24] stands everywhere else ([W6-80]). It is still not a
+judgement: the record holds what the opponent said as it chose, computes nothing, and says nothing
+of a person's move but the move.
+
 ## Definitions
 
 Terms from *0003* — the view model, `submit`, `publish`, the state module — carry their meaning
@@ -84,6 +95,8 @@ there. Terms from *0004* — tier, `Choice`, `curtailed` — carry theirs.
 | **Thinking** | A request is outstanding. The view model says so ([W6-19]); nothing else infers it. |
 | **Estimator** | The seat whose request produced the current `lastChoice`, and the level that seat held when the request was made ([W6-56]). |
 | **Estimate** | The published reading of the estimator's `lastChoice.value`, per seat ([W6-55]). |
+| **Record** | `history`: one `PlyRecord` per ply of the game in progress ([W6-67]); and the dialog that shows it ([W6-71]). |
+| **Log** | The record's table, one row per ply and one per round scored ([W6-74]). |
 
 ## Data model
 
@@ -110,6 +123,25 @@ interface ViewModel {
   lastChoice: Choice | ExpertChoice | MasterChoice | null;  // [W6-25]
   /** What the last computer to move reckoned, per seat; the only rendering of `lastChoice` [W6-55]. */
   estimate: Estimate | null;        // [W6-55]
+  /** *(Added for intent 0014.)* Every ply of this game, in order; a fresh array each ply [W6-67]. */
+  history: readonly PlyRecord[];    // [W6-67]
+}
+
+/** *(Added for intent 0014.)* One ply of this game [W6-68]. Plain data, replaced never mutated. */
+interface PlyRecord {
+  /** 1-based. */
+  ply: number;
+  /** The engine's round index when the ply was played. */
+  round: number;
+  seat: Player;
+  action: number;
+  level: Level | null;
+  /** The reply's report as it crossed the seam; `null` for a person. */
+  choice: Choice | ExpertChoice | MasterChoice | null;
+  /** [W6-56]'s reading of `choice.value`; `null` for a person. */
+  estimate: Estimate | null;
+  /** The round's record when this ply resolved a round [0003 U3-82]. */
+  scoring: RoundScoring | null;
 }
 
 /** *(Added for intent 0012.)* Indexed by seat: `[p]` is seat `p`'s side of it. */
@@ -372,7 +404,11 @@ chose, not one dealt on the way to it.*
   rules out explaining moves; [0003 U3-30] already rules out judging one before it is made, and
   this extends it to after. *(Amended for intent 0012: the value was forbidden outright; the
   estimate is now its one permitted rendering, and it is about the position the computer's move
-  left, never about a move.)*
+  left, never about a move.)* *(Amended for intent 0014: inside the game's record, and only
+  there, a computer ply's row MAY show what its reply reported — the depth, the node count, the
+  simulation and root-visit counts, the `complete` and `curtailed` flags and the raw value — in
+  the forms [W6-76] gives them. Everywhere else this requirement stands as written ([W6-80]), and
+  the record ranks and comments on no move either.)*
 - **[W6-25]** `lastChoice` MAY be published, and MUST NOT be rendered except through `estimate`
   ([W6-55]): no module under `src/components/` may read `lastChoice` at all. Every other field of
   a `Choice`, `ExpertChoice` or `MasterChoice` stays unrendered ([W6-24]).
@@ -382,7 +418,10 @@ chose, not one dealt on the way to it.*
   on a move. And by [0012 T12-24], `MasterChoice.value`, which is the same kind of number.)*
   *(Amended for intent 0012: both values now reach the screen, but only as [W6-56] reads them —
   a chance for those two, a lead in points for a tier — and only through the state module, so a
-  component cannot reach a depth or a visit count by the same road.)*
+  component cannot reach a depth or a visit count by the same road.)* *(Amended for intent
+  0014: the record of [W6-67] carries each reply's `Choice` in `history`, which the state module
+  publishes, and the record's log renders its fields as [W6-76] allows. That is the one road to
+  them; the rule that no component reads `lastChoice` stands.)*
 
 ### Responsiveness
 
@@ -492,6 +531,151 @@ requirements are about reading it honestly.*
   as before it existed, and nothing in `bot`, `ai-bot`, `alphazero-bot` or either worker changes
   for it.
 
+### The record
+
+*Added for intent 0014 — The game's record, for the curious. The estimate of [W6-55] is one number
+about the latest computer move; the record keeps every ply of the game, and for each computer ply
+everything its reply carried, behind a control that is closed by default. Nothing new is computed:
+each figure is one the game already keeps or a reply already brought across the seam. The record
+has two halves — the log, specified here, and the graph, specified in its own section. This
+section owns the field, the control, the dialog and the log.*
+
+- **[W6-67]** The view model MUST carry `history: readonly PlyRecord[]`, of the shape in *Data
+  model*: one record per ply of the game in progress, in the order played. `submit` MUST append
+  the ply's record in the same publish that carries the ply — one `setView` per ply, as
+  [0003 U3-42] requires — and MUST do so by publishing a fresh array, never by pushing onto the
+  one the previous view model holds, so that a view model published earlier still says what it
+  said ([0003 U3-21]). A record, once published, MUST NOT be mutated. Every deal MUST clear it to
+  an empty array, whatever starts the deal ([W6-3], [W6-49], [W6-52]), beside the resets
+  [0003 U3-83] lists. No other publish changes it: the publish that marks `thinking`, a failed
+  reply ([W6-15]) and a stale one ([W6-16]) all carry the array they found.
+- **[W6-68]** Each record MUST hold, for its ply:
+  - `ply`: its position in the game, from 1;
+  - `round`: the engine's round index ([0001 E1-35]) of the position the ply was played from —
+    before any round it resolved;
+  - `seat`: the seat that was to move, which is the position's `currentPlayer` and not who chose
+    the action ([0003 U3-31]);
+  - `action`: the action submitted, as `lastMoves` records it ([0003 U3-101]);
+  - `level`: what that seat held in the seating ([W6-2]), `null` for a person;
+  - `choice`: for a ply submitted from a reply ([W6-8]), the reply's `Choice`, `ExpertChoice` or
+    `MasterChoice` as it crossed the seam, unaltered, with no field added or dropped; otherwise
+    `null`;
+  - `estimate`: for such a ply, `estimateOf(choice.value, seat, level)` — [W6-56]'s reading, with
+    the estimator's seat and level as [W6-56] captures them from the request; otherwise `null`;
+  - `scoring`: the `RoundScoring` that `applyExplained` returned for this ply when it resolved a
+    round ([0007 S7-1]) — the same record [0003 U3-82] publishes; otherwise `null`.
+
+  The choice reaches the record from the turn loop, which hands it over beside the action.
+  `submit` still takes an action and learns nothing about who chose it ([0003 U3-31]), and a
+  person's ply carries `null` because nothing was reported for it.
+- **[W6-69]** Keeping the record MUST cost the game nothing, as [W6-61] says of the estimate: no
+  request is issued for it, the requests and replies are exactly [W6-14]'s, the same deal and
+  seating produce the same requests as before it existed, nothing is computed on a person's ply
+  beyond what [0003 U3-101] and [0003 U3-82] already record, and nothing in `bot`, `ai-bot`,
+  `alphazero-bot` or either worker changes for it. The record holds only what a reply carried and
+  what the published position shows; the bag's order is no part of it ([W6-14]).
+- **[W6-70]** The top bar MUST carry a control named `Record`, beside the new-game control, that
+  opens the dialog of [W6-71]. It MUST be present in every seating, two people included, from the
+  deal on and at the end of a game. It is not a move control ([0003 U3-79]) and, like the
+  new-game control, it stays available while a search is in flight ([W6-23]). It is a button with
+  `aria-haspopup="dialog"`, reachable by keyboard, and meets [0003 U3-59]'s target size.
+- **[W6-71]** The control MUST open a modal dialog named `Game record`, modelled on the new-game
+  sheet of [W6-49]:
+  - it is rendered only while open, and a closed record leaves nothing in the document but its
+    control;
+  - while it is open the page beneath is inert, and focus moves into it — to its **Close**
+    control — and returns to the `Record` control when it closes;
+  - **Close**, <kbd>Escape</kbd> and a press on the page outside it close it, and change nothing
+    else;
+  - the game beneath carries on: a computer to move keeps thinking and may move, the log gains
+    that ply's row while the dialog is open, and a ply arriving while it is open MUST NOT move
+    focus ([0003 U3-57] is about the page beneath, which is inert);
+  - it holds the graph (*The estimate graph*, [W6-85] onward) above the log, and nothing
+    else but its heading and Close.
+
+  It is bounded by the viewport and MAY scroll within itself in both directions; the document
+  beneath MUST NOT scroll because it is open.
+- **[W6-72]** The record MUST be closed by default, every game, and opening it MUST NOT be kept:
+  it is closed when the page loads and whenever a game is dealt, by whatever route. Whether it is
+  open MUST NOT be part of the view model, the URL or storage ([0003 U3-15]).
+
+  *The interface offers no deal while the record is open — every control that deals is beneath
+  it, and inert — so the deal clause is reached only by code. It is kept so that nothing about an
+  open record can outlive the game it was opened on, whatever deals next, and it is kept by the
+  record's own emptying: the dialog closes whenever `history` empties after a ply was played. A
+  deal before any ply leaves an empty record empty, and cannot be told apart from no deal.*
+- **[W6-73]** While the record is closed it MUST change nothing about the document's own scroll
+  or layout beyond its one control: [0003 U3-95]'s no-scroll rules, measured with nothing
+  expanded, and [0003 U3-58]'s horizontal rule MUST hold at 1280 × 800, 844 × 390 and 390 × 844
+  with the control in the top bar.
+- **[W6-74]** The log MUST be a table with one row per record, in `history`'s order, under these
+  column headers:
+
+  | Header | Cell |
+  | --- | --- |
+  | `Ply` | the record's `ply`; the row's header cell |
+  | `Round` | `round + 1` |
+  | `Player` | `Player N` for seat `N − 1`, then who held the seat in parentheses: `Person`, or the level in a board's words as `levelName` gives them ([W6-58]) — `Player 1 (Person)`, `Player 2 (master)` |
+  | `Move` | the action in exactly the words a board's strip uses for a last move ([0003 U3-101]), produced by the same function |
+  | `Estimate` | [W6-75] |
+  | `Search` | [W6-76] |
+
+  Before the first ply the log MUST say `No moves yet` in place of its rows.
+- **[W6-75]** For a record with an `estimate`, the `Estimate` cell MUST give both seats' sides,
+  Player 1's first, separated by ` / `, each read from its own seat's entry as [W6-58] reads it
+  and negating nothing ([W6-55]):
+
+  | Kind | Cell |
+  | --- | --- |
+  | chance | each side's short value: `62% / 38%` |
+  | lead, not decided | each side in [W6-58]'s full words: `Ahead by 2 points / Behind by 2 points`, `Even / Even` |
+  | lead, decided | each side in [W6-58]'s full words: `A win by 3 points / A loss by 3 points`, `A win on the tie-break / A loss on the tie-break` |
+
+  The words come from the function the boards use ([W6-58]), so a board and the log cannot word
+  the same estimate two ways.
+- **[W6-76]** For a record with a `choice`, the `Search` cell MUST give what the reply reported
+  besides its action, by the record's `level`, and nothing else of it:
+
+  | Level | Cell |
+  | --- | --- |
+  | `master` | `S simulations` |
+  | `expert` | `S simulations, V root visits` |
+  | a tier | `value X points, depth D, N nodes`, then `, complete` when `complete`, then `, curtailed` when `curtailed` |
+
+  Counts are whole numbers grouped by thousands in English (`10,000`). `X` is the raw `value`
+  ([0004 B4-11]) from the mover's side: a whole number as itself, grouped; any other to one
+  decimal place; with `+` before a positive value and `−` (U+2212) before a negative one, and no
+  sign on a value shown as zero. A decided search's value is shown raw too, `WIN` and all
+  ([0004 B4-13]): the `Estimate` cell beside it gives the decided reading, and the record is where
+  the number itself is read. An `expert` or `master` value is not repeated here: the `Estimate`
+  cell is its reading, and [W6-56] is exact for both.
+- **[W6-77]** A row for a person's ply MUST leave its `Estimate` and `Search` cells empty. So
+  MUST every row of a game of two people, whose log still has a row per ply and the round rows of
+  [W6-78].
+- **[W6-78]** After the row of a ply whose record carries `scoring`, the log MUST have one more
+  row saying `Round N scored`, with `N` the record's `scoring.round + 1`, and each player's score
+  as that record states it: `Player 1: B to A; Player 2: B to A`, with `B` the player's
+  `scoreBefore` and `A` its `scoreAfterRound`. When the record carries `bonuses`, each player's
+  part continues `, bonuses ±T, final F` from that player's `bonuses.total` and
+  `bonuses.scoreAfter`. Each seat's figures MUST be read from that seat's entry, and nothing is
+  added, subtracted or compared ([0003 U3-84]). The row is one cell spanning the table and is not
+  a ply: the `Ply` numbering does not count it.
+- **[W6-79]** The log MUST be readable by assistive technology as a table: a `table` with a
+  caption, column header cells for [W6-74]'s headers, and each ply row's `Ply` cell a row header.
+  Nothing in the dialog is a live region or carries `role="status"`, and the record is no part of
+  [0003 U3-56]'s announcement: a row added while the dialog is open is read when it is reached,
+  not announced.
+- **[W6-80]** Showing the report's fields in the record is the one exception [W6-24] makes for
+  them, and it is the record's alone: no other part of the interface renders a depth, a node
+  count, a simulation or root-visit count, a `complete` or `curtailed` flag, or a raw value. The
+  log and the dialog MUST read the record from `history` and MUST NOT read `lastChoice`
+  ([W6-25]).
+- **[W6-81]** The record MUST be the same, row for row, whenever the same plies are played with
+  the same replies: a record is a function of the deal, the seating, the moves and the replies,
+  and holds nothing taken from a clock or from the page. *(So two loads of one link give
+  identical records exactly when [W6-4] gives them identical games. A curtailed search
+  ([0004 B4-29]) is the clock's, not the record's, and its row says it was curtailed.)*
+
 ## Amendments to 0003
 
 Each row is an edit to `spec/0003-web-interface.md`. Identifiers there are append-only, so a
@@ -515,6 +699,8 @@ widened requirement is edited in place and a genuinely new one takes the next fr
 | [0003 U3-47] | Unchanged; [W6-3] and [W6-23] both route through it. |
 | [0003 U3-6] | *(For intent 0012.)* Extend the view model with `estimate` ([W6-55]). |
 | [0003 U3-30] | *(For intent 0012.)* Unchanged. A note says the estimate of [W6-55] is about a position after a computer's move and never about a move not yet made. |
+| [0003 U3-6] | *(For intent 0014.)* Extend the view model with `history` ([W6-67]). |
+| [0003 U3-95] | *(For intent 0014.)* Unchanged. The record's dialog ([W6-71]) is a sheet raised, so the no-scroll rule is measured with it closed, and [W6-73] holds the closed record to it. |
 
 - **[W6-28]** These amendments MUST land in `spec/0003-web-interface.md` in the same change as the
   code that needs them. A spec that describes a client that no longer exists is worse than no spec.
@@ -536,6 +722,20 @@ widened requirement is edited in place and a genuinely new one takes the next fr
   — every view model of a game of two people included.
 - **[W6-64]** Whenever `estimate` is set, `estimate.level === seating.players[estimate.by]`, and
   the last ply submitted from a worker reply was `estimate.by`'s.
+- **[W6-82]** In every published view model, of `history` ([W6-67], [W6-68]):
+  - its length is the number of plies played since the deal, and `history[i].ply === i + 1`;
+  - `round` never decreases along it, and each record's `level` is `seating.players[seat]`;
+  - for each seat, the `action` of its last record is `lastMoves[seat]` ([0003 U3-101]), and
+    `null` there means the seat has no record;
+  - `choice` and `estimate` are both `null` or both set, and where set, `estimate` deep-equals
+    `estimateOf(choice.value, seat, level)` and `level` is a computer's; in a game played through
+    the turn loop, `choice` is set exactly on the plies of computer seats;
+  - the `estimate` of the last record that has one deep-equals `estimate` ([W6-55]), and `estimate`
+    is `null` when no record has one;
+  - the last record with a `scoring` holds the very object `scoring` publishes ([0003 U3-82]), and
+    `scoring` is `null` when none has one;
+  - the record of the ply that published a non-null `transition` ([0003 U3-42]) is the last
+    record, and it carries a `scoring`.
 
 ## Verification
 
@@ -776,6 +976,61 @@ the seam as much as the number: on which publish it changes, and on which it mus
   dropping the deal's `estimator = null` changes nothing, because the deal also clears
   `lastChoice` and the estimate needs both.
 
+### The record
+
+*Added for intent 0014. `history` is a new field on every publish and a new reader of `dispatch`'s
+reply, so — as for the estimate — the tests are about the seam as much as the table: which publish
+appends, which must not, and whether an old requirement still holds now that something else rides
+on the same `setView`.*
+
+- **[W6-83]** The fast suite MUST assert, in `test/record.test.tsx`, through the injected seam of
+  [W6-18] answering with chosen choices and through the rendered dialog:
+  - [W6-67] in the configuration it reads: `history` is empty at the deal and through the
+    computer's first `thinking` publish; gains exactly one record on exactly the publish that
+    carries each ply, a person's and a computer's; is a fresh array each time, with the arrays
+    published before it unchanged; is unchanged by a failed reply and by a stale one; and is
+    cleared by every kind of deal — the sheet's Deal, Rematch, Replay this deal;
+  - a round transition made by a computer's ply and one made by a person's, each still publishing
+    its `transition` ([0003 U3-42]) in the view model whose last record carries the round's
+    `scoring`;
+  - [W6-68] field by field, from **both** seats — a computer on seat 0 and one on seat 1 — and
+    with each kind of reply: a tier's `Choice`, an `ExpertChoice` and a `MasterChoice`, each
+    recorded with its every field and no other;
+  - [W6-69], by counting exactly one request per computer ply and none on a person's ply over a
+    whole game with the record open, and checking each `ToWorker`'s key set against *Data model*;
+  - [W6-70] through [W6-73]: the control present in a game of two people, mid-search and at the
+    end of a game; the dialog named, absent from the document when closed, focus moved in and
+    returned; Close, Escape and a press outside each closing it; a computer's ply arriving while
+    it is open adding its row without moving focus; the dialog closed by a deal made while it is
+    open and closed on a fresh mount; and nothing written to the URL or to storage by opening it;
+  - [W6-74] through [W6-78], by reading the rendered table: the headers; a person's row and a
+    computer's row in each of the three report forms; a tier's value whole, fractional, negative,
+    shown as zero and decided; the estimate in each of its kinds and a decided lead each way; the
+    round row after its ply, with the seats' figures **different** so a row reading the wrong seat
+    cannot pass, and with bonuses on the game's last round; and a game of two people played
+    through a round transition;
+  - [W6-79], by finding the log by role as a table with its column and row headers, and nothing in
+    the dialog with `role="status"` or `aria-live`, and the announcement unchanged by a ply made
+    while it is open;
+  - [W6-80], by a source check that the record's components do not mention `lastChoice`, and that
+    no component outside them renders a report field;
+  - [W6-81], by playing one game twice from one seed and seating, with the seam answering both
+    alike, and comparing the two records;
+  - [W6-82] over whole games in [W6-29]'s property test, at every published view.
+
+  [W6-73] MUST be asserted in the browser lane of [0003 U3-73], at 1280 × 800, 844 × 390 and
+  390 × 844, with the `Record` control in the top bar and the record closed.
+- **[W6-84]** Each test of [W6-83] that guards a **ply's place** in the record, a **seat**, the
+  **clearing** on a deal, or a **field of the report** MUST have been seen to fail, under the rules
+  in `CLAUDE.md`, and each mutation is recorded here as [W6-66] records them. At least: a ply
+  dropped from the record; the estimate not recorded; the record not cleared on a deal; the dialog
+  kept open across a deal; the round row reading the other seat's figures; and a report field left
+  out of the `Search` cell.
+
+  | Mutation (function: edit) | Test that went red |
+  | --- | --- |
+  | *to be filled when the record is built* | |
+
 ### Traceability exemptions
 
 | Requirement | Why it is not testable |
@@ -804,6 +1059,7 @@ the seam as much as the number: on which publish it changes, and on which it mus
 
 - Intent [0003 — Computer opponent](../intent/0003-computer-opponent.md)
 - Intent [0012 — How the opponent sees it](../intent/0012-how-the-opponent-sees-it.md) — the estimate, [W6-55] onward
+- Intent [0014 — The game's record, for the curious](../intent/0014-the-games-record-for-the-curious.md) — the record, [W6-67] onward
 - Spec [0001 — Engine core](0001-engine-core.md)
 - Spec [0003 — Web interface](0003-web-interface.md) — amended here
 - Spec [0004 — Computer opponent](0004-computer-opponent.md)

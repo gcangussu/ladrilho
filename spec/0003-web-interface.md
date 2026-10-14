@@ -165,8 +165,8 @@ type Selection = { source: number; color: Color } | null;
 - **[U3-6]** Every value a component reads **that derives from the game state** MUST be a declared
   field of the view model. It gains `seating`, `thinking` and `lastChoice` with the computer
   opponent ([0006 W6-2], [0006 W6-19], [0006 W6-25]), `scoring` with the workings
-  ([U3-82]), `lastMoves` with the table ([U3-101]), and `estimate` with intent 0012
-  ([0006 W6-55]). *(Extended by [0006 W6-28].)* The exceptions are the current selection and the stateless engine
+  ([U3-82]), `lastMoves` with the table ([U3-101]), `estimate` with intent 0012
+  ([0006 W6-55]), and `history` with intent 0014 ([0006 W6-67]). *(Extended by [0006 W6-28].)* The exceptions are the current selection and the stateless engine
   functions of [U3-4]. A component that needs anything else gets a new view-model field, computed
   at publish time.
 

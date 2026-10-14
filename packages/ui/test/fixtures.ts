@@ -29,6 +29,7 @@ export function openingView(seed = 42): ViewModel {
     estimate: null,
     scoring: null,
     lastMoves: [null, null],
+    history: [],
   };
 }
 
