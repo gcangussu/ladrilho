@@ -450,14 +450,27 @@ describe("the record's control at a real size [W6-73]", () => {
       expect(root.scrollWidth, 'the open record scrolls the page sideways').toBeLessThanOrEqual(root.clientWidth);
 
       // [W6-71]: scrolled right and down, Close is still on screen and on top.
-      const body = dialog!.querySelector<HTMLElement>('.record-body')!;
-      if (width === 390) {
-        expect(body.scrollWidth, 'nothing to scroll sideways on a phone').toBeGreaterThan(body.clientWidth);
+      // Whatever in the dialog scrolls, scrolled to its far corner — the
+      // dialog itself included, so a heading inside the scroller is caught.
+      const scrollers = [dialog!, ...dialog!.querySelectorAll<HTMLElement>('*')].filter(
+        (el) => el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight,
+      );
+      for (const el of scrollers) {
+        el.scrollLeft = el.scrollWidth;
+        el.scrollTop = el.scrollHeight;
       }
-      body.scrollLeft = body.scrollWidth;
-      body.scrollTop = body.scrollHeight;
       await tick(50);
-      if (width === 390) expect(body.scrollLeft, 'the content did not scroll right').toBeGreaterThan(0);
+      if (width === 390) {
+        expect(scrollers.some((el) => el.scrollLeft > 0), 'nothing scrolled right on a phone').toBe(true);
+        // The content scrolls sideways rather than shrinking: the graph is
+        // drawn at its full 640 px ([W6-94]), and the dialog's scroller is
+        // narrower than what it holds.
+        const body = dialog!.querySelector<HTMLElement>('.record-body')!;
+        expect(body.scrollWidth, 'the record does not scroll sideways').toBeGreaterThan(body.clientWidth);
+        const svg = dialog!.querySelector('svg');
+        expect(svg, 'no graph drawn, though the computer has an estimate').not.toBeNull();
+        expect(Math.round(svg!.getBoundingClientRect().width)).toBe(640);
+      }
       const close = [...dialog!.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.trim() === 'Close')!;
       const c = close.getBoundingClientRect();
       expect(c.left).toBeGreaterThanOrEqual(0);

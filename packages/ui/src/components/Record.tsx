@@ -104,7 +104,7 @@ export function RecordSheet(props: {
 }): JSX.Element {
   return (
     <div
-      class="sheet-scrim record-scrim"
+      class="sheet-scrim"
       // A press on the dimmed page outside it closes it [W6-71].
       onClick={(event) => {
         if (event.target === event.currentTarget) props.onClose();
@@ -138,7 +138,7 @@ export function RecordSheet(props: {
                 </tr>
               </thead>
               <tbody>
-                <For each={[...props.history]}>
+                <For each={props.history}>
                   {(record) => (
                     <>
                       <tr>
