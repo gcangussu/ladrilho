@@ -33,13 +33,26 @@ import {
  * [0008 A8-33] asks: intent 0006 said the learned opponent ships only if it
  * wins clearly more often than the hardest setting we built.
  */
-const LABELS: Readonly<Record<Level, string>> = {
-  easy: 'Computer — gentle',
-  steady: 'Computer — steady',
-  sharp: 'Computer — ruthless',
-  expert: 'Computer — expert',
-  master: 'Computer — master',
+const NAMES: Readonly<Record<Level, string>> = {
+  easy: 'gentle',
+  steady: 'steady',
+  sharp: 'ruthless',
+  expert: 'expert',
+  master: 'master',
 };
+
+const LABELS: Readonly<Record<Level, string>> = {
+  easy: `Computer — ${NAMES.easy}`,
+  steady: `Computer — ${NAMES.steady}`,
+  sharp: `Computer — ${NAMES.sharp}`,
+  expert: `Computer — ${NAMES.expert}`,
+  master: `Computer — ${NAMES.master}`,
+};
+
+/** A level in a board's own words, without `Computer — ` [W6-58]. */
+export function levelName(level: Level): string {
+  return NAMES[level];
+}
 
 /** Who sits at a seat, in words — for the board that seat plays [W6-1]. */
 export function seatLabel(level: Level | null): string {

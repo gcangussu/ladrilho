@@ -31,6 +31,7 @@ import { patternLineName } from '../src/components/PatternLines.jsx';
 import { createMasterSeat } from '../src/masters.js';
 import { simulationsLabel } from '../src/components/Seating.jsx';
 import { choiceNames, choices, commit, deal, editSeat, openSheet } from './sheet-helpers.js';
+import { holdsInvariants } from './estimate-helpers.js';
 import {
   EXPERT_AVAILABLE,
   LEVELS,
@@ -771,7 +772,7 @@ describe('a whole game with a computer opponent [W6-29]', () => {
   // unexercised through the rendered interface.
   // And once with the master [W6-43], whose requests carry a setting [W6-44].
   it.for(['easy', 'expert', 'master'] as const)(
-    '[W6-29] [W6-32] [W6-34] [W6-41] plays through against %s, one request at a time',
+    '[W6-29] [W6-32] [W6-34] [W6-41] [W6-62] [W6-64] plays through against %s, one request at a time',
     { timeout: 60_000 },
     async (level, { skip }) => {
       // `expert` is only a seating the URL accepts while the committed gate
@@ -800,6 +801,12 @@ describe('a whole game with a computer opponent [W6-29]', () => {
       // [0003 U3-63]: the published view always describes the held state, and
       // the parallel engine agrees about what is legal.
       expect(state.view().game.legalActions).toEqual(legalActions(parallel));
+      // [W6-62] [W6-64]: the estimate, once there, holds every invariant and
+      // is the computer's — the only seat that can have produced one here.
+      const estimate = state.view().estimate;
+      if (answered === 0) expect(estimate).toBeNull();
+      else expect(estimate).toMatchObject({ by: 1, level });
+      holdsInvariants(state.view());
 
       if (state.view().thinking !== null) {
         // [W6-32]: never more than one request outstanding.

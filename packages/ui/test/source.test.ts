@@ -359,6 +359,22 @@ describe('the module layout the check runs against', () => {
   });
 
   /**
+   * [W6-25]. A choice reaches the screen only as the estimate the state module
+   * derives from it [W6-55]: a component that read `lastChoice` could render a
+   * depth or a visit count by the same road [W6-24].
+   */
+  it('[W6-25] keeps lastChoice out of the components', () => {
+    const reads = (files: Source[]): string[] => matches(inComponents(files), /\blastChoice\b/g);
+    expect(reads(src), 'a component reads lastChoice [W6-25]').toEqual([]);
+    // Not vacuous: the matcher rejects a component that does, and the field is
+    // real — the state module publishes it.
+    expect(
+      reads([{ file: `${COMPONENTS}Board.tsx`, code: 'const d = props.view.lastChoice.depth;' }]),
+    ).toHaveLength(1);
+    expect(src.find((s) => s.file === STATE_MODULE)!.code).toMatch(/\blastChoice\b/);
+  });
+
+  /**
    * [W6-12]. The worker must not be able to reach the held state: if it could,
    * a move could enter the game without passing `submit` ([U3-18], [W6-8]).
    */
