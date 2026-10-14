@@ -394,3 +394,54 @@ describe('the docked board and the curtain [U3-103]', () => {
     expect(small).toEqual([]);
   });
 });
+
+/**
+ * [W6-73]: the record's control sits in the top bar at every size, and a
+ * closed record changes nothing else — the page still does not scroll. Open,
+ * it fits the screen and scrolls within itself, and the page beneath still
+ * does not ([W6-71]).
+ */
+describe("the record's control at a real size [W6-73]", () => {
+  it.each([
+    { width: 1280, height: 800, layout: 'wide' },
+    { width: 844, height: 390, layout: 'side' },
+    { width: 390, height: 844, layout: 'stack' },
+  ])('[W6-73] [W6-71] keeps the page still with the Record control in the top bar, at $width × $height',
+    async ({ width, height: tall, layout }) => {
+      const doc = await load(width, tall, '?seed=909&seating=human-easy');
+      await settleOn(doc, layout);
+      const root = doc.documentElement;
+      const buttons = [...doc.querySelectorAll<HTMLButtonElement>('.topbar button')];
+      const record = buttons.find((b) => b.textContent?.trim() === 'Record');
+      const newGame = buttons.find((b) => b.textContent?.trim() === 'New game');
+      expect(record, 'no Record control in the top bar').toBeDefined();
+      // Beside New game, on its line, and a finger's target [U3-59].
+      const r = record!.getBoundingClientRect();
+      const n = newGame!.getBoundingClientRect();
+      expect(Math.round(r.top)).toBe(Math.round(n.top));
+      expect(r.height).toBeGreaterThanOrEqual(44);
+      expect(r.width).toBeGreaterThanOrEqual(44);
+      expect(r.left).toBeGreaterThanOrEqual(0);
+      expect(n.right).toBeLessThanOrEqual(width);
+      expect(record!.scrollWidth, 'the text overflows the control').toBeLessThanOrEqual(record!.clientWidth);
+      expect(root.scrollHeight, 'scrolls vertically with the record closed').toBeLessThanOrEqual(root.clientHeight);
+      expect(root.scrollWidth, 'scrolls sideways with the record closed').toBeLessThanOrEqual(root.clientWidth);
+
+      // After the computer has moved, open: inside the screen, the page still.
+      await playAPly(doc);
+      const deadline = Date.now() + 10_000;
+      while (doc.querySelector('.thinking') && Date.now() < deadline) await tick(50);
+      record!.click();
+      await tick(80);
+      const dialog = doc.querySelector<HTMLElement>('[role="dialog"][aria-labelledby="record-title"]');
+      expect(dialog, 'the record did not open').not.toBeNull();
+      expect(dialog!.querySelectorAll('tbody tr').length).toBeGreaterThanOrEqual(2);
+      const box = dialog!.getBoundingClientRect();
+      expect(box.top).toBeGreaterThanOrEqual(0);
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.bottom).toBeLessThanOrEqual(tall);
+      expect(box.right).toBeLessThanOrEqual(width);
+      expect(root.scrollHeight, 'the open record scrolls the page').toBeLessThanOrEqual(root.clientHeight);
+      expect(root.scrollWidth, 'the open record scrolls the page sideways').toBeLessThanOrEqual(root.clientWidth);
+    });
+});
