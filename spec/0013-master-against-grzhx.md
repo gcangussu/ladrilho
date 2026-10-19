@@ -220,10 +220,15 @@ Committed by a person, written by `grzhx timing` ([G13-47]):
 - **[G13-7]** Their Python code MUST run in its own environment, `grzhx/host/.venv`, built by
   `grzhx/host/venv.sh` as [0011 Z11-5] builds the trainer's: uv, binary wheels only, every hash
   checked against `grzhx/host/requirements.txt`, Python 3.12, and the trainer's torch and NumPy
-  versions. Before building, the harness MUST check for `cmake` and `uv` and configure and build a
-  scratch CMake project, with their `CMakeLists.txt`'s C++ standard, whose one source includes
-  `<algorithm>`, so the compiler is checked as CMake will drive it; it fails naming whichever is
-  missing or broken.
+  versions. The same environment holds the cmake that builds their library, from its pinned PyPI
+  wheel, so nothing is installed on the machine. Before building, the harness MUST check for `uv`
+  and configure and build a scratch CMake project, with their `CMakeLists.txt`'s C++ standard,
+  whose one source includes `<algorithm>`, so the compiler is checked as CMake will drive it. On
+  macOS, when that fails and the SDK's own `usr/include/c++/v1` holds `<algorithm>`, it MUST try
+  again with `-isystem` naming those headers, and, if that builds, build their library with the
+  same flag and record it in every result. Otherwise it fails naming whichever is missing or
+  broken. *A Command Line Tools install whose own `include/c++/v1` is partial shadows the SDK's
+  complete one; the machine of record has one.*
 
 ### The host
 

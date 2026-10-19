@@ -3,3 +3,4 @@ runs/
 .lock
 train/.venv/
 web/dist/
+grzhx/host/.venv/

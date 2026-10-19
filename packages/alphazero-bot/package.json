@@ -23,7 +23,8 @@
     "pool": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs pool",
     "web": "node tools/web.mjs",
     "web-latency": "node tools/web.mjs && node tools/bundle.mjs && node node_modules/.alphazero/web-latency.mjs",
-    "tile": "node tile/bundle.mjs && node node_modules/.alphazero/tile.mjs"
+    "tile": "node tile/bundle.mjs && node node_modules/.alphazero/tile.mjs",
+    "grzhx": "node grzhx/bundle.mjs && node node_modules/.alphazero/grzhx.mjs"
   },
   "dependencies": {
     "engine": "workspace:*"
