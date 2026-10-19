@@ -87,6 +87,8 @@ class Host:
         self.checkpoint = torch.load(args.actor, map_location='cpu', weights_only=False)
         self.model = load_actor(args.actor, 'cpu')
         self.actor = FrozenActor(self.model, 'cpu', bf16=False)
+        # As their local player sets it; `torchThreads` sets the intra-op threads per cell.
+        torch.set_num_interop_threads(1)
         self.actor_sha256 = got
         self.cells = {}
         self.game = None
@@ -267,6 +269,10 @@ class Host:
             for tree in range(r['trees']):
                 g['copy'].restore(tree, snapshot)
             actions, policies, values = g['search'].run(seed, tree_version=g['deals'])
+            # As their script checks: every tree ran its whole budget.
+            ran = int(g['search'].metrics.get('simulations', -1))
+            if ran != r['trees'] * r['simulations']:
+                raise SystemExit(f"their trees ran {ran} simulations, not {r['trees']} x {r['simulations']}")
             votes = np.zeros(180, np.int64)
             action, _, _ = rank_search_actions(actions[:r['trees']], policies[:r['trees']].mean(0), votes, limit=1)
             out = {'action': int(action), 'simulations': int(g['search'].metrics.get('simulations', 0)),
@@ -300,13 +306,31 @@ class Host:
             values.append(float(vals[0]))
             accumulated += policies[0]
             selected, _, _ = rank_search_actions(actions, accumulated / len(chunk_actions), votes, limit=1)
-            if time.perf_counter() - started >= budget_s or (len(chunk_actions) + 1) * r['chunk'] > 65536 * 1024:
+            if time.perf_counter() - started >= budget_s:
                 break
         elapsed = time.perf_counter() - started
         return {'action': int(selected), 'simulations': len(chunk_actions) * r['chunk'], 'value': float(np.mean(values)),
                 'chunks': len(chunk_actions), 'chunkActions': chunk_actions,
                 'tally': {str(a): int(n) for a, n in enumerate(votes) if n},
                 'overrun': max(0.0, (elapsed - budget_s) * 1000.0)}
+
+    def on_time(self, msg):
+        """[G13-47]: one fresh search of an imported position, timed: no
+        lockstep game, nothing kept, for `grzhx timing` alone."""
+        r = self.cells[msg['cell']]
+        env = Batch(1, threads=1, seed=0, library=self.library)
+        try:
+            env.import_public(0, **msg['imported'])
+            search = self.make_search(r, env)
+            try:
+                started = time.perf_counter()
+                actions, _, _ = search.run(mix(DOMAIN_MOVE, msg['index']))
+                ms = (time.perf_counter() - started) * 1000.0
+                return {'action': int(actions[0]), 'ms': ms, 'simulations': int(search.metrics.get('simulations', 0))}
+            finally:
+                search.close()
+        finally:
+            env.close()
 
     def on_step(self, msg):
         g = self.game
@@ -333,7 +357,8 @@ class Host:
     def handle(self, msg):
         kind = msg.get('type')
         handler = {'hello': self.on_hello, 'configure': self.on_configure, 'game': self.on_game,
-                   'deal': self.on_deal, 'ply': self.on_ply, 'move': self.on_move, 'step': self.on_step}.get(kind)
+                   'deal': self.on_deal, 'ply': self.on_ply, 'move': self.on_move, 'step': self.on_step,
+                   'time': self.on_time}.get(kind)
         if handler is None:
             raise SystemExit(f'unknown request {kind!r}')
         if kind in ('deal', 'ply', 'move', 'step') and self.game is None:
