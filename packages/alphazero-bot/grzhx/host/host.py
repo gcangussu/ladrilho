@@ -292,25 +292,30 @@ class Host:
         snapshot = g['lockstep'].snapshot(0)
         accumulated = np.zeros(180, np.float64)
         votes = np.zeros(180, np.int64)
-        chunk_actions, values = [], []
+        chunk_actions, chunk_simulations, values = [], [], []
         selected = None
+        abandoned = False
         while True:
             g['copy'].restore(0, snapshot)
             deadline = None if not chunk_actions else time.monotonic() + max(0.0, budget_s - (time.perf_counter() - started))
             index = len(chunk_actions)
             result = g['search'].run(mix(seed, index), deadline=deadline, tree_version=g['deals'])
             if g['search'].deadline_reached:
+                abandoned = True
                 break  # the chunk in flight, abandoned: it plays no part
             actions, policies, vals = result
             chunk_actions.append(int(actions[0]))
+            # Measured, by their own search's count, not assumed from the setting.
+            chunk_simulations.append(int(g['search'].metrics.get('simulations', -1)))
             values.append(float(vals[0]))
             accumulated += policies[0]
             selected, _, _ = rank_search_actions(actions, accumulated / len(chunk_actions), votes, limit=1)
             if time.perf_counter() - started >= budget_s:
                 break
         elapsed = time.perf_counter() - started
-        return {'action': int(selected), 'simulations': len(chunk_actions) * r['chunk'], 'value': float(np.mean(values)),
-                'chunks': len(chunk_actions), 'chunkActions': chunk_actions,
+        return {'action': int(selected), 'simulations': sum(chunk_simulations), 'value': float(np.mean(values)),
+                'chunks': len(chunk_actions), 'chunkActions': chunk_actions, 'chunkSimulations': chunk_simulations,
+                'abandoned': abandoned,
                 'tally': {str(a): int(n) for a, n in enumerate(votes) if n},
                 'overrun': max(0.0, (elapsed - budget_s) * 1000.0)}
 

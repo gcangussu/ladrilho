@@ -30,7 +30,9 @@ class Reader {
     };
     child.on('error', fail);
     child.stdin!.on('error', fail);
-    child.on('exit', () => {
+    // 'close', not 'exit': it comes only after stdout is drained, so an answer
+    // in flight when the process ends is still read.
+    child.on('close', () => {
       this.ended = true;
       this.waiting?.();
     });
@@ -88,8 +90,20 @@ export interface HostPaths {
   actorSha256: string;
 }
 
+/** What a game asks of the host; a test hands `runMatch` a fake one. */
+export interface HostLike {
+  ask<T = Record<string, unknown>>(request: Record<string, unknown>, timeoutMs: number, what: string): Promise<T>;
+  close(): void;
+}
+
+/** What a game asks of our player. */
+export interface ServeLike {
+  choose(position: AzulJSON, timeoutMs: number, what: string): Promise<OurAnswer>;
+  close(): void;
+}
+
 /** The host: line-delimited JSON, one request then one answer ([G13-10]). */
-export class Host {
+export class Host implements HostLike {
   private readonly child: ChildProcess;
   private readonly reader: Reader;
 
@@ -174,7 +188,7 @@ export function readSplitAnswer(b: Buffer): OurAnswer {
 }
 
 /** Our player: one `serve --split-ms` for one game, with a clock or without. */
-export class Serve {
+export class Serve implements ServeLike {
   private readonly child: ChildProcess;
   private readonly reader: Reader;
 

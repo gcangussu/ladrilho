@@ -67,11 +67,34 @@ look-ahead differently, so pick counts from the table below.
 How long each player takes per move here, from `grzhx timing`, which rewrites `timing.json` and this
 table. Our times are the search's alone: our endgame proof, which their player has no counterpart
 of, runs after it, outside any clock. In a match with one tree and a count, their search reuses its
-tree across a game's moves, while `timing` searches each position fresh, so such a match's moves of
-theirs may cost less than the table says; and a clocked move of theirs is not the search of the
+tree across a game's moves, and our `serve` keeps its memo of evaluations across a round (spec 0011,
+Z11-69), while `timing` searches each position fresh on both sides, so a match's moves may cost less
+than the table says; and a clocked move of theirs is not the search of the
 count it reached.
 
 <!-- timing -->
+| side | simulations | median ms | p90 ms | mean ms |
+| --- | ---: | ---: | ---: | ---: |
+| ours | 500 | 18.0 | 29.0 | 15.8 |
+| ours | 1,000 | 30.0 | 55.0 | 28.4 |
+| ours | 2,000 | 42.0 | 108 | 50.7 |
+| ours | 4,000 | 60.0 | 208 | 85.7 |
+| ours | 8,000 | 74.0 | 380 | 139 |
+| ours | 11,300 | 101 | 549 | 205 |
+| ours | 16,000 | 106 | 786 | 260 |
+| theirs | 128 | 183 | 262 | 190 |
+| theirs | 256 | 328 | 474 | 334 |
+| theirs | 512 | 631 | 752 | 585 |
+| theirs | 1,024 | 1137 | 1382 | 1036 |
+| theirs | 2,048 | 1870 | 2259 | 1695 |
+| theirs | 4,096 | 3980 | 4749 | 3517 |
+| theirs | 8,192 | 7569 | 9679 | 6821 |
+
+A player makes 28.0 moves in a game on average, 31 at most (20 games).
+Measured 2026-10-19 on Intel(R) Core(TM) i7-1068NG7 CPU @ 2.30GHz, 8 logical cores, darwin 25.6.0: 198 positions of the latency corpus, one move at a time, each search fresh, single-threaded.
+Ours is `twelfth/120`; theirs is generation 2300 at `b1d5f5dc5cbe`.
+
+A cell takes about `games × moves per game × (our mean + their mean) ÷ workers`.
 <!-- /timing -->
 
 ## How a match is played and judged

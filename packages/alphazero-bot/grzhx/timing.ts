@@ -13,7 +13,7 @@ import { fromCanonical, toJSON, type AzulJSON } from 'engine';
 import { corpusBlocks, parseBlock } from '../eval/blocks.js';
 import { writeJson } from '../eval/files.js';
 import { importArgs } from './convert.js';
-import { framedPosition, readSplitAnswer, type Host } from './processes.js';
+import { framedPosition, readSplitAnswer, type HostLike as Host } from './processes.js';
 import { HERE } from './release.js';
 import { ourConfig, type OurResolved } from './settings.js';
 

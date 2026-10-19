@@ -253,7 +253,7 @@ fn serve_with(e: &Env, extra: &[&str], stdin: &[u8]) -> std::process::Output {
     run(&args, stdin)
 }
 
-/// [Z11-78], [Z11-23] as amended by [0013 G13-27]: `serve --clock-ms 0` and
+/// [Z11-78], [Z11-23] as amended by spec 0013 [G13-27]: `serve --clock-ms 0` and
 /// `play --clock-ms 0` stop after the first whole simulation, so they answer
 /// every position with one simulation and exactly the move and value `play`
 /// gives at `playSimulations: 1` — the count stays the config's ceiling, and

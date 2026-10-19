@@ -158,6 +158,7 @@ Line-delimited JSON on stdin and stdout, one request then one answer, flushed:
 | `ply {imported, legal, scores}` | `ok` or `{disagreement}` ([G13-17]) |
 | `move {}` | `{action, simulations, value, ms}`, with `chunks`, each chunk's action, the vote's tally and `overrun` under a clock ([G13-13], [G13-28]) |
 | `step {action}` | `{scores, roundFinished, terminated, winner}` or `{disagreement}` |
+| `time {cell, index, imported}` | `{action, ms, simulations}`: one fresh search of an imported position, for `timing` alone ([G13-47]) |
 
 Malformed input, or a request out of order, ends the host with an error naming it.
 
@@ -174,9 +175,9 @@ Committed by a person, written by `grzhx timing` ([G13-47]):
 ```jsonc
 {
   "measured": "<ISO date>",
-  "machine": { "cpu": "…", "cores": 4, "logicalCores": 8, "os": "…" },
+  "machine": { "cpu": "…", "logicalCores": 8, "os": "…" },
   "ours": { "checkpoint": "<run>/<generation>", "sha256": "…", "settings": { … } },
-  "theirs": { "commit": "…", "build": [], "settings": { … } },
+  "theirs": { "commit": "…", "build": [], "cxxFlags": [], "settings": { … } },
   "positions": 200,
   "rows": [ { "side": "ours", "simulations": 1000,
               "ms": { "median": 0, "p90": 0, "mean": 0, "max": 0 } }, … ],
@@ -547,46 +548,49 @@ The `grzhx` script bundles the harness and runs it, as `tile` does.
   | Mutation | Must fail |
   | --- | --- |
   | `convert.ts` sending the floor count without the marker | `verify`, and [G13-46] |
+  | `convert.ts` sending the floor count uncapped at seven | [G13-51]'s full-floor case |
   | `convert.ts` leaving the lid out of the discard counts | `verify`, and [G13-46] |
   | `convert.ts` sending the round 0-based | `verify`, and [G13-46] |
-  | the deal order putting post-refill tiles first in the refilling factory | `verify` |
+  | the deal order putting post-refill tiles first in the refilling factory | [G13-50]'s deal-order case and [G13-46]'s fixture |
   | the host searching the imported state instead of the lockstep state | [G13-51]'s reuse case |
   | the host playing the policy's most probable action | [G13-51]'s `PipelineSearch` case |
   | a tracked file holding a copy of one of their blobs | [G13-4] |
   | `timing.json` edited after the table was rendered | [G13-48] |
   | `serve --clock-ms` answering with the ceiling's move | [0011 Z11-78]'s `serve` case |
-  | the harness framing the live state's `toCanonical` instead of the rebuilt one | [G13-50]'s framing case |
+  | `framedPosition` building the block from a state other than `fromJSON(position, 0)` (its bag reversed) | [G13-50]'s framing case |
+  | a report's illegal last move left out of its `moves`, or replayed without our rules' check | [G13-51]'s replay case |
   | the clocked vote counting the abandoned chunk's partial decision | [G13-51]'s clock case |
 
   *The first three are mistakes the tile harness's translation made when it was written; their
   engine takes a position the same way.*
 - **[G13-53]** Every requirement in this document MUST be either cited by a test in
   `packages/alphazero-bot`, by identifier, or listed with a reason in the *Traceability
-  exemptions* table, enforced by a `traceability-0013` test beside 0011's and 0012's. A
-  requirement cited only by [G13-51] is marked so in its test, because the root suite never runs
-  that script.
+  exemptions* table, enforced by a `traceability-0013` test beside 0011's and 0012's. Which
+  requirements only [G13-51] holds, which the root suite never runs, the table below says.
 
 ### Which check holds which requirement
 
 | Requirements | Held by |
 | --- | --- |
-| [G13-4], [G13-16], [G13-21], [G13-22], [G13-24], [G13-29] to [G13-32], [G13-34] to [G13-40], [G13-42], [G13-46], [G13-48], [G13-49] | [G13-50] |
-| [G13-3], [G13-9], [G13-12], [G13-13], [G13-17], [G13-25], [G13-28], [G13-33], [G13-43] | [G13-51] |
-| [G13-14], [G13-15], [G13-19], [G13-20] | `verify` and [G13-46]; [G13-51]'s game |
+| [G13-1], [G13-4] | the pin's and the tripwire's cases, needing no cache |
+| [G13-14], [G13-15], [G13-16], [G13-19], [G13-21], [G13-22], [G13-29], [G13-31], [G13-32], [G13-34] to [G13-42], [G13-46], [G13-48], [G13-49] | [G13-50]. Its timeout case checks only that the error stops the match and names where; the reader's own timeout, and a process that exits or is missing, are its real-process cases |
+| [G13-33] | [G13-50]'s fake matches hold that the worker count does not change which games are played; [G13-51]'s game played twice through one host holds that nothing carries from one game to the next |
+| [G13-3], [G13-9], [G13-11], [G13-12], [G13-13], [G13-15], [G13-17], [G13-20], [G13-23], [G13-24], [G13-25], [G13-28], [G13-33], [G13-43] | [G13-51], run by `test:grzhx` alone |
+| [G13-14], [G13-15], [G13-17], [G13-19], [G13-20] | also `verify` |
 | [G13-16]'s import ban | also the source check of [0011 Z11-3], extended to `grzhx/` |
-| [G13-27] | [0011 Z11-78]'s cases |
+| [G13-27] | [0011 Z11-78]'s cases in the crate's suite |
 
 ### Traceability exemptions
 
 | Requirement | Why it is not testable here |
 | --- | --- |
-| [G13-1], [G13-2], [G13-5] | The pin's contents and the commands that move it run against the network on purpose. [G13-4] and [G13-49] read the pin. |
+| [G13-2], [G13-5] | Commands that move the pin or ask GitHub, run on purpose against the network. |
 | [G13-6], [G13-7] | Build steps, run by every command that needs the cache; [G13-51] runs on their product. |
-| [G13-8], [G13-10], [G13-11] | Properties of the host's source and protocol, exercised by every [G13-51] case and reviewed rather than asserted. |
+| [G13-8], [G13-10] | Properties of the host's source and protocol, exercised by every [G13-51] case and reviewed rather than asserted. |
 | [G13-18] | A rule about what a report does not say. |
-| [G13-23] | Defaults read from their files at run time; [G13-26]'s `info` prints them and [G13-51] runs on them. |
-| [G13-26], [G13-41] | Behaviour of a command's output, observed by running it. |
-| [G13-44], [G13-45], [G13-47] | Lanes run on purpose, on an idle machine, with the cache, and the README a person writes from them. |
+| [G13-26] | A command's printed output. |
+| [G13-30] | Structural: `play`, `timing` and `info` call one function in `cli.ts`, and none resolves a setting anywhere else. |
+| [G13-44], [G13-45], [G13-47] | Lanes run on purpose, with the cache, on an idle machine, and the README a person writes from them. |
 | [G13-52] | A process promise about how checks were kept. |
 | [G13-54] | A process promise about what lands in which commit. |
 
