@@ -19,6 +19,11 @@ import {
 import { Host } from './processes.js';
 import { assetPath, checkUpdates, defaultCacheDir, ensureRelease, fetchRelease, makePin, PIN_PATH, readPin, repoDir, writePin, type Pin } from './release.js';
 import { verify, verifyCells } from './verify.js';
+import { readReport, recordFixtures, replay, REPLAY_CELLS } from './replay.js';
+import { DEFAULT_OURS, DEFAULT_THEIRS, stats, timeOurs, timeTheirs, timingPositions, writeTiming, type Timing } from './timing.js';
+import { join } from 'node:path';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 
 /** The cache fetched and their library built, once, before any host starts. */
 async function prepare(cache: string, pin: Pin, options: BuildOption[]) {
@@ -47,15 +52,12 @@ interface Resolved {
 }
 
 /** [G13-21] to [G13-25]: every setting parsed and checked before anything is built or played. */
-function resolveSettings(v: { us?: string; them?: string; 'us-set'?: string[]; 'them-set'?: string[] }): Resolved {
+function resolveSettings(v: { us?: string | undefined; them?: string | undefined; 'us-set'?: string[] | undefined; 'them-set'?: string[] | undefined }): Resolved {
   const us = parseBudgets(v.us, 'us');
   const them = parseBudgets(v.them, 'them');
   const ours = resolveOurs(parseSets(v['us-set'] ?? [], 'us'));
   const theirs = parseTheirs(parseSets(v['them-set'] ?? [], 'them'));
   checkTheirBudgets(them, theirs);
-  // [G13-34]: a checkpoint without its parity file is refused before any game.
-  const parity = ours.checkpointPath.replace(/\.bin$/, '.parity');
-  if (!existsSync(parity)) throw new SettingError(`no parity file beside ${ours.checkpointPath}, so it is not loaded ([0011 Z11-13])`);
   return { us, them, ours, theirs };
 }
 
@@ -66,12 +68,33 @@ function machine() {
 const USAGE = `usage: pnpm -F alphazero-bot grzhx <command> [options]
 
 commands
+  play              play a match: every --us budget against every --them budget
+  info              every resolved setting of both sides, and where it came from
+  verify            random games through the lockstep game, every comparison at every ply
+  replay <report>   replay a disagreement report; exit 0 when it no longer reproduces
+  timing            measure both sides' move times and rewrite timing.json and the README's table
+  fixtures          re-record grzhx/fixtures/convert.json from games their engine matched
   fetch             clone their repository at the pin and download the release into the cache
   check-updates     ask GitHub whether their branch or release moved; writes nothing
   pin <commit> <tag>  rewrite grzhx/pinned.json from a fresh fetch (a deliberate act)
   build             build their library into the cache
 
-options
+play and info
+  --us <spec,...>   our budgets: <n> or sims:<n> simulations, ms:<n> a clock (default: the milestone's playSimulations)
+  --them <spec,...> theirs, the same way (default: the actor's recorded search.simulations)
+  --us-set k=v      checkpoint, cpuct, fpu, endgame, ceiling; repeatable
+  --them-set k=v    candidates, maxDepth, chanceInitial, chanceCap, valueScale, maxvisitInit, gumbelScale,
+                    qMode, subtreeReuse, cacheCapacity, symmetricCache, qFloor, chanceCoefficient,
+                    chanceExponent, chanceSensitivity, afterstatePrior, trees, threads, torchThreads,
+                    chunk, build; repeatable
+  --games <n>       games per cell, rounded up to even: each deal from both seats (default 100)
+  --seed <n>        the first deal's seed (default 1)
+  --workers <n>     games at once (default: logical cores - 1)
+  --out <path>      results prefix: <path>.jsonl per game, <path>.json summary (default runs/grzhx/<time>)
+  --no-build        do not build our release binary first
+
+verify --games <n> (default 200), timing [--us n,...] [--them n,...] [--games n] (default 20)
+
   --cache <dir>     where their files are kept (default ~/.cache/azul-grzhx)
 `;
 
@@ -100,6 +123,12 @@ async function main(): Promise<void> {
     return;
   }
   const cache = resolve(v.cache ?? defaultCacheDir());
+  // [G13-21]: --games and --seed are whole numbers, or nothing starts.
+  for (const [k, x] of [['games', v.games], ['seed', v.seed], ['workers', v.workers]] as const) {
+    if (x !== undefined && !/^\d+$/.test(x)) throw new SettingError(`--${k} must be a whole number, not "${x}"`);
+  }
+  if (v.games !== undefined && Number(v.games) < 1) throw new SettingError('--games must be at least 1');
+  if (v.workers !== undefined && Number(v.workers) < 1) throw new SettingError('--workers must be at least 1');
   switch (command) {
     case 'fetch': {
       await fetchRelease(cache, readPin(), log);
@@ -196,6 +225,91 @@ async function main(): Promise<void> {
         process.stderr.write(`${result.error?.message ?? 'stopped'}\n`);
         process.exitCode = 1;
       }
+      return;
+    }
+    case 'replay': {
+      const [path] = rest;
+      if (path === undefined) throw new Error('replay takes <report.json>');
+      const report = readReport(resolve(process.env.INIT_CWD ?? process.cwd(), path));
+      const { host } = await startHost(cache, readPin());
+      try {
+        await host.ask({ type: 'configure', cells: REPLAY_CELLS }, 600_000, 'configure');
+        const out = await replay(host, report);
+        if (out.reproduced) {
+          process.stdout.write(`reproduces at ply ${out.ply}: ${out.comparison}\n`);
+          process.exitCode = 1;
+        } else process.stdout.write('no longer reproduces\n');
+      } finally {
+        host.close();
+      }
+      return;
+    }
+    case 'fixtures': {
+      const pin = readPin();
+      const { host } = await startHost(cache, pin);
+      try {
+        await host.ask({ type: 'configure', cells: REPLAY_CELLS }, 600_000, 'configure');
+        const path = join(resolve(PIN_PATH, '..'), 'fixtures', 'convert.json');
+        const f = await recordFixtures(host, pin.commit, path);
+        process.stdout.write(`wrote ${path}: ${f.plies.length} plies, ${f.deals.length} deals\n`);
+      } finally {
+        host.close();
+      }
+      return;
+    }
+    case 'timing': {
+      const r = resolveSettings({ 'us-set': v['us-set'], 'them-set': v['them-set'] });
+      const pin = readPin();
+      const bin = v['no-build'] ? binary('release') : buildRelease();
+      const { built, hostPaths } = await prepare(cache, pin, r.theirs.build);
+      const list = (x: string | undefined, d: number[]): number[] => (x === undefined ? d : x.split(',').map((n) => Number(n.trim())));
+      const usCounts = list(v.us, DEFAULT_OURS);
+      const themCounts = list(v.them, DEFAULT_THEIRS);
+      const positions = timingPositions();
+      const rows: Timing['rows'] = [];
+      for (const n of usCounts) {
+        log(`ours at ${n} simulations`);
+        rows.push({ side: 'ours', simulations: n, ms: stats(timeOurs(bin, r.ours, n, positions)) });
+      }
+      const host = new Host(hostPaths);
+      let theirSettings: Record<string, unknown> = {};
+      try {
+        const cells = themCounts.map((n, i) => ({ id: i, budget: { kind: 'sims', n }, settings: { ...r.theirs.settings, torchThreads: 1, threads: 1 } }));
+        const configured = await host.ask<{ refused?: unknown; message?: string; cells?: { settings: Record<string, unknown> }[] }>({ type: 'configure', cells }, 600_000, 'configure');
+        if (configured.refused !== undefined) throw new SettingError(`their library refused a count: ${configured.message}`);
+        theirSettings = configured.cells![0].settings;
+        for (let i = 0; i < themCounts.length; i++) {
+          log(`theirs at ${themCounts[i]} simulations`);
+          rows.push({ side: 'theirs', simulations: themCounts[i], ms: stats(await timeTheirs(host, i, positions)) });
+        }
+      } finally {
+        host.close();
+      }
+      // Moves per game, from a short match at the smallest count of each list.
+      const games = Number(v.games ?? '20');
+      const out = join(mkdtempSync(join(tmpdir(), 'azul-grzhx-timing-')), 'games');
+      const cells = cellsFor([{ kind: 'sims', n: Math.min(...usCounts) }], [{ kind: 'sims', n: Math.min(...themCounts) }], `${out}.configs`);
+      const result = await runMatch({
+        cells, ours: r.ours, theirSettings: r.theirs.settings, hostPaths, binary: bin, games, seed: 1,
+        workers: defaultWorkers(availableParallelism(), 1, 1), out, header: { timing: true }, log,
+      });
+      if (result.stopped) throw result.error ?? new Error('the timing games stopped');
+      const perPlayer = readFileSync(`${out}.jsonl`, 'utf8').split('\n').filter((l) => l.includes('"record"'))
+        .flatMap((l) => {
+          const rec = (JSON.parse(l) as { record: { moves: { side: string }[] } }).record;
+          return ['ours', 'theirs'].map((side) => rec.moves.filter((m) => m.side === side).length);
+        });
+      const timing: Timing = {
+        measured: new Date().toISOString().slice(0, 10),
+        machine: machine(),
+        ours: { checkpoint: r.ours.settings.checkpoint, sha256: sha256(readFileSync(r.ours.checkpointPath)), settings: { ...r.ours.settings } },
+        theirs: { commit: pin.commit, build: built.options, cxxFlags: built.cxxFlags, settings: theirSettings },
+        positions: positions.length,
+        rows,
+        movesPerGame: { games: perPlayer.length / 2, mean: Math.round((perPlayer.reduce((a, b) => a + b, 0) / perPlayer.length) * 10) / 10, max: Math.max(...perPlayer) },
+      };
+      writeTiming(timing);
+      process.stdout.write(`wrote grzhx/timing.json and the README's table\n`);
       return;
     }
     case 'verify': {

@@ -20,7 +20,20 @@ class Reader {
   ended = false;
   stderr = '';
 
+  /** A spawn failure, or a write to a process that has died: the next read fails with it. */
+  failure: Error | null = null;
+
   constructor(child: ChildProcess) {
+    const fail = (e: Error): void => {
+      this.failure ??= e;
+      this.waiting?.();
+    };
+    child.on('error', fail);
+    child.stdin!.on('error', fail);
+    child.on('exit', () => {
+      this.ended = true;
+      this.waiting?.();
+    });
     child.stdout!.on('data', (b: Buffer) => {
       this.chunks.push(b);
       this.length += b.length;
@@ -52,6 +65,7 @@ class Reader {
     for (;;) {
       const n = ready(this.peek());
       if (n !== null) return this.take(n);
+      if (this.failure !== null) throw new Error(`${what}: ${this.failure.message}\n${this.stderr.trim()}`);
       if (this.ended) throw new Error(`${what}: the process ended without answering\n${this.stderr.trim()}`);
       const left = deadline - Date.now();
       if (left <= 0) throw new Error(`${what}: no answer in ${Math.round(timeoutMs / 1000)} s`);

@@ -15,6 +15,8 @@ import { NUM_COLORS, type AzulJSON } from 'engine';
 
 /** Their `empty` pattern colour (`engine.hpp`). */
 export const THEIR_EMPTY = 5;
+/** A floor's places, which their `floor_count` never exceeds (`validate`). */
+export const FLOOR_PLACES = 7;
 /** `azul_batch_manual_deal`'s tile for a place a short deal leaves empty. */
 export const NO_TILE = 255;
 
@@ -59,7 +61,10 @@ export function importArgs(j: AzulJSON): ImportArgs {
     pattern_colors: j.players.map((p) => p.patternLines.map((l) => (l.count === 0 ? THEIR_EMPTY : l.color))),
     pattern_counts: j.players.map((p) => p.patternLines.map((l) => l.count)),
     floor_tiles: j.players.map((p) => p.floor.slice()),
-    floor_counts: j.players.map((p) => p.floor.reduce((a, b) => a + b, 0) + (p.floorMarker ? 1 : 0)),
+    // Their floor has seven places and counts the marker in them; ours lets the
+    // marker land on a floor already holding seven tiles. Their engine then
+    // stops counting at seven, as here; both charge the same penalty.
+    floor_counts: j.players.map((p) => Math.min(FLOOR_PLACES, p.floor.reduce((a, b) => a + b, 0) + (p.floorMarker ? 1 : 0))),
     bag: j.bag.slice(),
     discard: j.lid.slice(),
     round: j.round + 1,
