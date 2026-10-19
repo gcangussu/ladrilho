@@ -302,49 +302,58 @@ fn corpus_positions(step: usize) -> Vec<AzulState<Seeded>> {
         .collect()
 }
 
-/// [Z11-78]: a search stopped after its `j`-th evaluator call has run some
-/// whole number `k` of simulations, at least one, and returns exactly what a
-/// search configured for `k` returns — visits, action and value bit for bit —
-/// through `search_until` and through the memoised search `serve` runs.
+/// [Z11-78]: `stop` is asked before each evaluator call and after each
+/// whole simulation, so a search stopped at its `j`-th asking has run some
+/// whole number `k` of simulations, at least one and at most `j` — exactly one
+/// when stopped at the root's own call — and returns exactly what a search
+/// configured for `k` returns, visits, action and value bit for bit. Both
+/// paths are held: `search_until`, which `play` runs, and the memoised search
+/// `serve` runs. Late-round positions are among them, where every leaf is soon
+/// valued and simulations stop reaching the network.
 ///
-/// Mutation, seen red ([Z11-48]), in a copy with its anchor confirmed: in
-/// `Search::stop`, `self.remaining = 0` in place of `self.remaining.min(1)`,
-/// which abandons the simulation in flight: stopped on the root's own call,
-/// the search then runs no simulation at all, and the case fails on its first
-/// position with 0 simulations.
+/// Mutations, seen red ([Z11-48]), each in a copy with its anchor confirmed:
+/// in `Search::stop`, `self.remaining = 0` in place of `self.remaining.min(1)`,
+/// which abandons the simulation in flight, so a search stopped on the root's
+/// call runs none (fails on "0 simulations"); in `Search::run`, the check after
+/// each simulation removed, so a late-round search runs to its ceiling
+/// unasked (fails on "more than at most j"); and in `search_until`, the check
+/// before each call removed, so a search stopped at the root's call runs to
+/// its ceiling (fails on "more than at most j = 1").
 #[test]
 fn a_stopped_search_is_the_search_of_its_count() {
     use azul_alphazero::memo::{Memo, search_memoised_until};
-    use azul_alphazero::search::search_until;
+    use azul_alphazero::search::{SearchResult, search_until};
     let net = fixture();
     let ceiling = config(400, 0.25);
+    let mut positions = corpus_positions(97);
+    positions.extend(late(60..64, 3));
     let mut checked = 0;
-    for (i, p) in corpus_positions(97).iter().enumerate() {
+    for (i, p) in positions.iter().enumerate() {
         for j in [1u32, 2, 5, 40, 150] {
-            let mut calls = 0;
-            let mut stop = || {
-                calls += 1;
-                calls >= j
-            };
-            let (r, _) = search_until(&net, p, &ceiling, None, &mut stop).unwrap();
-            let k: u32 = r.visits.iter().sum();
-            assert!((1..=400).contains(&k), "position {i}, stop at call {j}: {k} simulations");
-            let (full, _) = search(&net, p, &config(k, 0.25), None).unwrap();
-            assert_eq!(r.visits, full.visits, "position {i}, {k} simulations");
-            assert_eq!((r.action, r.value.to_bits()), (full.action, full.value.to_bits()), "position {i}");
-
-            let mut calls = 0;
-            let mut stop = || {
-                calls += 1;
-                calls >= j
-            };
-            let m = search_memoised_until(&net, p, &ceiling, &mut Memo::new(), &mut stop).unwrap();
-            let km: u32 = m.visits.iter().sum();
-            let (full, _) = search(&net, p, &config(km, 0.25), None).unwrap();
-            assert_eq!(m.visits, full.visits, "memoised, position {i}, {km} simulations");
-            assert_eq!((m.action, m.value.to_bits()), (full.action, full.value.to_bits()));
-            checked += 1;
+            for memoised in [false, true] {
+                let mut asked = 0;
+                let mut stop = || {
+                    asked += 1;
+                    asked >= j
+                };
+                let r: SearchResult = if memoised {
+                    search_memoised_until(&net, p, &ceiling, &mut Memo::new(), &mut stop).unwrap()
+                } else {
+                    search_until(&net, p, &ceiling, None, &mut stop).unwrap().0
+                };
+                let k: u32 = r.visits.iter().sum();
+                let path = if memoised { "memoised" } else { "plain" };
+                assert!(k >= 1, "{path}, position {i}, stop at asking {j}: 0 simulations");
+                assert!(k <= j, "{path}, position {i}: {k} simulations, more than at most j = {j}");
+                if j == 1 {
+                    assert_eq!(k, 1, "{path}, position {i}: exactly one simulation when stopped at the root");
+                }
+                let (full, _) = search(&net, p, &config(k, 0.25), None).unwrap();
+                assert_eq!(r.visits, full.visits, "{path}, position {i}, {k} simulations");
+                assert_eq!((r.action, r.value.to_bits()), (full.action, full.value.to_bits()), "{path}, position {i}");
+                checked += 1;
+            }
         }
     }
-    assert!(checked >= 50, "only {checked} cases");
+    assert!(checked >= 100, "only {checked} cases");
 }

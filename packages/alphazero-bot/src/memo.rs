@@ -122,8 +122,8 @@ pub fn choose_memoised<S: Shuffler, E: Evaluator>(
 }
 
 /// The search of `choose_memoised`, without the endgame proof, asking `stop`
-/// before each evaluation it hands the search whether to stop after the
-/// simulation in flight ([Z11-78]). `serve` calls this and the proof apart,
+/// before each evaluation it hands the search, and after each whole
+/// simulation, whether to stop ([Z11-78]). `serve` calls this and the proof apart,
 /// to time them apart ([Z11-79]).
 pub fn search_memoised_until<S: Shuffler, E: Evaluator>(
     net: &E,
@@ -143,13 +143,14 @@ pub fn search_memoised_until<S: Shuffler, E: Evaluator>(
             search.stop();
         }
         let Some(request) = search.wants() else { break };
+        let after: &mut dyn FnMut() -> bool = if stopped { &mut || false } else { &mut *stop };
         match memo.lookup(request) {
-            Ok(e) => search.supply(e),
+            Ok(e) => search.supply_until(e, after),
             Err(k) => {
                 let (observation, legal) = request;
                 net.evaluate(observation, legal, &mut eval);
                 memo.insert(k, &eval);
-                search.supply(&eval);
+                search.supply_until(&eval, after);
             }
         }
     }

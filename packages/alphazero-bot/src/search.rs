@@ -169,6 +169,14 @@ impl<S: Shuffler> Search<S> {
     /// The evaluation of what `wants` named; the search runs on until it
     /// needs the network again or has run every simulation.
     pub fn supply(&mut self, eval: &Evaluation) {
+        self.supply_until(eval, &mut || false);
+    }
+
+    /// [Z11-78]: `supply`, asking `stop` after each whole simulation it runs
+    /// on from here whether to start another. Simulations that end at a leaf
+    /// already valued never reach the network, so without this a search
+    /// could run to its ceiling without its caller being asked.
+    pub fn supply_until(&mut self, eval: &Evaluation, stop: &mut dyn FnMut() -> bool) {
         let Some(p) = self.pending.take() else { return };
         match p.wait {
             Wait::Root => {
@@ -191,7 +199,7 @@ impl<S: Shuffler> Search<S> {
                 self.settle(e, c);
             }
         }
-        self.run();
+        self.run(stop);
     }
 
     /// An expanded node: the evaluation's policy over the legal set becomes
@@ -219,9 +227,12 @@ impl<S: Shuffler> Search<S> {
     }
 
     /// Simulations until one needs the network or none remain.
-    fn run(&mut self) {
+    fn run(&mut self, stop: &mut dyn FnMut() -> bool) {
         while self.pending.is_none() && self.remaining > 0 {
             self.simulate();
+            if self.pending.is_none() && self.remaining > 0 && stop() {
+                self.remaining = 0;
+            }
         }
     }
 
@@ -358,7 +369,8 @@ pub fn search<S: Shuffler, E: Evaluator>(
 }
 
 /// [Z11-78]: `search`, asking `stop` before each evaluator call whether to
-/// stop after the simulation in flight. `config.simulations` is the ceiling.
+/// stop after the simulation in flight, and after each whole simulation
+/// whether to start another. `config.simulations` is the ceiling.
 pub fn search_until<S: Shuffler, E: Evaluator>(
     net: &E,
     root: &AzulState<S>,
@@ -376,7 +388,11 @@ pub fn search_until<S: Shuffler, E: Evaluator>(
             stopped = true;
             search.stop();
         }
-        search.supply(&eval);
+        if stopped {
+            search.supply(&eval);
+        } else {
+            search.supply_until(&eval, stop);
+        }
     }
     Some(search.finish())
 }
