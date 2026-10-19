@@ -122,7 +122,7 @@ async function main(): Promise<void> {
     process.stdout.write(USAGE);
     return;
   }
-  const cache = resolve(v.cache ?? defaultCacheDir());
+  const cache = v.cache !== undefined ? resolve(process.env.INIT_CWD ?? process.cwd(), v.cache) : defaultCacheDir();
   // [G13-21]: --games and --seed are whole numbers, or nothing starts.
   for (const [k, x] of [['games', v.games], ['seed', v.seed], ['workers', v.workers]] as const) {
     if (x !== undefined && !/^\d+$/.test(x)) throw new SettingError(`--${k} must be a whole number, not "${x}"`);
@@ -173,7 +173,10 @@ async function main(): Promise<void> {
       const bin = v['no-build'] ? binary('release') : buildRelease();
       if (!existsSync(bin)) throw new Error(`no binary at ${bin}: drop --no-build`);
       const { built, hostPaths } = await prepare(cache, pin, r.theirs.build);
-      const out = resolve(v.out ?? resolve(RUNS, 'grzhx', new Date().toISOString().replace(/[:.]/g, '-')));
+      // A path as the caller meant it: pnpm runs the script in the package directory.
+      const out = v.out !== undefined
+        ? resolve(process.env.INIT_CWD ?? process.cwd(), v.out)
+        : resolve(RUNS, 'grzhx', new Date().toISOString().replace(/[:.]/g, '-'));
       const cells = cellsFor(r.us, r.them, `${out}.configs`);
       // One host to hear their versions and have their library judge every cell ([G13-25]).
       const probe = new Host(hostPaths);
