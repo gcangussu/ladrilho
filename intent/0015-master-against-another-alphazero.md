@@ -2,7 +2,7 @@
 title: Our master against another AlphaZero
 author: Gabriel Cangussu
 date: 2026-10-19
-status: pending
+status: done
 depends-on: 0009 — An opponent we train ourselves; 0010 — Playing the opponent we trained
 summary: >
   A program that plays our trained player, "master", against the AlphaZero-style

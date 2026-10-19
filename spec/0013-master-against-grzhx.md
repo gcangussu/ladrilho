@@ -2,7 +2,7 @@
 title: Master against grzhx's AlphaZero
 author: Gabriel Cangussu
 date: 2026-10-19
-status: draft
+status: implemented
 intent: 0015 — Our master against another AlphaZero
 prefix: G13
 depends-on: 0001 — Engine core, 0010 — Engines cross-checked, 0011 — AlphaZero training, 0012 — Master opponent
