@@ -8,9 +8,10 @@ use std::time::Instant;
 use azul_alphazero::config::{RunConfig, SearchKind, Settings, settings};
 use azul_alphazero::network::{Evaluation, Evaluator, Network};
 use azul_alphazero::parity;
-use azul_alphazero::memo::{Memo, choose_memoised};
+use azul_alphazero::memo::{Memo, search_memoised_until};
 use azul_alphazero::samples::aux_path;
-use azul_alphazero::search::{SearchResult, choose};
+use azul_alphazero::endgame::refine;
+use azul_alphazero::search::{SearchResult, choose, search_until};
 use azul_alphazero::selfplay::{GAMES_PER_THREAD, self_play};
 use azul_alphazero::wire::{frame, read_canonical, read_message, read_messages};
 use azul_engine::{AzulState, Seeded};
@@ -42,6 +43,8 @@ enum Command {
         config: PathBuf,
         #[arg(long, value_enum)]
         search: Search,
+        #[command(flatten)]
+        timing: Timing,
     },
     /// Positions on stdin one after another, each answered on stdout as `play`
     /// answers it, until stdin ends ([Z11-72]).
@@ -51,6 +54,8 @@ enum Command {
         config: PathBuf,
         #[arg(long, value_enum)]
         search: Search,
+        #[command(flatten)]
+        timing: Timing,
     },
     /// Self-play games, written as a sample file ([Z11-26]).
     Selfplay {
@@ -79,6 +84,21 @@ enum Command {
         #[arg(long)]
         config: PathBuf,
     },
+}
+
+/// `play`'s and `serve`'s clock and split answer ([0013 G13-27], [0013 G13-29]).
+/// The clock is a stop the command applies, not a search setting
+/// ([Z11-60]): the count's ceiling is still the config's.
+#[derive(clap::Args, Clone, Copy)]
+struct Timing {
+    /// [Z11-78]: stop after the first whole simulation that ends at or past
+    /// this many milliseconds of search.
+    #[arg(long)]
+    clock_ms: Option<u64>,
+    /// [Z11-79]: answer in five words, the search's and the proof's
+    /// milliseconds apart.
+    #[arg(long)]
+    split_ms: bool,
 }
 
 fn read(path: &Path) -> Result<Vec<u8>, String> {
@@ -125,8 +145,8 @@ fn load(checkpoint: &Path, config: &Path) -> Result<Loaded, String> {
 
 pub fn run(cli: Cli) -> Result<(), String> {
     match cli.command {
-        Command::Play { checkpoint, config, search } => play(&checkpoint, &config, search),
-        Command::Serve { checkpoint, config, search } => serve(&checkpoint, &config, search),
+        Command::Play { checkpoint, config, search, timing } => play(&checkpoint, &config, search, timing),
+        Command::Serve { checkpoint, config, search, timing } => serve(&checkpoint, &config, search, timing),
         Command::Selfplay { checkpoint, config, generation, games, out } => {
             selfplay(&checkpoint, &config, generation, games, &out)
         }
@@ -152,17 +172,43 @@ fn position(block: &[u32]) -> Result<AzulState<Seeded>, String> {
 
 const TERMINAL: &str = "the position is terminal: there is no move to choose ([Z11-62])";
 
-/// The four words of [Z11-23]: the action, the simulations run, the root
-/// value's bits and the search's own milliseconds.
-fn answer(out: &mut impl Write, result: &SearchResult, started: Instant) -> Result<(), String> {
-    let ms = started.elapsed().as_secs_f64() * 1000.0;
-    let simulations: u32 = result.visits.iter().sum();
-    let words = [u32::from(result.action), simulations, result.value.to_bits(), ms.round() as u32];
+/// A clock's stop for [Z11-78], or one that never stops.
+fn stopper(clock_ms: Option<u64>, started: Instant) -> impl FnMut() -> bool {
+    move || clock_ms.is_some_and(|ms| started.elapsed().as_secs_f64() * 1000.0 >= ms as f64)
+}
+
+/// A move found by search then proof, each timed, around its own part
+/// ([Z11-79]). The result is `choose`'s ([Z11-78]).
+struct Answer {
+    result: SearchResult,
+    search_ms: f64,
+    proof_ms: f64,
+}
+
+/// The four words of [Z11-23] — the action, the simulations run, the root
+/// value's bits and the milliseconds — or, under `--split-ms`, five: the
+/// search's milliseconds and the proof's in place of their sum ([Z11-79]).
+fn answer(out: &mut impl Write, a: &Answer, split: bool) -> Result<(), String> {
+    let r = &a.result;
+    let simulations: u32 = r.visits.iter().sum();
+    let mut words = vec![u32::from(r.action), simulations, r.value.to_bits()];
+    if split {
+        words.extend([a.search_ms.round() as u32, a.proof_ms.round() as u32]);
+    } else {
+        words.push((a.search_ms + a.proof_ms).round() as u32);
+    }
     out.write_all(&frame(&words)).and_then(|()| out.flush()).map_err(|e| format!("writing stdout: {e}"))
 }
 
+/// The proof of [Z11-76] after a search that ran in `search_ms`.
+fn proved<S: azul_engine::Shuffler>(state: &AzulState<S>, result: SearchResult, nodes: u32, search_ms: f64) -> Answer {
+    let started = Instant::now();
+    let result = refine(state, result, nodes).0;
+    Answer { result, search_ms, proof_ms: started.elapsed().as_secs_f64() * 1000.0 }
+}
+
 /// [Z11-23]: one position in, four words out, nothing kept.
-fn play(checkpoint: &Path, config: &Path, search: Search) -> Result<(), String> {
+fn play(checkpoint: &Path, config: &Path, search: Search, timing: Timing) -> Result<(), String> {
     let loaded = load(checkpoint, config)?;
     let s = settings(&loaded.config, search_kind(search))?;
     let mut input = Vec::new();
@@ -173,17 +219,19 @@ fn play(checkpoint: &Path, config: &Path, search: Search) -> Result<(), String> 
     };
     let state = position(block)?;
     let started = Instant::now();
-    let Some(result) = choose(&loaded.net, &state, &s.search) else {
+    let Some((result, _)) = search_until(&loaded.net, &state, &s.search, None, &mut stopper(timing.clock_ms, started))
+    else {
         return Err(TERMINAL.into());
     };
-    answer(&mut std::io::stdout().lock(), &result, started)
+    let a = proved(&state, result, s.search.endgame_nodes, started.elapsed().as_secs_f64() * 1000.0);
+    answer(&mut std::io::stdout().lock(), &a, timing.split_ms)
 }
 
 /// [Z11-72]: `play` for a whole game in one process. The checkpoint is loaded
 /// and parity checked once; each position is answered before the next is
 /// read, from a memo of the evaluations made so far ([Z11-69]), emptied
 /// whenever a position's round differs from the one before it.
-fn serve(checkpoint: &Path, config: &Path, search: Search) -> Result<(), String> {
+fn serve(checkpoint: &Path, config: &Path, search: Search, timing: Timing) -> Result<(), String> {
     let loaded = load(checkpoint, config)?;
     let s = settings(&loaded.config, search_kind(search))?;
     let mut input = std::io::stdin().lock();
@@ -197,10 +245,12 @@ fn serve(checkpoint: &Path, config: &Path, search: Search) -> Result<(), String>
             round = Some(state.round_index());
         }
         let started = Instant::now();
-        let Some(result) = choose_memoised(&loaded.net, &state, &s.search, &mut memo) else {
+        let mut stop = stopper(timing.clock_ms, started);
+        let Some(result) = search_memoised_until(&loaded.net, &state, &s.search, &mut memo, &mut stop) else {
             return Err(TERMINAL.into());
         };
-        answer(&mut out, &result, started)?;
+        let a = proved(&state, result, s.search.endgame_nodes, started.elapsed().as_secs_f64() * 1000.0);
+        answer(&mut out, &a, timing.split_ms)?;
     }
     Ok(())
 }

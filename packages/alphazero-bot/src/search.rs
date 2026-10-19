@@ -311,6 +311,17 @@ impl<S: Shuffler> Search<S> {
         self.remaining -= 1;
     }
 
+    /// [Z11-78]: no simulation starts after the one in flight, or after the
+    /// first when the search is still paused on its root. The search then
+    /// finishes as one configured for the simulations it has run would: none
+    /// of its choices depend on how many remain, so the result is that
+    /// search's, bit for bit. Reads no clock; the caller decides when.
+    pub fn stop(&mut self) {
+        if self.pending.is_some() {
+            self.remaining = self.remaining.min(1);
+        }
+    }
+
     /// The root's visits and backed-up value, and the tree's shape. Read once
     /// `wants` is `None`.
     pub fn finish(self) -> (SearchResult, TreeStats) {
@@ -343,11 +354,28 @@ pub fn search<S: Shuffler, E: Evaluator>(
     config: &SearchConfig,
     noise: Option<(&SelfPlayNoise, &mut Rng)>,
 ) -> Option<(SearchResult, TreeStats)> {
+    search_until(net, root, config, noise, &mut || false)
+}
+
+/// [Z11-78]: `search`, asking `stop` before each evaluator call whether to
+/// stop after the simulation in flight. `config.simulations` is the ceiling.
+pub fn search_until<S: Shuffler, E: Evaluator>(
+    net: &E,
+    root: &AzulState<S>,
+    config: &SearchConfig,
+    noise: Option<(&SelfPlayNoise, &mut Rng)>,
+    stop: &mut dyn FnMut() -> bool,
+) -> Option<(SearchResult, TreeStats)> {
     // [Z11-62]: a terminal root asks for nothing.
     let mut search = Search::new(root, config, noise)?;
     let mut eval = Evaluation::default();
+    let mut stopped = false;
     while let Some((observation, legal)) = search.wants() {
         net.evaluate(observation, legal, &mut eval);
+        if !stopped && stop() {
+            stopped = true;
+            search.stop();
+        }
         search.supply(&eval);
     }
     Some(search.finish())
