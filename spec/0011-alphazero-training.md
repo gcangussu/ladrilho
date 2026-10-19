@@ -172,7 +172,9 @@ result, winrate) keep their meaning.
   no weights, no encoding table, no search code, no constants. A source check MUST fail on an
   import of `ai-bot`, on the path `packages/ai-bot`, and on the string `alpha-zero-general`
   anywhere in the package's sources — `web/` included ([0012 T12-32]), its generated payload
-  excepted.
+  excepted, and `grzhx/` included, its host too ([0013 G13-8]). Under `grzhx/` it also fails on an
+  import of `eval/chooser.ts`, which is in the ladder hash and which the harness never touches
+  ([0013 G13-16]).
 - **[Z11-4]** `package.json` scripts:
 
   | Script | Runs |
@@ -189,6 +191,8 @@ result, winrate) keep their meaning.
   | `throughput --run <name>` | [Z11-53] |
   | `web` | [0012 T12-7]: the master's payload |
   | `web-latency` | [0012 T12-25] |
+  | `grzhx <command>` | [0013 G13-31] and the harness's other commands: the master against grzhx's AlphaZero |
+  | `test:grzhx` | [0013 G13-51]: the harness's suite that needs their cache, the host's environment and their build |
 
   *(Extended by [0012 T12-32].)* `test` also runs the web crate's `cargo test` and builds the
   payload before the lanes' suite, and `typecheck` builds the payload first and lints the web
@@ -213,7 +217,9 @@ result, winrate) keep their meaning.
 
   The root `pnpm test` and `pnpm typecheck` therefore include the crate and the lanes. They do
   **not** include `test:train`: it needs `uv` and a PyTorch install, and the parts of the trainer
-  whose mistakes would reach play are checked from Rust instead ([Z11-13]).
+  whose mistakes would reach play are checked from Rust instead ([Z11-13]). Nor `test:grzhx`, for
+  the same reason: it needs `uv`, PyTorch, a C++ build and their release in the cache. The harness's
+  suite that needs none of them, [0013 G13-50], is part of the lanes' vitest suite.
 - **[Z11-5]** The trainer's environment MUST be pinned in `train/requirements.txt`, compiled by
   `uv pip compile --generate-hashes --python-version 3.12 --python-platform x86_64-apple-darwin`
   from a `train/requirements.in` naming `torch==2.2.2` and `numpy==1.26.4`, so that every package
@@ -552,8 +558,8 @@ The binary's commands, each loading one checkpoint and one run's settings:
   proof ran on about a fifth of the corpus, adding 50 ms at the median there.*
 
 - **[Z11-78]** The library MUST let a caller stop a search after any whole simulation, at least
-  one, without reading a clock itself (`Search::stop`, `search_until`, and
-  `memo::search_memoised_until`, which `serve` runs). A search stopped after `k` simulations MUST
+  one, without reading a clock itself (`Search::stop`, `Search::supply_until` for a caller driving
+  the search by hand, `search_until`, and `memo::search_memoised_until`, which `serve` runs). A search stopped after `k` simulations MUST
   return the action, visits and value that a search configured for `k` returns, bit for bit, and
   the endgame proof follows it as it follows any search. *Nothing in selection, expansion or
   backup reads how many simulations remain, so the claim holds by construction; the suite holds it

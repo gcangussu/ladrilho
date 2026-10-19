@@ -110,6 +110,11 @@ function milestoneConfig(run: string, generation: number): Record<string, unknow
   return entry.config;
 }
 
+/** [G13-34]: a checkpoint without its parity file is refused before any game ([0011 Z11-13]). */
+export function checkParity(checkpointPath: string): void {
+  if (!existsSync(checkpointPath.replace(/\.bin$/, '.parity'))) throw new SettingError(`no parity file beside ${checkpointPath}, so it is not loaded ([0011 Z11-13])`);
+}
+
 /** [G13-22]: our settings, defaults included, and where each came from. */
 export function resolveOurs(sets: Map<string, string>): OurResolved {
   for (const k of sets.keys()) {
@@ -127,8 +132,7 @@ export function resolveOurs(sets: Map<string, string>): OurResolved {
   }
   const checkpointPath = milestoneCheckpoint(run, generation);
   if (!checkpointPath.startsWith(MILESTONES) || !existsSync(checkpointPath)) throw new SettingError(`no milestone checkpoint at ${checkpointPath}`);
-  // [G13-34]: a checkpoint without its parity file is refused before any game ([0011 Z11-13]).
-  if (!existsSync(checkpointPath.replace(/\.bin$/, '.parity'))) throw new SettingError(`no parity file beside ${checkpointPath}, so it is not loaded ([0011 Z11-13])`);
+  checkParity(checkpointPath);
   const config = milestoneConfig(run, generation);
   const num = (k: 'cpuct' | 'fpu', logged: unknown): [number, string] =>
     sets.has(k) ? [decimal(sets.get(k)!, k), 'given'] : [Number(logged), "the milestone's logged config"];

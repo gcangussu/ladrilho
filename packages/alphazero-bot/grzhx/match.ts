@@ -11,7 +11,7 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { disagreementRecord, Disagreement, playGame, type Move, type Mover } from './game.js';
-import { Host, Serve, type HostPaths } from './processes.js';
+import { Host, Serve, type HostLike, type HostPaths, type ServeLike } from './processes.js';
 import { budgetLabel, ourConfig, type BudgetSpec, type OurResolved } from './settings.js';
 import { summarise, table, type CellInfo, type GameLine, type Summary } from './summary.js';
 
@@ -80,8 +80,9 @@ export interface MatchOptions {
   out: string;
   header: Record<string, unknown>;
   log: (s: string) => void;
-  /** For tests: what starts a host and a `serve`. */
-  start?: { host: (p: HostPaths) => Host; serve: (cell: Cell) => Serve };
+  /** For tests: what starts a host and a `serve`, and a move's timeout in place of [G13-38]'s. */
+  start?: { host: (p: HostPaths) => HostLike; serve: (cell: Cell) => ServeLike };
+  timeoutMs?: number;
 }
 
 export interface MatchResult {
@@ -91,7 +92,7 @@ export interface MatchResult {
 }
 
 /** Our player as a mover: `serve`'s answer, held to our engine's rules. */
-function ourMover(serve: Serve, timeoutMs: number, where: (ply: number) => string): Mover {
+function ourMover(serve: ServeLike, timeoutMs: number, where: (ply: number) => string): Mover {
   return async (position, ply) => {
     const a = await serve.choose(position, timeoutMs, where(ply));
     if (!position.legalActions.includes(a.action)) throw new Error(`${where(ply)}: our player chose ${a.action}, which our engine refuses`);
@@ -120,15 +121,15 @@ export async function runMatch(o: MatchOptions): Promise<MatchResult> {
     o.log(`stopping: ${e.message}`);
     for (const p of live) p.close();
   };
-  const startHost = o.start?.host ?? ((p: HostPaths) => new Host(p));
-  const startServe = o.start?.serve ?? ((c: Cell) => new Serve(o.binary, o.ours.checkpointPath, c.config, c.usBudget?.kind === 'ms' ? c.usBudget.n : null));
+  const startHost = o.start?.host ?? ((p: HostPaths): HostLike => new Host(p));
+  const startServe = o.start?.serve ?? ((c: Cell): ServeLike => new Serve(o.binary, o.ours.checkpointPath, c.config, c.usBudget?.kind === 'ms' ? c.usBudget.n : null));
   let done = 0;
 
   const worker = async (): Promise<void> => {
     const host = startHost(o.hostPaths);
     live.add(host);
     try {
-      const configured = await host.ask<{ refused?: unknown; message?: string }>({ type: 'configure', cells: hostCells(o.cells, o.theirSettings) }, 10 * 60_000, 'configure');
+      const configured = await host.ask<{ refused?: unknown; message?: string }>({ type: 'configure', cells: hostCells(o.cells, o.theirSettings) }, o.timeoutMs ?? 10 * 60_000, 'configure');
       if (configured.refused !== undefined) throw new Error(`their library refused cell ${String(configured.refused)}'s settings: ${configured.message}`);
       while (!stopped && next < jobs.length) {
         const job = jobs[next++];
@@ -136,12 +137,13 @@ export async function runMatch(o: MatchOptions): Promise<MatchResult> {
         const serve = startServe(cell);
         live.add(serve);
         const where = (ply: number): string => `cell ${job.cell} (${cell.us} v ${cell.them}), seed ${job.seed}, our seat ${job.ourSeat}, ply ${ply}`;
-        const timeout = Math.max(moveTimeout(cell.usBudget), moveTimeout(cell.themBudget));
+        const ourTimeout = o.timeoutMs ?? moveTimeout(cell.usBudget);
+        const timeout = o.timeoutMs ?? Math.max(moveTimeout(cell.usBudget), moveTimeout(cell.themBudget));
         let line: GameLine;
         try {
           const record = await playGame({
             host, cell: job.cell, matchSeed: o.seed, seed: job.seed, ourSeat: job.ourSeat,
-            ours: ourMover(serve, moveTimeout(cell.usBudget), where), theirs: null, timeoutMs: timeout,
+            ours: ourMover(serve, ourTimeout, where), theirs: null, timeoutMs: timeout,
           });
           line = { kind: 'game', cell: job.cell, seed: job.seed, ourSeat: job.ourSeat, record };
         } catch (e) {

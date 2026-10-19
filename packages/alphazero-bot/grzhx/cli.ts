@@ -291,7 +291,7 @@ async function main(): Promise<void> {
       const cells = cellsFor([{ kind: 'sims', n: Math.min(...usCounts) }], [{ kind: 'sims', n: Math.min(...themCounts) }], `${out}.configs`);
       const result = await runMatch({
         cells, ours: r.ours, theirSettings: r.theirs.settings, hostPaths, binary: bin, games, seed: 1,
-        workers: defaultWorkers(availableParallelism(), 1, 1), out, header: { timing: true }, log,
+        workers: defaultWorkers(availableParallelism(), 1, 1), out, header: { timing: true, repeatable: true }, log,
       });
       if (result.stopped) throw result.error ?? new Error('the timing games stopped');
       const perPlayer = readFileSync(`${out}.jsonl`, 'utf8').split('\n').filter((l) => l.includes('"record"'))

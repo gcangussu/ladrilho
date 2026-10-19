@@ -11,7 +11,7 @@
 
 import { apply, isLegal, newGame, outcome, toJSON, type AzulState } from 'engine';
 import { dealTiles, importArgs, type ImportArgs } from './convert.js';
-import type { Host } from './processes.js';
+import type { HostLike as Host } from './processes.js';
 
 const FULL_BAG = [20, 20, 20, 20, 20];
 
@@ -135,6 +135,12 @@ export async function playGame(spec: GameSpec, census: Census = emptyCensus()): 
     const replayed = spec.replay?.[ply];
     if (replayed !== undefined) {
       move = { side: s.currentPlayer === spec.ourSeat ? 'ours' : 'theirs', action: replayed };
+      // A replayed move is held to our rules as a fresh one is: a report whose
+      // fault was the move itself must reproduce, not crash ([G13-43]).
+      if (!isLegal(s, replayed)) {
+        played.push(replayed);
+        fail(move.side === 'theirs' ? 'their move is illegal in our engine' : 'a recorded move is illegal in our engine', { action: replayed });
+      }
     } else if (s.currentPlayer === spec.ourSeat) {
       move = await spec.ours(position, ply);
     } else if (spec.theirs !== null) {
@@ -142,7 +148,11 @@ export async function playGame(spec: GameSpec, census: Census = emptyCensus()): 
     } else {
       const a = await ask({ type: 'move' }, where('their move'));
       move = { side: 'theirs', ...(a as unknown as Omit<Move, 'side'>) };
-      if (!isLegal(s, move.action)) fail('their move is illegal in our engine', { action: move.action });
+      if (!isLegal(s, move.action)) {
+        // Recorded, so a replay of the report plays it and finds it illegal again.
+        played.push(move.action);
+        fail('their move is illegal in our engine', { action: move.action });
+      }
     }
 
     const roundBefore = s.roundIndex;

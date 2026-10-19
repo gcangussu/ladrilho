@@ -12,7 +12,7 @@ import { apply, newGame, Rng, toJSON } from 'engine';
 import { writeAtomic } from '../eval/files.js';
 import { dealTiles, importArgs } from './convert.js';
 import { Disagreement, playGame, type DisagreementRecord, type Mover } from './game.js';
-import type { Host } from './processes.js';
+import type { HostLike as Host } from './processes.js';
 
 /** The cell a replay configures: its search is never run. */
 export const REPLAY_CELLS = [{ id: 0, budget: { kind: 'sims', n: 16 } }];

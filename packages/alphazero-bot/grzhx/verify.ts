@@ -7,7 +7,7 @@
 
 import { Rng } from 'engine';
 import { disagreementRecord, Disagreement, emptyCensus, playGame, type Census, type DisagreementRecord, type Mover } from './game.js';
-import type { Host } from './processes.js';
+import type { HostLike as Host } from './processes.js';
 
 export const VERIFY_CELL = 0;
 export const VERIFY_SIMULATIONS = 16;

@@ -59,6 +59,11 @@ function importFaults(files: Source[]): string[] {
       if (spec.startsWith('.') && posix.normalize(posix.join(posix.dirname(f.path), spec)).startsWith('..')) {
         out.push(`${f.path} reaches outside the package: ${spec}`);
       }
+      // [Z11-3] as amended by spec 0013 [G13-16]: the grzhx harness spawns `serve`
+      // itself and never imports the chooser, which is in the ladder hash.
+      if (f.path.startsWith('grzhx/') && spec.startsWith('.') && /^eval\/chooser(\.[jt]s)?$/.test(posix.normalize(posix.join(posix.dirname(f.path), spec)))) {
+        out.push(`${f.path} imports eval/chooser`);
+      }
     }
   }
   return out;
@@ -241,6 +246,9 @@ const SCRIPTS: Record<string, RegExp> = {
   gate: /cli\.mjs gate$/,
   latency: /cli\.mjs latency$/,
   throughput: /cli\.mjs throughput$/,
+  // [0013 G13-50], [0013 G13-51]: the harness, and its suite that needs the cache, kept out of `test`.
+  grzhx: /^node grzhx\/bundle\.mjs && node node_modules\/\.alphazero\/grzhx\.mjs$/,
+  'test:grzhx': /^vitest run --config grzhx\/vitest\.config\.ts$/,
 };
 
 describe('the source check [Z11-47]', () => {
@@ -281,9 +289,13 @@ describe('the source check [Z11-47]', () => {
       { path: 'eval/x.ts', text: `import { apply } from '${['..', '..', 'engine', 'src', 'apply.js'].join('/')}';` },
       { path: 'test/support/x.ts', text: `import { apply } from '${['..', '..', '..', 'engine', 'src'].join('/')}';` },
       { path: 'eval/x.ts', text: `const m = await import('${EXPERT}/gate');` },
+      { path: 'grzhx/x.ts', text: `import { frame } from '${['..', 'eval', 'chooser.js'].join('/')}';` },
+      { path: 'grzhx/test/x.ts', text: `import { frame } from '${['..', '..', 'eval', 'chooser.js'].join('/')}';` },
     ];
     for (const f of bad) expect(importFaults([f]), f.text).not.toEqual([]);
     expect(importFaults([{ path: 'eval/x.ts', text: "import { tier } from 'bot/arena';" }])).toEqual([]);
+    // Outside grzhx/ the chooser may be imported: the suite compares grzhx's framing with it.
+    expect(importFaults([{ path: 'test/x.ts', text: `import { frame } from '${['..', 'eval', 'chooser.js'].join('/')}';` }])).toEqual([]);
     expect(importFaults([{ path: 'test/support/x.ts', text: `import { due } from '${['..', '..', 'eval', 'decision.js'].join('/')}';` }])).toEqual([]);
     expect(manifestFaults({ ...pkg, dependencies: { engine: 'workspace:*', bot: 'workspace:*' } })).not.toEqual([]);
     expect(manifestFaults({ ...pkg, devDependencies: { [EXPERT]: 'workspace:*' } })).not.toEqual([]);
