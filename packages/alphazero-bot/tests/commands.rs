@@ -246,3 +246,68 @@ fn serve_ends_at_the_end_of_its_input_and_refuses_bad_input() {
     assert_eq!(o.status.code(), Some(2));
     assert!(stderr(&o).contains("terminal"), "{}", stderr(&o));
 }
+
+fn serve_with(e: &Env, extra: &[&str], stdin: &[u8]) -> std::process::Output {
+    let mut args = vec!["serve", &e.checkpoint, "--config", &e.config, "--search", "play"];
+    args.extend_from_slice(extra);
+    run(&args, stdin)
+}
+
+/// [Z11-78], [Z11-23] as amended by [0013 G13-27]: `serve --clock-ms 0` stops
+/// after the first whole simulation, so it answers every position with one
+/// simulation and exactly the move and value `play` gives at
+/// `playSimulations: 1` — the count stays the config's ceiling, and the
+/// command, not the library, reads the clock.
+///
+/// Mutation, seen red ([Z11-48]), in a copy with its anchor confirmed: in
+/// `serve`, `&mut || false` passed in place of `&mut stop`, which answers
+/// with the ceiling's move; the case fails on the simulations word.
+#[test]
+fn a_clocked_serve_is_the_search_of_its_count() {
+    let ceiling = env(&[("playSimulations", "300")]);
+    let one = env(&[("playSimulations", "1")]);
+    let positions: Vec<_> = support::game_positions(41).into_iter().step_by(4).collect();
+    let input: Vec<u8> = positions.iter().flat_map(|s| frame(&block_of(s))).collect();
+    let o = serve_with(&ceiling, &["--clock-ms", "0"], &input);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let served = words(&o.stdout);
+    assert_eq!(served.len(), 5 * positions.len());
+    for (i, s) in positions.iter().enumerate() {
+        let alone = words(&play(&one, "play", &frame(&block_of(s))).stdout);
+        assert_eq!(served[5 * i + 2], 1, "position {i}: one simulation");
+        assert_eq!(served[5 * i + 1..5 * i + 4], alone[1..4], "position {i}");
+    }
+}
+
+/// [Z11-79]: under `--split-ms`, `play` and `serve` answer in five words —
+/// the action, simulations and value of the four-word answer, then the
+/// search's milliseconds and the proof's — and the proof's is 0 with the
+/// proof off. Without the flag the answer is the four words it always was
+/// ([Z11-23]; `play_answers_in_four_words`).
+#[test]
+fn a_split_answer_times_search_and_proof_apart() {
+    let e = env(&[]);
+    let positions: Vec<_> = support::game_positions(43).into_iter().step_by(7).collect();
+    for s in &positions {
+        let input = frame(&block_of(s));
+        let four = words(&play(&e, "play", &input).stdout);
+        let o = run(&["play", &e.checkpoint, "--config", &e.config, "--search", "play", "--split-ms"], &input);
+        assert!(o.status.success(), "{}", stderr(&o));
+        let five = words(&o.stdout);
+        assert_eq!(five.len(), 6);
+        assert_eq!(five[0], 5, "the length prefix");
+        assert_eq!(five[1..4], four[1..4]);
+        assert_eq!(five[5], 0, "the proof is off");
+    }
+    let input: Vec<u8> = positions.iter().flat_map(|s| frame(&block_of(s))).collect();
+    let o = serve_with(&e, &["--split-ms"], &input);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let served = words(&o.stdout);
+    assert_eq!(served.len(), 6 * positions.len());
+    for (i, s) in positions.iter().enumerate() {
+        let four = words(&play(&e, "play", &frame(&block_of(s))).stdout);
+        assert_eq!(served[6 * i], 5);
+        assert_eq!(served[6 * i + 1..6 * i + 4], four[1..4], "position {i}");
+        assert_eq!(served[6 * i + 5], 0);
+    }
+}

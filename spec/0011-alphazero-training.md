@@ -418,8 +418,9 @@ network value `V` from when it was expanded.
   seat to move, which is [0004 B4-18]'s trap.
 - **[Z11-18]** A search MUST run exactly its configured number of simulations. Expanding the root
   — one network call on the root's own observation, before the first simulation — is not a
-  simulation, so the root's visits sum to exactly the configured number. Nothing in the crate's
-  library may read a clock, so a search is never curtailed.
+  simulation, so the root's visits sum to exactly the configured number, unless its caller stops
+  it after a whole simulation ([Z11-78], [0013 G13-27]). Nothing in the crate's library may read a
+  clock: only a command's `--clock-ms` curtails a search.
 - **[Z11-19]** In play (the lanes, [Z11-24]) the search MUST start from an empty tree on every
   move, use no noise, and return the action with the most root visits, ties to the lowest index.
   Self-play MAY reuse the subtree of the move played.
@@ -523,8 +524,8 @@ The binary's commands, each loading one checkpoint and one run's settings:
 
 | Command | Does |
 | --- | --- |
-| `alphazero play <checkpoint> --config <file> --search play\|milestone` | reads one position from stdin, writes one answer to stdout ([Z11-23]) |
-| `alphazero serve <checkpoint> --config <file> --search play\|milestone` | reads positions from stdin until it ends, answering each as `play` would ([Z11-72]) |
+| `alphazero play <checkpoint> --config <file> --search play\|milestone [--clock-ms N] [--split-ms]` | reads one position from stdin, writes one answer to stdout ([Z11-23]) |
+| `alphazero serve <checkpoint> --config <file> --search play\|milestone [--clock-ms N] [--split-ms]` | reads positions from stdin until it ends, answering each as `play` would ([Z11-72]) |
 | `alphazero selfplay <checkpoint> --config <file> --generation G --games N --out <file>` | [Z11-26] |
 | `alphazero latency <checkpoint> <corpus> --config <file> [--simulations N]` | [Z11-40], [Z11-57] |
 | `alphazero throughput <checkpoint> --config <file>` | [Z11-53] |
@@ -534,7 +535,8 @@ The binary's commands, each loading one checkpoint and one run's settings:
   simulation count: `play` for `playSimulations`, `milestone` for `milestoneSimulations`; `selfplay`
   and `throughput` use `selfPlaySimulations`, the noise settings and `threads`. `--simulations`
   overrides the count for `latency` alone, which is how [Z11-57] steps it; every other command
-  refuses it.
+  refuses it. `--clock-ms` ([Z11-23]) is a stop the command applies, not a search setting: the
+  count it stops below still comes only from the config, through the one function.
 - **[Z11-77]** A run's config MAY set `playEndgameNodes`, a whole number up to 10⁹; absent means 0.
   It is [Z11-76]'s `endgame_nodes` for `--search play` and for `latency`, so a latency record
   measures the proof with the search it follows, and it is 0 for `--search milestone`, `selfplay`
@@ -549,6 +551,19 @@ The binary's commands, each loading one checkpoint and one run's settings:
   185 ms, the median 44 to 45, p95 678 to 732, p99 815 to 924, and the longest 1,434 to 1,910; the
   proof ran on about a fifth of the corpus, adding 50 ms at the median there.*
 
+- **[Z11-78]** The library MUST let a caller stop a search after any whole simulation, at least
+  one, without reading a clock itself (`Search::stop`, `search_until`, and
+  `memo::search_memoised_until`, which `serve` runs). A search stopped after `k` simulations MUST
+  return the action, visits and value that a search configured for `k` returns, bit for bit, and
+  the endgame proof follows it as it follows any search. *Nothing in selection, expansion or
+  backup reads how many simulations remain, so the claim holds by construction; the suite holds it
+  at several `k` on latency-corpus positions, and holds `serve --clock-ms 0` to one simulation and
+  `play`'s move at `playSimulations: 1`.*
+- **[Z11-79]** `play --split-ms` and `serve --split-ms` MUST answer each position in five words:
+  [Z11-23]'s first three, then the search's milliseconds and the endgame proof's, each read by the
+  command around its own part. Both MUST still answer exactly as `choose` and `choose_memoised`
+  would. Without the flag the answer is exactly as before, so `eval/chooser.ts` and the ladder hash
+  ([Z11-63]) are untouched. With the proof off the fifth word is 0.
 - **[Z11-22]** No public function and no command may panic on any input. A malformed position,
   checkpoint or corpus is an error exit with a message. The one exception is a debug build's
   census check of [Z11-51]: `pre_deal_view` is meaningful only when `after` is `before` with a
@@ -558,9 +573,16 @@ The binary's commands, each loading one checkpoint and one run's settings:
   framing of [0010 C10-12], builds the state with `from_canonical(&block, Seeded::new(0))`, and
   writes the action, the simulations run, the root value's `f32` bits and the search's own
   milliseconds, rounded to a whole number, as four words. It holds no state between invocations.
-  The timing is read by the command around `choose`, not by the library ([Z11-18]).
+  The timing is read by the command around the search and the proof, not by the library
+  ([Z11-18]). Two flags, which only `packages/alphazero-bot/grzhx` passes ([0013 G13-27],
+  [0013 G13-29]): `--clock-ms <n>` stops the search after the first whole simulation that ends at
+  or past `n` ms of it ([Z11-78]), `playSimulations` (or `milestoneSimulations`) still the
+  ceiling, so the second word is then the simulations run; `--split-ms` answers in five words
+  ([Z11-79]).
 - **[Z11-24]** Given the same checkpoint, the same config, the same `--search` and the same
-  position, `play` MUST return the same action and value on the same build, on every run.
+  position, `play` MUST return the same action and value on the same build, on every run. Under
+  `--clock-ms` the simulations run may differ between runs; given the count it reports, the
+  action and value are those `play` returns configured for that count, bit for bit ([Z11-78]).
 - **[Z11-72]** `serve` MUST read positions one after another from stdin, each framed as `play`
   reads one ([Z11-23]), and answer each in `play`'s four words, flushed, before reading the next.
   It MUST exit successfully when stdin ends between positions, and with an error after answering
@@ -571,7 +593,8 @@ The binary's commands, each loading one checkpoint and one run's settings:
   position alone: the search still starts from an empty tree on every move ([Z11-19]), and the
   memo changes no evaluation. The milestones' and the gate's chooser runs one `serve` per player
   per game ([Z11-31]), and gives a process up, with an error, if a move goes unanswered for ten
-  minutes.
+  minutes. Under `--clock-ms` each answer is the one `play` gives that position configured for
+  the count `serve` reports; under `--split-ms` each answer has five words ([Z11-79]).
 
   *Measured on the machine of record, a `play` spent about 15 ms of a 37 ms milestone move
   starting, loading its checkpoint and checking parity; and a game's searches repeat each other's

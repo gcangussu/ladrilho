@@ -117,9 +117,32 @@ pub fn choose_memoised<S: Shuffler, E: Evaluator>(
     config: &SearchConfig,
     memo: &mut Memo,
 ) -> Option<SearchResult> {
+    let r = search_memoised_until(net, root, config, memo, &mut || false)?;
+    Some(crate::endgame::refine(root, r, config.endgame_nodes).0)
+}
+
+/// The search of `choose_memoised`, without the endgame proof, asking `stop`
+/// before each evaluation it hands the search whether to stop after the
+/// simulation in flight ([Z11-78]). `serve` calls this and the proof apart,
+/// to time them apart ([Z11-79]).
+pub fn search_memoised_until<S: Shuffler, E: Evaluator>(
+    net: &E,
+    root: &AzulState<S>,
+    config: &SearchConfig,
+    memo: &mut Memo,
+    stop: &mut dyn FnMut() -> bool,
+) -> Option<SearchResult> {
     let mut search = Search::new(root, config, None)?;
     let mut eval = Evaluation::default();
-    while let Some(request) = search.wants() {
+    let mut stopped = false;
+    while search.wants().is_some() {
+        // The simulation in flight needs this evaluation whatever `stop`
+        // says, so asking first changes nothing.
+        if !stopped && stop() {
+            stopped = true;
+            search.stop();
+        }
+        let Some(request) = search.wants() else { break };
         match memo.lookup(request) {
             Ok(e) => search.supply(e),
             Err(k) => {
@@ -130,5 +153,5 @@ pub fn choose_memoised<S: Shuffler, E: Evaluator>(
             }
         }
     }
-    Some(crate::endgame::refine(root, search.finish().0, config.endgame_nodes).0)
+    Some(search.finish().0)
 }
