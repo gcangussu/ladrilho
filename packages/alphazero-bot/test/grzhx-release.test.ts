@@ -10,6 +10,15 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { sha256 } from '../eval/files.js';
 import { REPO } from '../eval/paths.js';
+
+/** The commit and release spec 0013's *Definitions* name: a new pin is a spec change too. */
+function specPin(): { commit: string; release: string } {
+  const spec = readFileSync(join(REPO, 'spec', '0013-master-against-grzhx.md'), 'utf8');
+  const commit = /\| Their commit \| `([0-9a-f]{40})` \|/.exec(spec)?.[1];
+  const release = /\| Their release \| `([^`]+)` \|/.exec(spec)?.[1];
+  if (!commit || !release) throw new Error("spec 0013's Definitions name no commit or release");
+  return { commit, release };
+}
 import { ASSETS, parseSums, readPin } from '../grzhx/release.js';
 
 /** sha256 of the empty file: an empty file of ours copies nothing of theirs. */
@@ -30,8 +39,7 @@ describe('the pin', () => {
   it('names a full commit, the release, every asset and their tree [G13-1]', () => {
     const pin = readPin();
     expect(pin.repository).toBe('grzhx/azul-alpha-zero');
-    expect(pin.commit).toBe('b1d5f5dc5cbe14ae39fd96328b999dd87f92accb');
-    expect(pin.release).toBe('v2300.1');
+    expect({ commit: pin.commit, release: pin.release }).toEqual(specPin());
     expect(Object.keys(pin.assets).sort()).toEqual([...ASSETS].sort());
     expect(Object.keys(pin.blobs).length).toBeGreaterThan(50);
     for (const h of Object.values(pin.blobs)) expect(h).toMatch(/^[0-9a-f]{64}$/);

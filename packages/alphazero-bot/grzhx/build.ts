@@ -9,9 +9,10 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { HERE, repoDir } from './release.js';
+import { sha256 } from '../eval/files.js';
+import { HERE, repoDir, type Pin } from './release.js';
 
 export const THEIR_CAP = 65_536;
 export const BUILD_OPTIONS = ['native', 'anytime'] as const;
@@ -44,7 +45,11 @@ function has(cmd: string): boolean {
 
 /** The host's environment, built once by `venv.sh` ([G13-7]). */
 export function ensureVenv(log: (s: string) => void = () => {}): void {
-  if (existsSync(join(VENV, 'bin', 'python')) && existsSync(CMAKE)) return;
+  // venv.sh stamps a complete install with the requirements' hash, and
+  // rebuilds a venv without the stamp, or with a stale one.
+  const stamp = join(VENV, 'grzhx-installed');
+  const want = sha256(readFileSync(join(HERE, 'host', 'requirements.txt')));
+  if (existsSync(stamp) && readFileSync(stamp, 'utf8').trim() === want && existsSync(CMAKE)) return;
   if (!has('uv')) throw new Error('the host needs uv (https://docs.astral.sh/uv/) to build its environment');
   log('building the host environment (grzhx/host/.venv) from its pinned requirements');
   execFileSync('bash', [VENV_SH, '-c', 'pass'], { stdio: ['ignore', 'inherit', 'inherit'] });
@@ -87,7 +92,16 @@ function tryScratch(dir: string, standard: string, flags: string[]): string | nu
 export function preflight(cache: string): string[] {
   if (!existsSync(CMAKE)) throw new Error(`no cmake at ${CMAKE}: the host environment is incomplete; delete grzhx/host/.venv and rerun`);
   const standard = theirStandard(cache);
-  const dir = join(cache, 'preflight');
+  // Per process, so two commands at once never share a scratch project.
+  const dir = join(cache, `preflight-${process.pid}`);
+  try {
+    return preflightIn(dir, standard);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function preflightIn(dir: string, standard: string): string[] {
   const plain = tryScratch(dir, standard, []);
   if (plain === null) return [];
   if (process.platform === 'darwin') {
@@ -109,28 +123,50 @@ export function preflight(cache: string): string[] {
 export const buildDir = (cache: string, options: BuildOption[]): string =>
   join(cache, `build-${options.length ? [...options].sort().join('+') : 'plain'}`);
 
-/** [G13-6]: their library, built once per set of options. */
-export function buildLibrary(cache: string, options: BuildOption[], log: (s: string) => void = () => {}): Built {
+/** The compiler CMake will find, by its own description, for the build's stamp. */
+function compilerIdentity(): string {
+  try {
+    return run('c++', ['--version']).split('\n')[0].trim();
+  } catch {
+    return '(no c++ on PATH)';
+  }
+}
+
+const LIBRARY = process.platform === 'darwin' ? 'libazul.dylib' : 'libazul.so';
+
+/**
+ * [G13-6]: their library, built once per set of options, pinned commit and
+ * compiler. The build happens in a directory of its own process and is
+ * renamed into place, so two commands at once never build into one tree.
+ */
+export function buildLibrary(cache: string, pin: Pin, options: BuildOption[], log: (s: string) => void = () => {}): Built {
   ensureVenv(log);
   const cxxFlags = preflight(cache);
   const dir = buildDir(cache, options);
-  const library = join(dir, process.platform === 'darwin' ? 'libazul.dylib' : 'libazul.so');
+  const library = join(dir, LIBRARY);
   const stamp = join(dir, 'grzhx-build.json');
+  const tmp = `${dir}.tmp-${process.pid}`;
   const args = [
-    '-S', repoDir(cache), '-B', dir,
+    '-S', repoDir(cache), '-B', tmp,
     '-DCMAKE_BUILD_TYPE=Release',
     `-DAZUL_SEARCH_MAX_SIMULATIONS=${THEIR_CAP}`,
     `-DAZUL_NATIVE=${options.includes('native') ? 'ON' : 'OFF'}`,
     `-DAZUL_ANYTIME=${options.includes('anytime') ? 'ON' : 'OFF'}`,
     ...(cxxFlags.length ? [`-DCMAKE_CXX_FLAGS=${cxxFlags.join(' ')}`] : []),
   ];
-  const want = JSON.stringify(args.slice(2));
+  const want = JSON.stringify({ commit: pin.commit, compiler: compilerIdentity(), cmake: args.slice(4) });
   if (existsSync(library) && existsSync(stamp) && readFileSync(stamp, 'utf8') === want) return { library, options, cxxFlags };
   log(`building their library (${options.length ? options.join('+') : 'plain'}) in ${dir}`);
-  rmSync(dir, { recursive: true, force: true });
-  run(CMAKE, args);
-  run(CMAKE, ['--build', dir, '--config', 'Release', '--parallel', '--target', 'azul']);
-  if (!existsSync(library)) throw new Error(`their build produced no ${library}`);
-  writeFileSync(stamp, want);
+  rmSync(tmp, { recursive: true, force: true });
+  try {
+    run(CMAKE, args);
+    run(CMAKE, ['--build', tmp, '--config', 'Release', '--parallel', '--target', 'azul']);
+    if (!existsSync(join(tmp, LIBRARY))) throw new Error(`their build produced no ${LIBRARY}`);
+    writeFileSync(join(tmp, 'grzhx-build.json'), want);
+    rmSync(dir, { recursive: true, force: true });
+    renameSync(tmp, dir);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
   return { library, options, cxxFlags };
 }
