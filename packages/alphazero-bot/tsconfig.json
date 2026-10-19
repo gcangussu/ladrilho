@@ -25,6 +25,7 @@
     "eval",
     "tools",
     "tile",
+    "grzhx",
     "web",
     "vitest.config.ts"
   ]

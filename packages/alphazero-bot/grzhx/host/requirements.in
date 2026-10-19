@@ -1,0 +1,12 @@
+# The host's environment [0013 G13-7]. Compiled into requirements.txt by
+#
+#   uv pip compile --generate-hashes --python-version 3.12 \
+#     --python-platform x86_64-apple-darwin requirements.in -o requirements.txt
+#
+# torch and NumPy are the trainer's versions (train/requirements.in): the last
+# torch with a macOS x86_64 wheel, and the NumPy 1 it was built against.
+# cmake comes from its PyPI wheel, so building their library needs no system
+# install and is pinned like everything else here.
+torch==2.2.2
+numpy==1.26.4
+cmake==3.31.6
