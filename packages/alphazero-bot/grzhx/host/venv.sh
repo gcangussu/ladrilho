@@ -11,13 +11,23 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 VENV="$HERE/.venv"
 
-if [ ! -x "$VENV/bin/python" ]; then
+STAMP="$VENV/grzhx-installed"
+WANT="$(shasum -a 256 "$HERE/requirements.txt" | cut -d' ' -f1)"
+
+# The stamp is written only after a complete install, and holds the
+# requirements' hash: a venv an install left half built, or one built from
+# other requirements, is thrown away and built again.
+if [ ! -f "$STAMP" ] || [ "$(cat "$STAMP")" != "$WANT" ]; then
   if ! command -v uv >/dev/null 2>&1; then
     echo "grzhx/host/venv.sh needs uv (https://docs.astral.sh/uv/) to build $VENV" >&2
     exit 1
   fi
+  rm -rf "$VENV"
   uv venv --quiet --python 3.12 "$VENV"
   VIRTUAL_ENV="$VENV" uv pip install --quiet --only-binary :all: --require-hashes -r "$HERE/requirements.txt"
+  echo "$WANT" > "$STAMP"
 fi
 
-exec "$VENV/bin/python" -I "$@"
+# -I: no user site, no environment variables, no script directory on the
+# path; -B: no bytecode written into their tree ([0013 G13-3]).
+exec "$VENV/bin/python" -I -B "$@"

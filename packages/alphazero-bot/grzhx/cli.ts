@@ -69,7 +69,7 @@ async function main(): Promise<void> {
     case 'build': {
       const pin = readPin();
       await ensureRelease(cache, pin, log);
-      const b = buildLibrary(cache, [], log);
+      const b = buildLibrary(cache, pin, [], log);
       process.stdout.write(`${b.library}${b.cxxFlags.length ? `  (with ${b.cxxFlags.join(' ')})` : ''}\n`);
       return;
     }

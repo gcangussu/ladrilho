@@ -9,7 +9,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { readJson, sha256, writeAtomic } from '../eval/files.js';
@@ -66,8 +66,12 @@ function gitBytes(args: string[], cwd: string): Buffer {
 const releaseUrl = (pin: Pick<Pin, 'repository' | 'release'>, a: Asset): string =>
   `https://github.com/${pin.repository}/releases/download/${pin.release}/${a}`;
 
+/** A download gives up after this long, so a stalled connection cannot hang `fetch` or `pin`. */
+const DOWNLOAD_TIMEOUT_MS = 300_000;
+const API_TIMEOUT_MS = 30_000;
+
 async function download(url: string): Promise<Uint8Array> {
-  const r = await fetch(url, { redirect: 'follow' });
+  const r = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
   if (r.status !== 200) throw new Error(`GET ${url}: HTTP ${r.status}`);
   return new Uint8Array(await r.arrayBuffer());
 }
@@ -114,7 +118,10 @@ function checkRepo(cache: string, pin: Pin): void {
   const dir = repoDir(cache);
   const head = git(['rev-parse', 'HEAD'], dir).trim();
   if (head !== pin.commit) throw new Error(`${dir} is at ${head}, not the pinned ${pin.commit}: run \`grzhx fetch\``);
-  const dirty = git(['status', '--porcelain', '--untracked-files=no'], dir).trim();
+  // Untracked and ignored files too: the host imports their `python/`, and
+  // a stray module there would be loaded unchecked. The host never writes
+  // bytecode (`venv.sh` runs Python with -B), so nothing is allowed.
+  const dirty = git(['status', '--porcelain', '--untracked-files=all', '--ignored'], dir).trim();
   if (dirty) throw new Error(`${dir} has been modified:\n${dirty}\nrun \`grzhx fetch\` to restore it`);
 }
 
@@ -172,6 +179,10 @@ export async function fetchRelease(cache: string, pin: Pin, log: (s: string) => 
     checkRepo(staging, pin);
     for (const a of ASSETS) writeAtomic(assetPath(staging, a), bodies.get(a)!);
     // Only now, with everything in hand and checked, does the cache change.
+    // Every build of the old tree goes with it ([G13-6]).
+    for (const name of readdirSync(cache)) {
+      if (name.startsWith('build-') || name.startsWith('preflight')) rmSync(join(cache, name), { recursive: true, force: true });
+    }
     rmSync(repoDir(cache), { recursive: true, force: true });
     rmSync(join(cache, 'assets'), { recursive: true, force: true });
     renameSync(join(staging, 'repo'), repoDir(cache));
@@ -228,7 +239,14 @@ export function writePin(pin: Pin, path = PIN_PATH): void {
 }
 
 async function api<T>(path: string): Promise<T> {
-  const r = await fetch(`https://api.github.com/repos/${path}`, { headers: { accept: 'application/vnd.github+json' } });
+  const headers: Record<string, string> = { accept: 'application/vnd.github+json' };
+  if (process.env.GITHUB_TOKEN) headers.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+  const r = await fetch(`https://api.github.com/repos/${path}`, { headers, signal: AbortSignal.timeout(API_TIMEOUT_MS) });
+  if ((r.status === 403 || r.status === 429) && r.headers.get('x-ratelimit-remaining') === '0') {
+    const reset = Number(r.headers.get('x-ratelimit-reset'));
+    const when = Number.isFinite(reset) && reset > 0 ? ` until ${new Date(reset * 1000).toISOString()}` : '';
+    throw new Error(`GitHub's API rate limit is spent${when}; set GITHUB_TOKEN to raise it`);
+  }
   if (r.status !== 200) throw new Error(`GitHub API ${path}: HTTP ${r.status}`);
   return (await r.json()) as T;
 }
@@ -246,7 +264,9 @@ export async function checkUpdates(pin: Pin): Promise<string[]> {
   for (const a of ASSETS) {
     const found = release.assets.find((x) => x.name === a);
     if (found === undefined) changed.push(`release ${pin.release} no longer has ${a}`);
-    else if (found.digest && found.digest !== `sha256:${pin.assets[a]}`) changed.push(`${a}: ${found.digest}, pinned sha256:${pin.assets[a]}`);
+    // A missing digest is not "unchanged": nothing was compared, so it is reported.
+    else if (!found.digest) changed.push(`${a}: GitHub gives no digest, so it could not be compared`);
+    else if (found.digest !== `sha256:${pin.assets[a]}`) changed.push(`${a}: ${found.digest}, pinned sha256:${pin.assets[a]}`);
   }
   return changed;
 }
