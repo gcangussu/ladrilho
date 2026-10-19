@@ -222,8 +222,10 @@ class Host:
             g['lockstep'].manual_deal(tiles)
         except ValueError as e:
             raise Disagreement('manual_deal refused our deal', tiles=tiles, error=str(e)) from e
-        # As their local player does after a manual deal: a new tree version,
-        # so nothing searched before the deal is reused after it.
+        # Their local player bumps its actor's version after a manual deal, and
+        # every search runs under that version. Here the count of deals is the
+        # version each search is run under (`tree_version`), so nothing
+        # searched before a deal is reused after it, as there.
         g['deals'] += 1
         return {'ok': True}
 
