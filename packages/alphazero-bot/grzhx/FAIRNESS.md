@@ -87,7 +87,11 @@ author ships is its advice mode for the human player ("keep thinking"). The harn
 their clock: chunks of 1024 simulations (`chunk`, the local player's `fixed_budget or 1024`), each a
 fresh search of the same root with subtree reuse off and candidates clamped to the chunk, voted by
 their `rank_search_actions`; the vote counts finished chunks only, the chunk running at the clock is
-abandoned as theirs is when the person stops, and the first chunk always runs to its end. The advice
+abandoned as theirs is when the person stops, and the first chunk always runs to its end. Their
+search checks the clock only between requests to the network, and a hit in their evaluation cache
+needs none, so with the cache on, as by default, a chunk is usually answered between checks and runs
+whole: a clocked move of theirs can overrun by up to a chunk, in their favour, and every move
+records its `overrun`. The advice
 mode builds its chunks' settings from the local player's configuration, where the harness, by
 default, uses the actor's record; and it seeds its chunks with their `split_seed`, the harness with
 its own hash. Neither changes what a chunk is.

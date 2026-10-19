@@ -59,7 +59,10 @@ look-ahead differently, so pick counts from the table below.
   proof following outside it; the move is exactly the search of the count it reached.
 - **Their clock** searches chunks of `chunk` simulations, fresh each time, and plays the vote over
   the chunks that finished; the chunk running at the clock is abandoned, the first always runs to
-  its end (`overrun` records by how much). Their evaluation cache lives across chunks and moves, so
+  its end (`overrun` records by how much). Their search checks the clock only between requests to
+  the network, and a hit in their evaluation cache is answered without one, so with the cache on, as
+  by default, a chunk is usually answered between checks and runs whole: the move then overruns its
+  clock by up to a chunk, and `overrun` shows by how much. Their evaluation cache lives across chunks and moves, so
   a clocked move of theirs is not guaranteed to replay even from its count of chunks.
 
 ## Timing
