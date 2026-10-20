@@ -31,7 +31,9 @@ describe('settings [G13-21] [G13-22] [G13-25] [G13-34] [G13-35]', () => {
     expect(parseBudgets('500, sims:1000,ms:250', 'us')).toEqual([{ kind: 'sims', n: 500 }, { kind: 'sims', n: 1000 }, { kind: 'ms', n: 250 }]);
     expect(() => parseBudgets('x', 'us')).toThrow(SettingError);
     expect(() => parseBudgets('1.5', 'them')).toThrow(SettingError);
-    expect(() => parseBudgets('65536', 'us')).toThrow(/65535/);
+    expect(parseBudgets('200001', 'us')).toEqual([{ kind: 'sims', n: 200_001 }]);
+    expect(parseBudgets('4294967295', 'us')).toEqual([{ kind: 'sims', n: 4_294_967_295 }]);
+    expect(() => parseBudgets('4294967296', 'us')).toThrow(/4294967295/);
     expect(parseBudgets('65536', 'them')).toEqual([{ kind: 'sims', n: 65536 }]);
     expect(() => parseBudgets('65537', 'them')).toThrow(/65536/);
     expect(() => parseBudgets('1', 'them')).toThrow(SettingError);

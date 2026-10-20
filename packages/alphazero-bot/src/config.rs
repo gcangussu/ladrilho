@@ -83,9 +83,14 @@ fn within(key: &str, n: f64, lo: f64, hi: f64) -> Result<f32, String> {
     if (lo..=hi).contains(&n) { Ok(n as f32) } else { Err(format!("config: \"{key}\" must be in [{lo}, {hi}]")) }
 }
 
-/// The most simulations a search may run: a sample stores root visits as
-/// `u16` ([Z11-27]).
+/// The most simulations a self-play search may run: a sample stores root
+/// visits as `u16` ([Z11-27]).
 pub const MAX_SIMULATIONS: u64 = 65_535;
+
+/// The most simulations a search that writes no sample may run — `play`,
+/// `milestone` and `latency` ([Z11-60]): no bound but the search's own
+/// `u32` visit counts. Memory, not this, is what limits a long search.
+pub const MAX_PLAY_SIMULATIONS: u64 = u32::MAX as u64;
 
 /// The largest endgame node cap a config may set ([Z11-77]): far past what a
 /// move can spend, and within `u32`.
@@ -119,9 +124,9 @@ impl RunConfig {
             seed: r.seed,
             play_simulations: match r.play_simulations {
                 None => None,
-                Some(n) => Some(whole("playSimulations", n, 1, MAX_SIMULATIONS)?),
+                Some(n) => Some(whole("playSimulations", n, 1, MAX_PLAY_SIMULATIONS)?),
             },
-            milestone_simulations: whole("milestoneSimulations", r.milestone_simulations, 1, MAX_SIMULATIONS)?,
+            milestone_simulations: whole("milestoneSimulations", r.milestone_simulations, 1, MAX_PLAY_SIMULATIONS)?,
             self_play_simulations,
             cpuct: positive("cpuct", r.cpuct)?,
             fpu: within("fpu", r.fpu, 0.0, 2.0)?,
@@ -176,8 +181,8 @@ pub fn settings(config: &RunConfig, kind: SearchKind) -> Result<Settings, String
         SearchKind::Milestone => config.milestone_simulations,
         SearchKind::SelfPlay => config.self_play_simulations,
         SearchKind::Latency(Some(n)) => {
-            if n == 0 || u64::from(n) > MAX_SIMULATIONS {
-                return Err(format!("--simulations must be in 1..={MAX_SIMULATIONS}"));
+            if n == 0 || u64::from(n) > MAX_PLAY_SIMULATIONS {
+                return Err(format!("--simulations must be in 1..={MAX_PLAY_SIMULATIONS}"));
             }
             n
         }

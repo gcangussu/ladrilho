@@ -543,6 +543,13 @@ The binary's commands, each loading one checkpoint and one run's settings:
   overrides the count for `latency` alone, which is how [Z11-57] steps it; every other command
   refuses it. `--clock-ms` ([Z11-23]) is a stop the command applies, not a search setting: the
   count it stops below still comes only from the config, through the one function.
+
+  `selfPlaySimulations` (and `cheapSimulations`) MUST be at most 65,535, because a sample stores
+  root visits as `u16` ([Z11-27]). A count that writes no sample — `playSimulations`,
+  `milestoneSimulations` and `latency`'s `--simulations` — is bounded only by the search's `u32`
+  visit counts, 4,294,967,295; memory, which a long search's tree fills, is the practical limit.
+  The browser's bound is 0012's own ([0012 T12-16]). *Until 2026-10-19 the sample's bound applied
+  to every count, by accident, and capped [0013 G13-27]'s clocked moves near 1–2 s.*
 - **[Z11-77]** A run's config MAY set `playEndgameNodes`, a whole number up to 10⁹; absent means 0.
   It is [Z11-76]'s `endgame_nodes` for `--search play` and for `latency`, so a latency record
   measures the proof with the search it follows, and it is 0 for `--search milestone`, `selfplay`
