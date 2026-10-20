@@ -325,3 +325,35 @@ fn a_split_answer_times_search_and_proof_apart() {
         assert_eq!(served[6 * i + 5], 0);
     }
 }
+
+/// [Z11-60]: a self-play count is at most 65,535, because a sample stores root
+/// visits as `u16` ([Z11-27]); a count that writes no sample — `playSimulations`
+/// and `milestoneSimulations` — is bounded only by the search's `u32` visit
+/// counts, and a search configured past the old cap runs.
+///
+/// Mutation, seen red ([Z11-48]), in a copy with its anchor confirmed: in
+/// `config.rs`, `playSimulations` bounded by `MAX_SIMULATIONS` again; the
+/// 4,294,967,295 config is then refused.
+#[test]
+fn only_self_play_is_bounded_by_its_sample_format() {
+    let input = frame(&block_of(&AzulState::seeded(9)));
+    let refused = |overrides: &[(&str, &str)], key: &str| {
+        let e = env(overrides);
+        let o = play(&e, "play", &input);
+        assert_eq!(o.status.code(), Some(2), "{overrides:?}");
+        assert!(stderr(&o).contains(key), "{}", stderr(&o));
+    };
+    refused(&[("selfPlaySimulations", "65536")], "selfPlaySimulations");
+    refused(&[("playSimulations", "4294967296")], "playSimulations");
+    refused(&[("milestoneSimulations", "4294967296")], "milestoneSimulations");
+
+    let high = env(&[("playSimulations", "4294967295"), ("milestoneSimulations", "4294967295"), ("selfPlaySimulations", "65535")]);
+    let o = run(&["play", &high.checkpoint, "--config", &high.config, "--search", "play", "--clock-ms", "200"], &input);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let o = run(&["play", &high.checkpoint, "--config", &high.config, "--search", "milestone", "--clock-ms", "200"], &input);
+    assert!(o.status.success(), "{}", stderr(&o));
+    // Past the old cap, run to the end: the count is the configured one.
+    let past = env(&[("playSimulations", "70000")]);
+    let w = words(&play(&past, "play", &input).stdout);
+    assert_eq!(w[2], 70_000);
+}

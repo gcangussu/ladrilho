@@ -108,7 +108,7 @@ harness relies on, read at the pinned commit:
 | Their commit | `b1d5f5dc5cbe14ae39fd96328b999dd87f92accb` |
 | Their release | `v2300.1` |
 | `THEIR_CAP` | 65 536: the build's `AZUL_SEARCH_MAX_SIMULATIONS` ([G13-6]) |
-| `OUR_CAP` | 65 535: 0011's `MAX_SIMULATIONS`, the most `playSimulations` may be |
+| `OUR_CAP` | 4 294 967 295 (`u32::MAX`): 0011's `MAX_PLAY_SIMULATIONS`, the most `playSimulations` may be ([0011 Z11-60]) |
 | `MOVE_TIMEOUT` | 10 minutes, or the move's clock plus 60 s if that is longer ([G13-38]) |
 
 ## Data model
@@ -314,7 +314,7 @@ Committed by a person, written by `grzhx timing` ([G13-47]):
   | `checkpoint` | the milestone `web/shipped.json` names | a logged milestone, `run/generation` |
   | `cpuct`, `fpu` | the milestone's logged config | selection's constants ([0011 Z11-16]) |
   | `endgame` | `web/shipped.json`'s endgame cap ([0012 T12-33]) | the endgame proof's node cap; 0 is off ([0011 Z11-76]) |
-  | `ceiling` | `OUR_CAP` | the most simulations a clocked move may run ([G13-27]) |
+  | `ceiling` | `OUR_CAP`: in effect none, so the clock alone decides | the most simulations a clocked move may run ([G13-27]) |
 
   The harness MUST hand `serve` a copy of the milestone's config with `cpuct`, `fpu` and
   `playEndgameNodes` replaced, and `playSimulations` set to the move's count, or to `ceiling`

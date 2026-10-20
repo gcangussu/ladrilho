@@ -15,8 +15,8 @@ import { join } from 'node:path';
 import { LOG, MILESTONES, PACKAGE, milestoneCheckpoint } from '../eval/paths.js';
 import { BUILD_OPTIONS, THEIR_CAP, type BuildOption } from './build.js';
 
-/** 0011's `MAX_SIMULATIONS`: the most `playSimulations` may be. */
-export const OUR_CAP = 65_535;
+/** 0011's `MAX_PLAY_SIMULATIONS`, `u32::MAX`: the most `playSimulations` may be ([0011 Z11-60]). */
+export const OUR_CAP = 4_294_967_295;
 
 export type Budget = { kind: 'sims'; n: number } | { kind: 'ms'; n: number };
 /** A budget, or `null` for the side's default count ([G13-24]). */
@@ -149,7 +149,7 @@ export function resolveOurs(sets: Map<string, string>): OurResolved {
       cpuct: cpuctFrom,
       fpu: fpuFrom,
       endgame: sets.has('endgame') ? 'given' : "web/shipped.json's endgame cap",
-      ceiling: sets.has('ceiling') ? 'given' : "OUR_CAP, 0011's MAX_SIMULATIONS",
+      ceiling: sets.has('ceiling') ? 'given' : 'none: OUR_CAP, the search\'s own u32 bound, so the clock alone decides',
       simulations: "the milestone's playSimulations",
     },
     checkpointPath,
