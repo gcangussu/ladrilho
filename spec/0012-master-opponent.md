@@ -124,7 +124,9 @@ milestone, pool rating) keep their meaning.
 
 *The maximum is set by memory, not time. A search keeps every node it visits, plus the memo, at
 about 1.2 KB a simulation. 200 000 measured 254 MB on one heavy position, where 1 000 000 would
-need over a gigabyte. Its slowest moves take about 13 s on the machine of record.*
+need over a gigabyte. Its slowest moves take about 13 s on the machine of record.* *(Since 10-21
+about 0.36 KB a simulation: 72 MB at 200 000 on the heaviest corpus position; see [T12-25]. The
+maximum has not been revisited.)*
 
 ## Data model
 
@@ -175,8 +177,8 @@ all on `wasm32` linear memory:
 
 | Export | Signature | Does |
 | --- | --- | --- |
-| `alloc` | `(len: usize) -> *mut u8` | A buffer of `len` bytes that JavaScript fills. Never freed. |
-| `load` | `unsafe (ck, ck_len, par, par_len, cpuct: f32, fpu: f32, endgame_nodes: u32) -> i32` | `Network::load` with the parity check ([0011 Z11-13]), keeping the settings and the endgame cap every `choose` plays at ([T12-33]). Returns `0`, or `-1` with the error text set. |
+| `alloc` | `(len: usize) -> *mut u8` | A buffer of `len` bytes that JavaScript fills, for `load`, which frees it. |
+| `load` | `unsafe (ck, ck_len, par, par_len, cpuct: f32, fpu: f32, endgame_nodes: u32) -> i32` | `Network::load_single` with the parity check ([0011 Z11-13]), keeping the settings and the endgame cap every `choose` plays at ([T12-33]). Frees both buffers. Returns `0`, or `-1` with the error text set. |
 | `words_ptr` | `() -> *mut u32` | A buffer of at least 512 words for one canonical block ([0010 C10-8]). |
 | `choose` | `(n_words: usize, simulations: u32) -> i32` | The action, or `-1` for a terminal position, or `-2` for a refused block, with the error text set. |
 | `value` | `() -> f32` | The value of the last `choose`. |
@@ -466,6 +468,16 @@ These requirements were proposals for *0006*, in the manner of [0008 A8-33]. Eac
   compared; interleaved A/B runs on fixed position sets, minimum of three, gave 1.36× on moves at
   the default and 1.5× on the proof alone. A cap or a default that spends the room is a new
   latency record ([T12-33]), not part of this change.*
+
+  *Remeasured on 10-21 after the crate was laid out for memory, with every move and value the
+  same: the memo keeps a sparse key and the legal actions' policy only; a tree node keeps no state
+  and an action's visits and value sum live on its child; edges come in fixed chunks; the proof's
+  table keys on two words; the network holds each matrix once (`Network::load_single`); `load`
+  frees the checkpoint's buffers; and `choose` hands `choose_memoised` its memo to drop before the
+  proof. The lane: p50 37 ms, p95 426 ms, p99 545 ms, max 697 ms, 19 MB after the corpus and 72 MB
+  after the search at the maximum, against 53 MB and 436 MB before. On every fourth corpus
+  position, four interleaved A/B pairs: 17.4 MB against 50.7 MB, moves 2.7% faster in total; six
+  pairs of the search at the maximum: 0.7% slower at the median.*
 
 ## Verification
 

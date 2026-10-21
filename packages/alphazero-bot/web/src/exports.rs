@@ -34,8 +34,7 @@ fn with<R>(f: impl FnOnce(&mut State) -> R) -> R {
     STATE.with(|s| f(&mut s.borrow_mut()))
 }
 
-/// A buffer of `len` bytes for JavaScript to fill. Never freed: `load` is
-/// called once per module instance.
+/// A buffer of `len` bytes for JavaScript to fill, for `load`, which frees it.
 #[unsafe(no_mangle)]
 pub extern "C" fn alloc(len: usize) -> *mut u8 {
     Box::leak(vec![0u8; len].into_boxed_slice()).as_mut_ptr()
@@ -43,12 +42,14 @@ pub extern "C" fn alloc(len: usize) -> *mut u8 {
 
 /// The checkpoint and parity file JavaScript wrote at two `alloc`ed buffers,
 /// the milestone's search settings, and the shipped endgame node cap
-/// ([T12-33]). `0`, or `-1` with the error set.
+/// ([T12-33]). `0`, or `-1` with the error set. Both buffers are freed: the
+/// network keeps what it needs of the checkpoint in its own form, and linear
+/// memory never shrinks, so a search reuses their room rather than growing.
 ///
 /// # Safety
 ///
-/// `ck` and `par` must each be a buffer `alloc` returned for at least
-/// `ck_len` and `par_len` bytes respectively.
+/// `ck` and `par` must each be a buffer `alloc` returned for exactly `ck_len`
+/// and `par_len` bytes respectively, and neither used again.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn load(
     ck: *const u8,
@@ -59,10 +60,16 @@ pub unsafe extern "C" fn load(
     fpu: f32,
     endgame_nodes: u32,
 ) -> i32 {
-    // SAFETY: the caller's contract above: each pointer is an `alloc`ed
-    // buffer of at least that many bytes, never freed.
-    let (checkpoint, parity) = unsafe { (std::slice::from_raw_parts(ck, ck_len), std::slice::from_raw_parts(par, par_len)) };
-    let loaded = Player::load(checkpoint, parity, cpuct, fpu, endgame_nodes);
+    // SAFETY: the caller's contract above: each pointer is a buffer `alloc`
+    // leaked at exactly that length, so it is a `Box<[u8]>` to take back.
+    let (checkpoint, parity) = unsafe {
+        (
+            Box::from_raw(std::ptr::slice_from_raw_parts_mut(ck.cast_mut(), ck_len)),
+            Box::from_raw(std::ptr::slice_from_raw_parts_mut(par.cast_mut(), par_len)),
+        )
+    };
+    let loaded = Player::load(&checkpoint, &parity, cpuct, fpu, endgame_nodes);
+    drop((checkpoint, parity));
     with(|s| match loaded {
         Ok(p) => {
             s.player = Some(p);

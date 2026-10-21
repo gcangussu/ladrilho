@@ -4,6 +4,11 @@
 //! value sum from the perspective of the seat to move there, and its own
 //! network value from when it was expanded. Terminal and boundary nodes are
 //! leaves for good: valued once, on their first visit, and never expanded.
+//!
+//! Laid out for memory, which a long search fills: an action's visit count and
+//! value sum are kept on the child it leads to, since an action not yet taken
+//! has neither, and a node keeps no state, which a simulation replays from the
+//! root instead. Neither changes what is computed, or in what order.
 
 use azul_engine::{ACTION_SPACE, Action, ActionList, AzulState, ENCODED_SIZE, Outcome, Player, Shuffler};
 
@@ -55,26 +60,110 @@ enum Kind {
     Boundary,
 }
 
-struct Edge {
-    action: Action,
-    prior: f32,
-    visits: u32,
-    /// Sum of backed-up values, from the parent's seat to move.
-    total: f64,
-    child: u32,
+/// Every node's edges, one array a field, a node's at its `edges()`. Most
+/// edges are never taken, so an edge holds only what it has before it is: its
+/// visits and backed-up values are its child's (`Node::taken`, `Node::total`),
+/// and an edge without a child has neither.
+///
+/// The arrays come in chunks of `CHUNK` edges that are never moved or grown,
+/// and a node's edges never straddle two: a vector that doubles holds up to
+/// twice what it needs, and copies itself to grow, both at the largest size a
+/// search reaches.
+#[derive(Default)]
+struct Edges {
+    chunks: Vec<Chunk>,
+    /// The index the next node's edges would start at, in the last chunk.
+    len: usize,
+}
+
+const CHUNK: usize = 1 << 16;
+
+struct Chunk {
+    action: Box<[Action]>,
+    prior: Box<[f32]>,
+    child: Box<[u32]>,
+}
+
+impl Edges {
+    /// A node's edges, one for each of `legal` with its prior from `policy`,
+    /// unexpanded; the index of the first.
+    fn push(&mut self, legal: &[Action], policy: &[f32; ACTION_SPACE]) -> usize {
+        // The next free edge is always in the last chunk: a new one when the
+        // edges would cross its end, or start at it.
+        if self.len + legal.len().max(1) > self.chunks.len() * CHUNK {
+            self.len = self.chunks.len() * CHUNK;
+            self.chunks.push(Chunk {
+                action: vec![0; CHUNK].into_boxed_slice(),
+                prior: vec![0.0; CHUNK].into_boxed_slice(),
+                child: vec![NONE; CHUNK].into_boxed_slice(),
+            });
+        }
+        let start = self.len;
+        let c = &mut self.chunks[start / CHUNK];
+        let at = start % CHUNK;
+        c.action[at..at + legal.len()].copy_from_slice(legal);
+        for (p, &a) in c.prior[at..].iter_mut().zip(legal) {
+            *p = policy[usize::from(a)];
+        }
+        self.len += legal.len();
+        start
+    }
+
+    /// The node's edges from `start` on: their actions, priors and children.
+    fn of(&self, start: usize, len: usize) -> (&[Action], &[f32], &[u32]) {
+        let c = &self.chunks[start / CHUNK];
+        let at = start % CHUNK;
+        (&c.action[at..at + len], &c.prior[at..at + len], &c.child[at..at + len])
+    }
+
+    fn action(&self, e: usize) -> Action {
+        self.chunks[e / CHUNK].action[e % CHUNK]
+    }
+
+    fn prior_mut(&mut self, e: usize) -> &mut f32 {
+        &mut self.chunks[e / CHUNK].prior[e % CHUNK]
+    }
+
+    fn child(&self, e: usize) -> u32 {
+        self.chunks[e / CHUNK].child[e % CHUNK]
+    }
+
+    fn set_child(&mut self, e: usize, c: u32) {
+        self.chunks[e / CHUNK].child[e % CHUNK] = c;
+    }
 }
 
 const NONE: u32 = u32::MAX;
 
-struct Node<S: Shuffler> {
-    state: AzulState<S>,
+/// A node holds no state: every expanded node is in the root's round, where
+/// nothing is drawn, so its state is the root's with the path's actions
+/// replayed, which each simulation does on its way down (`trail`).
+struct Node {
     seat: Player,
     kind: Kind,
     /// The network's value for an expanded node; the leaf value for a terminal
     /// or boundary one. From `seat`'s perspective.
     value: f32,
+    /// Simulations that went on below it.
     visits: u32,
-    edges: std::ops::Range<usize>,
+    /// The visits of the edge into it: one more than `visits` for an expanded
+    /// node, the leaf's first, and every visit for a terminal or boundary one.
+    taken: u32,
+    /// Sum of the values backed up through the edge into it, from the parent's
+    /// seat to move.
+    total: f64,
+    edges_start: usize,
+    edges_len: u8,
+}
+
+impl Node {
+    fn leaf(seat: Player, kind: Kind, value: f32) -> Node {
+        Node { seat, kind, value, visits: 0, taken: 0, total: 0.0, edges_start: 0, edges_len: 0 }
+    }
+
+    fn edges(&self) -> std::ops::Range<usize> {
+        self.edges_start..self.edges_start + usize::from(self.edges_len)
+    }
 }
 
 /// `+1`, `-1` or `0` for `seat` ([Z11-14]).
@@ -112,8 +201,15 @@ struct Pending<S: Shuffler> {
 /// so who evaluates, alone or in a batch, changes nothing it computes.
 pub struct Search<S: Shuffler> {
     config: SearchConfig,
-    nodes: Vec<Node<S>>,
-    edges: Vec<Edge>,
+    /// The states of the last path down: `trail[d]` is the state at depth `d`,
+    /// the root's first, and `trail[d + 1]` the child by edge `steps[d]`. An
+    /// edge has one child, so a simulation that takes the same edge from depth
+    /// `d` finds that child's state here, and replays only past where its path
+    /// leaves the last one.
+    trail: Vec<AzulState<S>>,
+    steps: Vec<usize>,
+    nodes: Vec<Node>,
+    edges: Edges,
     stats: TreeStats,
     path: Vec<(u32, usize)>,
     /// Simulations still to run, the one paused included.
@@ -144,8 +240,10 @@ impl<S: Shuffler> Search<S> {
         let pending = Some(Self::expansion(Wait::Root, root.clone()));
         Some(Search {
             config: config.clone(),
+            trail: vec![root.clone()],
+            steps: Vec::new(),
             nodes: Vec::new(),
-            edges: Vec::new(),
+            edges: Edges::default(),
             stats: TreeStats::default(),
             path: Vec::new(),
             remaining: config.simulations,
@@ -180,22 +278,22 @@ impl<S: Shuffler> Search<S> {
         let Some(p) = self.pending.take() else { return };
         match p.wait {
             Wait::Root => {
-                self.push_expanded(p.state, p.legal.as_ref(), eval);
+                self.push_expanded(p.state.current_player(), p.legal.as_ref(), eval);
                 if let Some((eps, dir)) = self.noise.take() {
-                    for (i, d) in self.nodes[0].edges.clone().zip(dir) {
-                        let prior = &mut self.edges[i].prior;
+                    for (i, d) in self.nodes[0].edges().zip(dir) {
+                        let prior = self.edges.prior_mut(i);
                         *prior = ((1.0 - eps) * f64::from(*prior) + eps * d) as f32;
                     }
                 }
             }
             Wait::Expand(e) => {
-                let c = self.push_expanded(p.state, p.legal.as_ref(), eval);
+                let c = self.push_expanded(p.state.current_player(), p.legal.as_ref(), eval);
                 self.settle(e, c);
             }
             Wait::Boundary(e) => {
                 let seat = p.state.current_player();
                 self.stats.boundaries += 1;
-                let c = self.push(Node { state: p.state, seat, kind: Kind::Boundary, value: eval.value, visits: 0, edges: 0..0 });
+                let c = self.push(Node::leaf(seat, Kind::Boundary, eval.value));
                 self.settle(e, c);
             }
         }
@@ -204,24 +302,23 @@ impl<S: Shuffler> Search<S> {
 
     /// An expanded node: the evaluation's policy over the legal set becomes
     /// its priors, its value the node's `V`.
-    fn push_expanded(&mut self, state: AzulState<S>, legal: Option<&ActionList>, eval: &Evaluation) -> u32 {
-        let start = self.edges.len();
-        for &a in legal.map_or(&[][..], ActionList::as_slice) {
-            self.edges.push(Edge { action: a, prior: eval.policy[usize::from(a)], visits: 0, total: 0.0, child: NONE });
-        }
+    fn push_expanded(&mut self, seat: Player, legal: Option<&ActionList>, eval: &Evaluation) -> u32 {
+        let legal = legal.map_or(&[][..], ActionList::as_slice);
+        let edges_start = self.edges.push(legal, &eval.policy);
         self.stats.expanded += 1;
-        let seat = state.current_player();
-        self.push(Node { state, seat, kind: Kind::Expanded, value: eval.value, visits: 0, edges: start..self.edges.len() })
+        // At most every action: it fits.
+        let edges_len = legal.len() as u8;
+        self.push(Node { edges_start, edges_len, ..Node::leaf(seat, Kind::Expanded, eval.value) })
     }
 
-    fn push(&mut self, node: Node<S>) -> u32 {
+    fn push(&mut self, node: Node) -> u32 {
         self.nodes.push(node);
         (self.nodes.len() - 1) as u32
     }
 
     /// The new child `c` hangs below edge `e`; its value is the simulation's.
     fn settle(&mut self, e: usize, c: u32) {
-        self.edges[e].child = c;
+        self.edges.set_child(e, c);
         let n = &self.nodes[c as usize];
         self.backup(n.value, n.seat);
     }
@@ -245,17 +342,23 @@ impl<S: Shuffler> Search<S> {
         let cpuct = f64::from(self.config.cpuct);
         let unvisited = f64::from(n.value) - f64::from(self.config.fpu);
         let mut best = f64::NEG_INFINITY;
-        let mut chosen = n.edges.start;
-        for i in n.edges.clone() {
-            let e = &self.edges[i];
-            let q = if e.visits == 0 { unvisited } else { e.total / f64::from(e.visits) };
-            let u = q + cpuct * f64::from(e.prior) * sqrt_total / (1.0 + f64::from(e.visits));
+        let (_, priors, children) = self.edges.of(n.edges_start, usize::from(n.edges_len));
+        let mut chosen = 0;
+        for (i, (&prior, &child)) in priors.iter().zip(children).enumerate() {
+            let (q, visits) = match child {
+                NONE => (unvisited, 0),
+                c => {
+                    let c = &self.nodes[c as usize];
+                    (c.total / f64::from(c.taken), c.taken)
+                }
+            };
+            let u = q + cpuct * f64::from(prior) * sqrt_total / (1.0 + f64::from(visits));
             if u > best {
                 best = u;
                 chosen = i;
             }
         }
-        chosen
+        n.edges_start + chosen
     }
 
     /// One simulation: down to a leaf, then either its value backed up, or a
@@ -266,26 +369,37 @@ impl<S: Shuffler> Search<S> {
         loop {
             let e = self.select(node);
             self.path.push((node, e));
-            let child = self.edges[e].child;
+            let child = self.edges.child(e);
+            let depth = self.path.len() - 1;
             if child == NONE {
-                return self.descend_new(node, e);
+                return self.descend_new(depth, e);
             }
             let n = &self.nodes[child as usize];
             if n.kind != Kind::Expanded {
                 return self.backup(n.value, n.seat);
             }
+            if self.steps.get(depth) != Some(&e) {
+                let mut state = self.trail[depth].clone();
+                // It applied when the child was made, and replays the same.
+                let _ = state.apply(self.edges.action(e));
+                self.steps.truncate(depth);
+                self.steps.push(e);
+                self.trail.truncate(depth + 1);
+                self.trail.push(state);
+            }
             node = child;
         }
     }
 
-    /// A new child of `parent` by edge `e`: terminal ones are valued and backed
-    /// up here; boundary and expanded ones pause on the network ([Z11-14]).
-    fn descend_new(&mut self, parent: u32, e: usize) {
-        let before = &self.nodes[parent as usize].state;
+    /// A new child by edge `e` of the node at `depth` on the path: terminal
+    /// ones are valued and backed up here; boundary and expanded ones pause on
+    /// the network ([Z11-14]).
+    fn descend_new(&mut self, depth: usize, e: usize) {
+        let before = &self.trail[depth];
         let mut state = before.clone();
         // The action came from `legal_actions`, so this cannot fail; if it
         // somehow did, the unchanged clone is valued as a leaf of its own.
-        let applied = state.apply(self.edges[e].action).is_ok();
+        let applied = state.apply(self.edges.action(e)).is_ok();
         if applied && !state.is_terminal() {
             if !is_boundary(before, &state) {
                 self.pending = Some(Self::expansion(Wait::Expand(e), state));
@@ -300,7 +414,7 @@ impl<S: Shuffler> Search<S> {
         let seat = state.current_player();
         self.stats.terminals += 1;
         let value = terminal_value(state.outcome(), seat);
-        let c = self.push(Node { state, seat, kind: Kind::Terminal, value, visits: 0, edges: 0..0 });
+        let c = self.push(Node::leaf(seat, Kind::Terminal, value));
         self.settle(e, c);
     }
 
@@ -315,9 +429,9 @@ impl<S: Shuffler> Search<S> {
                 seat = n.seat;
             }
             n.visits += 1;
-            let edge = &mut self.edges[e];
-            edge.visits += 1;
-            edge.total += f64::from(value);
+            let child = &mut self.nodes[self.edges.child(e) as usize];
+            child.taken += 1;
+            child.total += f64::from(value);
         }
         self.remaining -= 1;
     }
@@ -341,15 +455,20 @@ impl<S: Shuffler> Search<S> {
         let mut total = 0f64;
         let mut count = 0u32;
         let root = &self.nodes[0];
-        let mut action = self.edges[root.edges.start].action;
+        let (actions, _, children) = self.edges.of(root.edges_start, usize::from(root.edges_len));
+        let mut action = actions[0];
         let mut most = 0u32;
-        for e in &self.edges[root.edges.clone()] {
-            visits[usize::from(e.action)] = e.visits;
-            total += e.total;
-            count += e.visits;
-            if e.visits > most {
-                most = e.visits;
-                action = e.action;
+        for (&a, &child) in actions.iter().zip(children) {
+            let (taken, sum) = match child {
+                NONE => (0, 0.0),
+                c => (self.nodes[c as usize].taken, self.nodes[c as usize].total),
+            };
+            visits[usize::from(a)] = taken;
+            total += sum;
+            count += taken;
+            if taken > most {
+                most = taken;
+                action = a;
             }
         }
         let value = if count == 0 { root.value } else { (total / f64::from(count)) as f32 };

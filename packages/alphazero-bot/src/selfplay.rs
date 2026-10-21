@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use azul_engine::{ACTION_SPACE, AzulState, Outcome, Player, Seeded, Shuffler};
 
 use crate::config::Settings;
-use crate::memo::Memo;
+use crate::memo::{Key, Memo};
 use crate::network::{BATCH, Evaluation, Evaluator, Request};
 use crate::rng::{Rng, cap_seed, game_seed, noise_seed};
 use crate::samples::{Aux, Kind, LEGAL_BYTES, Sample, legal_mask, wall_mask};
@@ -99,7 +99,7 @@ struct Game {
     memo: Memo,
     /// The memo key of the input the search is paused on, once the memo has
     /// missed it: the game is waiting for the network.
-    waiting: Option<Box<[u32]>>,
+    waiting: Option<Key>,
 }
 
 impl Game {
@@ -154,7 +154,7 @@ impl Game {
             };
             if let Some(request) = search.wants() {
                 match self.memo.lookup(request) {
-                    Ok(e) => search.supply(e),
+                    Ok(e) => search.supply(&e),
                     Err(k) => {
                         self.waiting = Some(k);
                         return true;
