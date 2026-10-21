@@ -32,7 +32,7 @@ fn put(bytes: &[u8]) -> *const u8 {
 }
 
 fn load(checkpoint: &[u8], parity: &[u8], endgame_nodes: u32) -> i32 {
-    // SAFETY: both buffers came from `alloc`, at their own lengths.
+    // SAFETY: both buffers came from `alloc`, at their own lengths, and are not used again.
     unsafe { exports::load(put(checkpoint), checkpoint.len(), put(parity), parity.len(), CPUCT, FPU, endgame_nodes) }
 }
 

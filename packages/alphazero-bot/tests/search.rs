@@ -4,10 +4,11 @@
 
 mod support;
 
+use azul_alphazero::network::{Evaluation, Evaluator};
 use azul_alphazero::rng::{Rng, game_seed, noise_seed};
-use azul_alphazero::search::{SearchConfig, SelfPlayNoise, choose, search};
-use azul_alphazero::view::is_boundary;
-use azul_engine::{AzulState, Player, Seeded, encode_action};
+use azul_alphazero::search::{SearchConfig, SearchResult, SelfPlayNoise, choose, search};
+use azul_alphazero::view::{is_boundary, pre_deal_view};
+use azul_engine::{Action, AzulState, Outcome, Player, Seeded, encode_action};
 use support::{Counting, Zero, blank, fixture, game_positions, pose};
 
 fn config(simulations: u32, fpu: f32) -> SearchConfig {
@@ -272,7 +273,8 @@ fn noise_is_drawn_apart_from_the_shuffle() {
 /// Mutations, seen red ([Z11-48]), each in a copy with its anchor confirmed:
 /// in `choose_memoised`, the network's answer never remembered (its
 /// `memo.insert` removed), which makes as many calls as `choose`; and in
-/// `memo.rs`, the key built from the first 100 observation floats alone.
+/// `memo.rs`, the key built from the first 100 observation floats alone
+/// (`observation.iter().take(100)`, re-run red on 10-21).
 #[test]
 fn a_memoised_choice_is_the_choice() {
     use azul_alphazero::memo::{Memo, choose_memoised};
@@ -356,4 +358,133 @@ fn a_stopped_search_is_the_search_of_its_count() {
         }
     }
     assert!(checked >= 100, "only {checked} cases");
+}
+
+/// A node of `reference_search`: its state, and per legal action a prior, a
+/// visit count, a value sum and the child it leads to.
+struct RefNode {
+    state: AzulState<Seeded>,
+    seat: Player,
+    expanded: bool,
+    value: f32,
+    visits: u32,
+    edges: Vec<(Action, f32, u32, f64, Option<usize>)>,
+}
+
+/// [Z11-14] through [Z11-19] written plainly, as the search was before it was
+/// laid out for memory: every node keeps its own state, every edge its own
+/// visits and value sum, in growable vectors. Nothing is paused, memoised or
+/// noised; the arithmetic, and its order, is the search's.
+fn reference_search<E: Evaluator>(net: &E, root: &AzulState<Seeded>, config: &SearchConfig) -> SearchResult {
+    let mut eval = Evaluation::default();
+    let expand = |net: &E, state: AzulState<Seeded>, eval: &mut Evaluation| {
+        let legal = state.legal_actions();
+        net.evaluate(&state.encode(), legal.as_slice(), eval);
+        let edges = legal.as_slice().iter().map(|&a| (a, eval.policy[usize::from(a)], 0, 0.0, None)).collect();
+        RefNode { seat: state.current_player(), state, expanded: true, value: eval.value, visits: 0, edges }
+    };
+    let mut nodes = vec![expand(net, root.clone(), &mut eval)];
+    for _ in 0..config.simulations {
+        let mut path = Vec::new();
+        let mut node = 0;
+        let (value, seat) = loop {
+            let n = &nodes[node];
+            let sqrt_total = f64::from(n.visits).sqrt();
+            let unvisited = f64::from(n.value) - f64::from(config.fpu);
+            let mut best = f64::NEG_INFINITY;
+            let mut e = 0;
+            for (i, &(_, prior, visits, total, _)) in n.edges.iter().enumerate() {
+                let q = if visits == 0 { unvisited } else { total / f64::from(visits) };
+                let u = q + f64::from(config.cpuct) * f64::from(prior) * sqrt_total / (1.0 + f64::from(visits));
+                if u > best {
+                    best = u;
+                    e = i;
+                }
+            }
+            path.push((node, e));
+            if let Some(c) = n.edges[e].4 {
+                if !nodes[c].expanded {
+                    break (nodes[c].value, nodes[c].seat);
+                }
+                node = c;
+                continue;
+            }
+            let before = &n.state;
+            let mut state = before.clone();
+            let applied = state.apply(n.edges[e].0).is_ok();
+            let child = if applied && !state.is_terminal() && !is_boundary(before, &state) {
+                expand(net, state, &mut eval)
+            } else if applied && !state.is_terminal() {
+                net.evaluate(&pre_deal_view(before, &state), &[], &mut eval);
+                RefNode { seat: state.current_player(), state, expanded: false, value: eval.value, visits: 0, edges: Vec::new() }
+            } else {
+                let seat = state.current_player();
+                let value = match state.outcome() {
+                    Some(Outcome::Player0) if seat == Player::P0 => 1.0,
+                    Some(Outcome::Player1) if seat == Player::P1 => 1.0,
+                    Some(Outcome::Draw) | None => 0.0,
+                    Some(_) => -1.0,
+                };
+                RefNode { seat, state, expanded: false, value, visits: 0, edges: Vec::new() }
+            };
+            nodes.push(child);
+            let c = nodes.len() - 1;
+            nodes[node].edges[e].4 = Some(c);
+            break (nodes[c].value, nodes[c].seat);
+        };
+        let (mut value, mut seat) = (value, seat);
+        for &(node, e) in path.iter().rev() {
+            let n = &mut nodes[node];
+            if n.seat != seat {
+                value = -value;
+                seat = n.seat;
+            }
+            n.visits += 1;
+            n.edges[e].2 += 1;
+            n.edges[e].3 += f64::from(value);
+        }
+    }
+    let root = &nodes[0];
+    let mut visits = [0u32; 180];
+    let (mut total, mut count, mut most, mut action) = (0f64, 0u32, 0u32, root.edges[0].0);
+    for &(a, _, n, t, _) in &root.edges {
+        visits[usize::from(a)] = n;
+        total += t;
+        count += n;
+        if n > most {
+            most = n;
+            action = a;
+        }
+    }
+    let value = if count == 0 { root.value } else { (total / f64::from(count)) as f32 };
+    SearchResult { action, visits, value }
+}
+
+/// The search ([Z11-14] through [Z11-19]) computes what `reference_search`
+/// computes, bit for bit: every
+/// root visit, the action and the value, on every position of a game and on
+/// a search of an opening large enough that its edges fill several of the
+/// chunks they are kept in. The layout for memory — no state in a node, an
+/// action's visits and values on its child, edges in chunks — changes nothing.
+///
+/// Mutations, seen red ([Z11-48]), each in a copy with its anchor confirmed:
+/// in `simulate`, a path's state reused by depth alone, not by the edge that
+/// leads to it (`if self.steps.len() <= depth`), which expands nodes from
+/// stale states; and in `Edges::push`, a new chunk's edges begun where the
+/// last one's left off (its `self.len = self.chunks.len() * CHUNK` removed),
+/// so that a node's edges cross a chunk's end.
+#[test]
+fn the_search_is_the_reference_search() {
+    let net = fixture();
+    for (i, s) in game_positions(41).iter().enumerate() {
+        let want = reference_search(&net, s, &config(150, 0.25));
+        let (got, _) = search(&net, s, &config(150, 0.25), None).unwrap();
+        assert_eq!((got.action, got.value.to_bits()), (want.action, want.value.to_bits()), "position {i}");
+        assert_eq!(got.visits, want.visits, "position {i}");
+    }
+    let opening = AzulState::seeded(43);
+    let (got, stats) = search(&net, &opening, &config(6000, 0.25), None).unwrap();
+    let want = reference_search(&net, &opening, &config(6000, 0.25));
+    assert_eq!((got.action, got.value.to_bits(), got.visits), (want.action, want.value.to_bits(), want.visits));
+    assert!(stats.expanded > 5000, "{stats:?}");
 }

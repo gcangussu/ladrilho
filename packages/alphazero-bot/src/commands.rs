@@ -126,12 +126,15 @@ struct Loaded {
     checkpoint_sha256: String,
 }
 
-/// A checkpoint and the parity file beside it (`x.bin` → `x.parity`), and a config.
-fn load(checkpoint: &Path, config: &Path) -> Result<Loaded, String> {
+/// A checkpoint and the parity file beside it (`x.bin` → `x.parity`), and a
+/// config. Only a command that batches its evaluations keeps the network's
+/// row-major matrices: one that searches alone holds each matrix once.
+fn load(checkpoint: &Path, config: &Path, batched: bool) -> Result<Loaded, String> {
     let bytes = read(checkpoint)?;
     let parity = read(&checkpoint.with_extension("parity"))
         .map_err(|e| format!("no parity file beside the checkpoint, so it is not loaded ([Z11-13]): {e}"))?;
-    let net = Network::load(&bytes, &parity).map_err(|e| format!("{}: {e}", checkpoint.display()))?;
+    let net = if batched { Network::load(&bytes, &parity) } else { Network::load_single(&bytes, &parity) };
+    let net = net.map_err(|e| format!("{}: {e}", checkpoint.display()))?;
     let config = RunConfig::parse(&read(config)?)?;
     let (w, b) = net.architecture();
     if (w, b) != (config.width, config.blocks) {
@@ -209,7 +212,7 @@ fn proved<S: azul_engine::Shuffler>(state: &AzulState<S>, result: SearchResult, 
 
 /// [Z11-23]: one position in, four words out, nothing kept.
 fn play(checkpoint: &Path, config: &Path, search: Search, timing: Timing) -> Result<(), String> {
-    let loaded = load(checkpoint, config)?;
+    let loaded = load(checkpoint, config, false)?;
     let s = settings(&loaded.config, search_kind(search))?;
     let mut input = Vec::new();
     std::io::stdin().read_to_end(&mut input).map_err(|e| format!("reading stdin: {e}"))?;
@@ -232,7 +235,7 @@ fn play(checkpoint: &Path, config: &Path, search: Search, timing: Timing) -> Res
 /// read, from a memo of the evaluations made so far ([Z11-69]), emptied
 /// whenever a position's round differs from the one before it.
 fn serve(checkpoint: &Path, config: &Path, search: Search, timing: Timing) -> Result<(), String> {
-    let loaded = load(checkpoint, config)?;
+    let loaded = load(checkpoint, config, false)?;
     let s = settings(&loaded.config, search_kind(search))?;
     let mut input = std::io::stdin().lock();
     let mut out = std::io::stdout().lock();
@@ -257,7 +260,7 @@ fn serve(checkpoint: &Path, config: &Path, search: Search, timing: Timing) -> Re
 
 /// [Z11-26].
 fn selfplay(checkpoint: &Path, config: &Path, generation: u64, games: u64, out: &Path) -> Result<(), String> {
-    let loaded = load(checkpoint, config)?;
+    let loaded = load(checkpoint, config, true)?;
     let s = settings(&loaded.config, SearchKind::SelfPlay)?;
     let (bytes, aux) = self_play(&loaded.net, &s, loaded.config.seed, generation, games as usize);
     // The aux file first: a complete sample file then always has its aux file
@@ -280,7 +283,7 @@ struct LatencyReport {
 /// [Z11-40]: `choose` timed on every corpus position, single-threaded, from
 /// the position handed in to the action returned.
 fn latency(checkpoint: &Path, corpus: &Path, config: &Path, simulations: Option<u32>) -> Result<(), String> {
-    let loaded = load(checkpoint, config)?;
+    let loaded = load(checkpoint, config, false)?;
     let s = settings(&loaded.config, SearchKind::Latency(simulations))?;
     let mut states = Vec::new();
     for (i, block) in read_messages(&read(corpus)?)?.iter().enumerate() {
@@ -333,7 +336,7 @@ struct ThroughputReport {
 /// the run's threads, and what that makes a generation cost. Written beside
 /// the config, as `throughput.json`.
 fn throughput(checkpoint: &Path, config: &Path) -> Result<(), String> {
-    let loaded = load(checkpoint, config)?;
+    let loaded = load(checkpoint, config, true)?;
     let s: Settings = settings(&loaded.config, SearchKind::SelfPlay)?;
 
     let corpus = parity::corpus();

@@ -95,21 +95,27 @@ impl std::fmt::Display for LoadError {
 
 impl std::error::Error for LoadError {}
 
-/// Tensor offsets into the flat weight vector, in the file's order.
+/// Where each tensor lives. The stem's and the blocks' matrices are kept in
+/// `Network::columns`, and in `Network::rows` once a batch has wanted them,
+/// both in the file's order: the stem first, then each block's `B1`, `B2`.
+/// Every other tensor is in `Network::weights`, also in the file's order, at
+/// the offsets here.
 #[derive(Clone, Debug)]
 struct Layout {
     width: usize,
     blocks: usize,
-    stem_w: usize,
     stem_b: usize,
-    /// Per block: `B1, b1, B2, b2`.
-    block: Vec<[usize; 4]>,
+    /// Per block: `b1, b2`.
+    block: Vec<[usize; 2]>,
     pol_w: usize,
     pol_b: usize,
     v1_w: usize,
     v1_b: usize,
     v2_w: usize,
     v2_b: usize,
+    /// The length of `Network::weights`.
+    heads: usize,
+    /// The file's floats: `heads` and every matrix.
     total: usize,
 }
 
@@ -121,18 +127,29 @@ impl Layout {
             at += n;
             o
         };
-        let stem_w = take(width * ENCODED_SIZE);
         let stem_b = take(width);
-        let block = (0..blocks)
-            .map(|_| [take(width * width), take(width), take(width * width), take(width)])
-            .collect();
+        let block = (0..blocks).map(|_| [take(width), take(width)]).collect();
         let pol_w = take(POLICY * width);
         let pol_b = take(POLICY);
         let v1_w = take(VALUE_HIDDEN * width);
         let v1_b = take(VALUE_HIDDEN);
         let v2_w = take(VALUE_HIDDEN);
         let v2_b = take(1);
-        Layout { width, blocks, stem_w, stem_b, block, pol_w, pol_b, v1_w, v1_b, v2_w, v2_b, total: at }
+        let heads = at;
+        let total = heads + width * ENCODED_SIZE + 2 * blocks * width * width;
+        Layout { width, blocks, stem_b, block, pol_w, pol_b, v1_w, v1_b, v2_w, v2_b, heads, total }
+    }
+
+    /// The file's tensors in its order: each one's length, and whether it is
+    /// one of the matrices `columns` holds.
+    fn file_order(&self) -> Vec<(usize, bool)> {
+        let n = self.width;
+        let mut t = vec![(n * ENCODED_SIZE, true), (n, false)];
+        for _ in 0..self.blocks {
+            t.extend([(n * n, true), (n, false), (n * n, true), (n, false)]);
+        }
+        t.extend([(POLICY * n, false), (POLICY, false), (VALUE_HIDDEN * n, false), (VALUE_HIDDEN, false), (VALUE_HIDDEN, false), (1, false)]);
+        t
     }
 }
 
@@ -141,10 +158,15 @@ impl Layout {
 #[derive(Clone, Debug)]
 pub struct Network {
     layout: Layout,
+    /// Every tensor but the stem's and the blocks' matrices.
     weights: Vec<f32>,
-    /// The stem's and every block's two matrices again, transposed (`[in][out]`),
-    /// for `linear_columns`: the stem first, then each block's `B1`, `B2`.
+    /// The stem's and every block's two matrices, transposed (`[in][out]`), for
+    /// `linear_columns`: the stem first, then each block's `B1`, `B2`.
     columns: Vec<f32>,
+    /// The same matrices row-major, for the batched pass: `load`'s alone. A
+    /// network from `load_single`, for a process that evaluates one input at a
+    /// time, holds each matrix once, and evaluates a batch input by input.
+    rows: Option<Vec<f32>>,
     generation: u32,
 }
 
@@ -420,14 +442,42 @@ fn linear_columns(wt: &[f32], b: &[f32], nz: &NonZero<'_>, n: usize, out: &mut [
 /// An `rows × cols` row-major matrix as `linear_columns` reads it: each whole
 /// block of `BLOCK` rows as `[cols][BLOCK]`, then each row past the last whole
 /// block as its own `[cols]`.
-fn columns_of(w: &[f32], rows: usize, cols: usize, out: &mut Vec<f32>) {
+fn columns_of(w: &[[u8; 4]], rows: usize, cols: usize, out: &mut Vec<f32>) {
     let whole = rows / BLOCK * BLOCK;
     for o0 in (0..whole).step_by(BLOCK) {
         for j in 0..cols {
-            out.extend((o0..o0 + BLOCK).map(|o| w[o * cols + j]));
+            out.extend((o0..o0 + BLOCK).map(|o| f32::from_le_bytes(w[o * cols + j])));
         }
     }
-    out.extend_from_slice(&w[whole * cols..rows * cols]);
+    out.extend(w[whole * cols..rows * cols].iter().map(|b| f32::from_le_bytes(*b)));
+}
+
+/// Every matrix of `columns`, row-major, in its order.
+fn rows_of_all(l: &Layout, columns: &[f32]) -> Vec<f32> {
+    let n = l.width;
+    let mut out = Vec::with_capacity(columns.len());
+    let mut at = 0;
+    for cols in std::iter::once(ENCODED_SIZE).chain(std::iter::repeat_n(n, 2 * l.blocks)) {
+        rows_of(&columns[at..at + n * cols], n, cols, &mut out);
+        at += n * cols;
+    }
+    out
+}
+
+/// `columns_of` undone: the matrix row-major again, appended to `out`.
+fn rows_of(c: &[f32], rows: usize, cols: usize, out: &mut Vec<f32>) {
+    let whole = rows / BLOCK * BLOCK;
+    let start = out.len();
+    out.resize(start + rows * cols, 0.0);
+    let w = &mut out[start..];
+    for o0 in (0..whole).step_by(BLOCK) {
+        for j in 0..cols {
+            for k in 0..BLOCK {
+                w[(o0 + k) * cols + j] = c[o0 * cols + j * BLOCK + k];
+            }
+        }
+    }
+    w[whole * cols..].copy_from_slice(&c[whole * cols..rows * cols]);
 }
 
 fn relu(x: &mut [f32]) {
@@ -442,20 +492,23 @@ fn read_u32(bytes: &[u8], at: usize) -> u32 {
     u32::from_le_bytes(w)
 }
 
-fn read_f32s(bytes: &[u8]) -> Vec<f32> {
-    bytes.as_chunks::<4>().0.iter().map(|w| f32::from_le_bytes(*w)).collect()
-}
-
-/// `Network::columns`: the stem's and every block's matrices, `columns_of` each.
-fn transposed(l: &Layout, w: &[f32]) -> Vec<f32> {
+/// `Network::weights` and `Network::columns`, read from the file's floats
+/// without holding them all at once a second time.
+fn split(l: &Layout, floats: &[[u8; 4]]) -> (Vec<f32>, Vec<f32>) {
     let n = l.width;
-    let mut out = Vec::with_capacity(n * ENCODED_SIZE + 2 * l.blocks * n * n);
-    columns_of(&w[l.stem_w..l.stem_b], n, ENCODED_SIZE, &mut out);
-    for &[b1w, b1b, b2w, b2b] in &l.block {
-        columns_of(&w[b1w..b1b], n, n, &mut out);
-        columns_of(&w[b2w..b2b], n, n, &mut out);
+    let mut weights = Vec::with_capacity(l.heads);
+    let mut columns = Vec::with_capacity(l.total - l.heads);
+    let mut at = 0;
+    for (len, matrix) in l.file_order() {
+        let t = &floats[at..at + len];
+        if matrix {
+            columns_of(t, n, len / n, &mut columns);
+        } else {
+            weights.extend(t.iter().map(|b| f32::from_le_bytes(*b)));
+        }
+        at += len;
     }
-    out
+    (weights, columns)
 }
 
 fn bad(field: &'static str, detail: impl Into<String>) -> LoadError {
@@ -466,15 +519,26 @@ impl Network {
     /// Reads a checkpoint ([Z11-11]) and refuses it unless its forward pass
     /// matches the parity file PyTorch wrote beside it ([Z11-13]).
     pub fn load(checkpoint: &[u8], parity: &[u8]) -> Result<Network, LoadError> {
-        let net = Network::read(checkpoint)?;
-        let expected = parity::read_parity(parity)?;
-        net.check_parity(&expected)?;
-        Ok(net)
+        Network::read(checkpoint, true)?.checked(parity)
     }
 
-    /// The checkpoint alone, unchecked. Crate-private: nothing outside may hold
-    /// a network that has not passed parity.
-    pub(crate) fn read(bytes: &[u8]) -> Result<Network, LoadError> {
+    /// `load` without the row-major matrices the batched pass reads, for a
+    /// process that evaluates one input at a time: a batch is then evaluated
+    /// input by input, which gives the same bits ([Z11-70]).
+    pub fn load_single(checkpoint: &[u8], parity: &[u8]) -> Result<Network, LoadError> {
+        Network::read(checkpoint, false)?.checked(parity)
+    }
+
+    fn checked(self, parity: &[u8]) -> Result<Network, LoadError> {
+        let expected = parity::read_parity(parity)?;
+        self.check_parity(&expected)?;
+        Ok(self)
+    }
+
+    /// The checkpoint alone, unchecked, with the matrices row-major too when
+    /// `batched`. Crate-private: nothing outside may hold a network that has
+    /// not passed parity.
+    pub(crate) fn read(bytes: &[u8], batched: bool) -> Result<Network, LoadError> {
         if bytes.len() < HEADER {
             return Err(bad("length", format!("{} bytes, shorter than the {HEADER}-byte header", bytes.len())));
         }
@@ -511,9 +575,9 @@ impl Network {
         if bytes.len() != want {
             return Err(bad("length", format!("{} bytes, but the header implies {want}", bytes.len())));
         }
-        let weights = read_f32s(&bytes[HEADER..]);
-        let columns = transposed(&layout, &weights);
-        Ok(Network { layout, weights, columns, generation })
+        let (weights, columns) = split(&layout, bytes[HEADER..].as_chunks::<4>().0);
+        let rows = batched.then(|| rows_of_all(&layout, &columns));
+        Ok(Network { layout, weights, columns, rows, generation })
     }
 
     /// `(W, B)`.
@@ -553,7 +617,7 @@ impl Network {
         };
         linear_columns(col(n * ENCODED_SIZE), &w[l.stem_b..l.stem_b + n], &NonZero::of(x, &mut buf), ENCODED_SIZE, h);
         relu(h);
-        for &[_, b1b, _, b2b] in &l.block {
+        for &[b1b, b2b] in &l.block {
             linear_columns(col(n * n), &w[b1b..b1b + n], &NonZero::of(h, &mut buf), n, t);
             relu(t);
             linear_columns(col(n * n), &w[b2b..b2b + n], &NonZero::of(t, &mut buf), n, u);
@@ -591,16 +655,34 @@ impl Network {
         let mut t = [[0f32; M]; BATCH];
         let mut u = [[0f32; M]; BATCH];
 
-        linear_x4(&w[l.stem_w..l.stem_b], &w[l.stem_b..l.stem_b + n], x.map(|v| &v[..]), h.each_mut().map(|r| &mut r[..n]));
+        let Some(rows) = &self.rows else {
+            // Loaded for one input at a time: each alone, the same bits.
+            let mut list = [0; POLICY];
+            let mut len = 0;
+            for a in 0..POLICY {
+                if wanted[a] {
+                    list[len] = a as Action;
+                    len += 1;
+                }
+            }
+            return std::array::from_fn(|k| self.forward_rows(x[k], &list[..len], &mut logits[k]));
+        };
+        // The matrices row-major, in the order `columns` holds them.
+        let mut at = 0;
+        let mut row = |len: usize| {
+            at += len;
+            &rows[at - len..at]
+        };
+        linear_x4(row(n * ENCODED_SIZE), &w[l.stem_b..l.stem_b + n], x.map(|v| &v[..]), h.each_mut().map(|r| &mut r[..n]));
         for r in &mut h {
             relu(&mut r[..n]);
         }
-        for &[b1w, b1b, b2w, b2b] in &l.block {
-            linear_x4(&w[b1w..b1b], &w[b1b..b1b + n], h.each_ref().map(|r| &r[..n]), t.each_mut().map(|r| &mut r[..n]));
+        for &[b1b, b2b] in &l.block {
+            linear_x4(row(n * n), &w[b1b..b1b + n], h.each_ref().map(|r| &r[..n]), t.each_mut().map(|r| &mut r[..n]));
             for r in &mut t {
                 relu(&mut r[..n]);
             }
-            linear_x4(&w[b2w..b2b], &w[b2b..b2b + n], t.each_ref().map(|r| &r[..n]), u.each_mut().map(|r| &mut r[..n]));
+            linear_x4(row(n * n), &w[b2b..b2b + n], t.each_ref().map(|r| &r[..n]), u.each_mut().map(|r| &mut r[..n]));
             for k in 0..BATCH {
                 for i in 0..n {
                     h[k][i] = (h[k][i] + u[k][i]).max(0.0);

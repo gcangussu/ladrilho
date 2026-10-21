@@ -332,7 +332,10 @@ result, winrate) keep their meaning.
   the master's moves 1.36× faster in V8 and the crate's search 1.49× natively, with every action,
   value, proof verdict and evaluator call the same on all 1978 positions, and self-play's sample
   and aux files byte-identical. The batched pass of [Z11-70] still reads rows: four inputs share
-  each row's reads, and their zeros do not line up.*
+  each row's reads, and their zeros do not line up.* *(Since 10-21 only a network loaded to batch,
+  by `Network::load`, keeps the rows. `Network::load_single`, which `play`, `serve`, the latency
+  lane and the master load, holds each matrix once — 2.5 MB rather than 4.7 at width 256 — and
+  evaluates a batch input by input, the same bits.)*
 
 ### Checkpoints
 

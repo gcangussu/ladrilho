@@ -17,7 +17,7 @@
 //! changes nothing. No clock is read ([Z11-18]).
 
 use std::collections::HashMap;
-use std::hash::{BuildHasherDefault, Hasher};
+use std::hash::{BuildHasherDefault, Hash, Hasher};
 
 use azul_engine::{ACTION_SPACE, Action, AzulState, Outcome, Player, Shuffler};
 
@@ -47,7 +47,7 @@ pub fn can_end_this_round<S: Shuffler>(s: &AzulState<S>) -> bool {
 /// scores (a round tiles and scores only at its end), nor can the round, so
 /// they are left out: every position a prover's table holds is in its root's
 /// round.
-fn key<S: Shuffler>(s: &AzulState<S>) -> u128 {
+fn key<S: Shuffler>(s: &AzulState<S>) -> Digest {
     let c = s.to_canonical();
     let mut bytes = [0u8; 72];
     let mut n = 0;
@@ -85,12 +85,24 @@ fn key<S: Shuffler>(s: &AzulState<S>) -> u128 {
         h = h.wrapping_mul(0xc4ce_b9fe_1a85_ec53);
         h ^ (h >> 33)
     };
-    (u128::from(mix(a)) << 64) | u128::from(mix(b))
+    Digest(mix(a), mix(b))
+}
+
+/// The 128-bit digest as two words. A `u128` is aligned to sixteen bytes,
+/// which pads a table slot holding one and its two bounds from 18 bytes to 32;
+/// two words pad it to 24.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct Digest(u64, u64);
+
+impl Hash for Digest {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_u64(self.0 ^ self.1);
+    }
 }
 
 /// The table's hasher. Its keys are already 128-bit digests (`key`), so
-/// SipHash over them again buys nothing: the two halves are folded. Fixed, so
-/// nothing is seeded from the system.
+/// SipHash over them again buys nothing: `Digest` folds its two halves. Fixed,
+/// so nothing is seeded from the system.
 #[derive(Default)]
 struct DigestHasher(u64);
 
@@ -101,8 +113,8 @@ impl Hasher for DigestHasher {
         }
     }
 
-    fn write_u128(&mut self, k: u128) {
-        self.0 = (k as u64) ^ ((k >> 64) as u64);
+    fn write_u64(&mut self, k: u64) {
+        self.0 = k;
     }
 
     fn finish(&self) -> u64 {
@@ -116,7 +128,7 @@ struct Prover {
     round: u32,
     cont: i8,
     /// Lower and upper bounds on a position's value, from earlier searches.
-    table: HashMap<u128, (i8, i8), BuildHasherDefault<DigestHasher>>,
+    table: HashMap<Digest, (i8, i8), BuildHasherDefault<DigestHasher>>,
 }
 
 impl Prover {

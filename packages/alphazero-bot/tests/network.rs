@@ -266,7 +266,9 @@ fn synthetic(width: u32, blocks: u32, seed: u64) -> (Vec<u8>, Vec<u8>) {
 /// and whose hidden inputs end in a tail past the last whole chunk.
 ///
 /// [Z11-70]: `forward_batch` is the same reference order, bit for bit, on
-/// every input of each group of four.
+/// every input of each group of four — and so is a network from
+/// `load_single`, which holds no row-major matrices and evaluates a batch
+/// input by input.
 ///
 /// Mutations, seen red ([Z11-48]), each in a copy with its anchor confirmed:
 /// in `network.rs`, `finish` summing the lanes in sequence
@@ -319,12 +321,14 @@ fn the_forward_pass_is_the_reference_order_bit_for_bit() {
 
     let (c, p) = fixture_bytes();
     check("the fixture", &c, &Network::load(&c, &p).unwrap(), &all);
+    check("the fixture, single", &c, &Network::load_single(&c, &p).unwrap(), &all);
 
     for (width, blocks) in [(17, 1), (33, 2)] {
         let (c, p) = synthetic(width, blocks, u64::from(width));
         let net = Network::load(&c, &p).unwrap_or_else(|e| panic!("width {width}: {e}"));
         assert_eq!(net.architecture(), (width, blocks));
         check(&format!("width {width}"), &c, &net, &all);
+        check(&format!("width {width}, single"), &c, &Network::load_single(&c, &p).unwrap(), &all);
     }
 
     // Each run's latest milestone: the width-256 kernel on weights as training
@@ -388,7 +392,8 @@ fn a_batch_is_each_request_alone() {
 /// of all 180 logits from `forward`. On the fixture and on a synthetic odd
 /// width, over every position of a game — legal sets of odd and even sizes,
 /// so the last row goes alone as often as not — and with boundary requests,
-/// which want no logits at all, mixed into the batches.
+/// which want no logits at all, mixed into the batches. Each of them loaded
+/// both ways: a batch on a network from `load_single` goes input by input.
 ///
 /// Mutations, seen red ([Z11-48]), each in a copy with its anchor confirmed:
 /// in `linear_rows`, the second row of a pair given the first row's bias
@@ -401,7 +406,13 @@ fn a_batch_is_each_request_alone() {
 #[test]
 fn only_the_legal_logits_are_computed_and_nothing_changes() {
     let (c, p) = synthetic(17, 1, 17);
-    let nets = [("the fixture", fixture()), ("width 17", Network::load(&c, &p).unwrap())];
+    let (fc, fp) = fixture_bytes();
+    let nets = [
+        ("the fixture", fixture()),
+        ("width 17", Network::load(&c, &p).unwrap()),
+        ("the fixture, single", Network::load_single(&fc, &fp).unwrap()),
+        ("width 17, single", Network::load_single(&c, &p).unwrap()),
+    ];
     let states = support::game_positions(13);
     let inputs: Vec<([f32; 182], Vec<u8>)> = states
         .iter()

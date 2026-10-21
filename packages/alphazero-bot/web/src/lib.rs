@@ -41,7 +41,7 @@ impl Player {
     /// ([0011 Z11-13]), the milestone's `cpuct` and `fpu`, and the shipped
     /// endgame node cap ([T12-33]).
     pub fn load(checkpoint: &[u8], parity: &[u8], cpuct: f32, fpu: f32, endgame_nodes: u32) -> Result<Player, String> {
-        let net = Network::load(checkpoint, parity).map_err(|e| e.to_string())?;
+        let net = Network::load_single(checkpoint, parity).map_err(|e| e.to_string())?;
         Ok(Player { net, cpuct, fpu, endgame_nodes })
     }
 
@@ -52,8 +52,7 @@ impl Player {
         let state = AzulState::from_canonical(&canonical, Seeded::new(0))
             .map_err(|e| Refusal::Block(format!("the position was refused: {e:?}")))?;
         let config = SearchConfig { simulations, cpuct: self.cpuct, fpu: self.fpu, endgame_nodes: self.endgame_nodes };
-        let mut memo = Memo::new();
-        let result = choose_memoised(&self.net, &state, &config, &mut memo).ok_or(Refusal::Terminal)?;
+        let result = choose_memoised(&self.net, &state, &config, Memo::new()).ok_or(Refusal::Terminal)?;
         Ok((result.action, result.value))
     }
 }

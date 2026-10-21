@@ -199,8 +199,8 @@ fn serve(e: &Env, search: &str, stdin: &[u8]) -> std::process::Output {
 ///
 /// Mutation, seen red ([Z11-48]), in a copy with its anchor confirmed: in
 /// `memo.rs`, the key built from the first 100 observation floats alone
-/// (`buf.iter_mut().zip(&observation[..100])`), which hands back another
-/// position's evaluation.
+/// (`observation.iter().take(100)`), which hands back another position's
+/// evaluation. Re-run red on 10-21, when the key became sparse.
 #[test]
 fn serve_answers_each_position_as_play_does() {
     let e = env(&[("milestoneSimulations", "24")]);
