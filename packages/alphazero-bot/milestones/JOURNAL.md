@@ -424,6 +424,79 @@ nodes, all 30 finished (0.31M to 14.7M, most under 1.7M), and only one changed i
 
 The optimisation effort stops here (10-05); the headroom it bought is the user's to spend.
 
+## What simulations and the endgame cap buy; the browser's maximum stays 200 000 (10-22)
+
+After the 10-21 memory layout, a search keeps about 0.29 KB a simulation, so memory no longer
+bounds the browser's maximum ([0012 T12-16]): at 1 000 000 the module held 290 MB and took
+41.3 s on the heaviest corpus position (498), 198 MB on the slowest at the default (501), and
+five 1M searches in turn on one module stayed at 290 MB. The games below decided it instead:
+the maximum stays 200 000. The four slowest 1M moves of the games below, replayed in
+the module alone, held 165 to 189 MB and took 24 to 28 s.
+
+`twelfth`/120 with the shipped proof cap (300 000) against itself at 100 simulations, natively
+through `serve`, 30 wide seeds from both seats, 60 games each:
+
+| Subject | Points | 95% interval | Elo vs 100 | Seeds won both / one / neither |
+| --- | --- | --- | --- | --- |
+| 1 000 | 48/60 (80.0%) | 68–88% | +241 | 19 / 10 / 1 |
+| 10 000 | 50/60 (83.3%) | 72–91% | +280 | 21 / 5 / 2 |
+| 100 000 | 53/60 (88.3%) | 78–94% | +352 | 24 / 2 / 2 |
+| 1 000 000 | 52/60 (86.7%) | 76–93% | +325 | 23 / 3 / 2 |
+
+Above 1 000 the yardstick saturates: against a player this much weaker, the deal decides what
+is left, and 60 games cannot tell 10 000, 100 000 and 1 000 000 apart. Those games ran eight at
+a time on four physical cores, so their move times are not kept.
+
+So the larger settings played the default instead, same seeds and seats, one game at a time
+(load average 2.5 to 3.5 from the rest of the machine):
+
+| Subject vs 10 000 | Points | 95% interval | Elo | As first / second | Seeds 2 / 1 / 0 points | Mean margin |
+| --- | --- | --- | --- | --- | --- | --- |
+| 100 000 | 37.5/60 (62.5%) | 50–74% | +89 | 78% / 47% | 10 / 16 / 3 | +2.6 ± 1.3 |
+| 1 000 000 | 37.5/60 (62.5%) | 50–74% | +89 | 82% / 43% | 8 / 21 / 0 | +1.4 ± 1.3 |
+
+And the two against each other, the same way:
+
+| Subject | Points | 95% interval | Elo | As first / second | Seeds 2 / 1 / 0 points | Mean margin |
+| --- | --- | --- | --- | --- | --- | --- |
+| 200 000 vs 100 000 | 34/60 (56.7%) | 44–68% | +47 | 68% / 45% | 9 / 16 / 5 | +0.9 ± 1.5 |
+| 500 000 vs 100 000 | 30/60 (50.0%) | 38–62% | 0 | 62% / 38% | 6 / 18 / 6 | +0.8 ± 1.4 |
+| 1 000 000 vs 100 000 | 28/60 (46.7%) | 35–59% | −23 | 58% / 35% | 6 / 16 / 8 | +0.0 ± 1.3 |
+
+| Native move, ms | mean | p50 | p90 | p99 | max | per game |
+| --- | --- | --- | --- | --- | --- | --- |
+| 10 000 | 49 | 8 | 179 | 309 | 684 | 1.4 s |
+| 100 000 | 175 | 38 | 555 | 1 551 | 2 265 | 4.8 s |
+| 200 000 | 279 | 74 | 802 | 2 888 | 4 497 | 7.8 s |
+| 500 000 | 518 | 166 | 1 245 | 5 743 | 10 198 | 14.5 s |
+| 1 000 000 | 938 | 341 | 1 969 | 10 930 | 16 448 | 26.2 s |
+
+Ten times the default buys about +90 Elo, at the edge of what 60 games resolve; a hundred times
+buys nothing more that they can see, for five times the thinking. Against 100 000 directly,
+200 000, 500 000 and 1 000 000 score 57%, 50% and 47%: the strength stops at 100 000 to
+200 000, which points at the network, not the search, as what limits it there. Most of the gain is from the
+first seat: from the second, either is level with the default. The module is about 1.5 times
+slower than the native player: four of the 1M series' slowest positions took 15 to 19 s natively
+alone and 24 to 28 s in the module, choosing the same moves. So 1 000 000 would be a setting for
+the patient, not a stronger one than 100 000 on this evidence.
+
+### The endgame proof's cap, swept (10-22)
+
+At the default, the shipped cap (300 000) against 400 000, 400 000 against 500 000, and so on to
+1 000 000, 100 games each on 50 wide seeds from both seats, one game at a time. Every match
+scored exactly 50/100, and every one of the 700 games was move for move the lower cap's game
+against itself: no cap from 300 000 to 1 000 000 changed a move on those seeds. The knob does
+reach the process: with the proof off, 4 of the 50 self-play games differ from the 300 000 ones
+(and 3 at 100 000; 100 000 and 200 000 play the same games). The first seat took 34.5 of those
+50 games, so a first-seat edge near 69% is what the seat splits above are read against.
+
+Played on all 1 978 non-terminal corpus positions natively, the move changes from cap 0 to
+300 000 on 3 positions, from 300 000 to 1 000 000 on 1 more (1073), and from 1 000 000 to
+2 000 000 on none. The module's lane, rerun at higher caps, now passes where it failed on 10-05:
+at 400 000, 500 000 and 600 000, max 689, 663 and 687 ms at the default and 31 MB after the
+corpus (19 MB at 300 000); the cheaper proof of 10-05 and 10-21 has made the room. So a larger
+cap is affordable and worth nothing measurable; the shipped 300 000 stands.
+
 ## Next
 
 - **Trainer code:** weight averaging (now mostly polish, the dips being small); blending the

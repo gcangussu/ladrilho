@@ -5,7 +5,8 @@
  * call to its return, with the endgame proof at the shipped cap ([T12-33]).
  * The module's memory after the corpus, which only grows, so it is the most
  * any of those moves held, the proof's table included. Then one search at the
- * maximum on the position slowest at the default, and the memory after it.
+ * maximum on the position slowest at the default, and one on the position
+ * whose tree is the largest, each on a fresh module, and the memory after it.
  *
  * `--endgame <nodes>` measures another cap, the way one is chosen before it
  * is shipped; the figures the spec records come from the shipped one.
@@ -24,6 +25,14 @@ import { corpusBlocks, parseBlock } from './blocks.js';
 const MAX_MS = 1000;
 /** The budget for memory at the maximum. */
 const MAX_MEMORY_MB = 512;
+/**
+ * The non-terminal corpus position whose search holds the most memory, found
+ * on 10-22 by a sweep of every third position at 50 000 simulations and
+ * confirmed at 200 000 and 1 000 000. The slowest at the default is usually a
+ * late position whose proof is slow but whose tree is small, so it alone
+ * would not test the budget. Re-found when the corpus is re-recorded.
+ */
+const HEAVIEST = 498;
 
 const pct = (sorted: number[], p: number): number => sorted[Math.max(0, Math.ceil((p / 100) * sorted.length) - 1)];
 
@@ -54,16 +63,20 @@ console.log(
 
 const slowest = times.reduce((a, b) => (b.ms > a.ms ? b : a));
 console.log(`slowest at the default: position ${slowest.at} of the non-terminal corpus, ${slowest.ms.toFixed(0)} ms`);
-const fresh = await createMaster(undefined, endgame);
-const t = performance.now();
-fresh.choose(positions[slowest.at], MASTER_SIMULATIONS.max);
-// The module's own linear memory, which only grows: its size after the search
-// is the most the search held. Node's `arrayBuffers` figure does not count it.
-const memory = fresh.memoryBytes();
-console.log(
-  `${MASTER_SIMULATIONS.max} simulations on the slowest position: ${((performance.now() - t) / 1000).toFixed(1)} s, ` +
-    `module memory ${(memory / 2 ** 20).toFixed(0)} MB (budget ${MAX_MEMORY_MB})`,
-);
+let memory = 0;
+for (const [what, at] of [['slowest', slowest.at], ['heaviest', HEAVIEST]] as const) {
+  const fresh = await createMaster(undefined, endgame);
+  const t = performance.now();
+  fresh.choose(positions[at], MASTER_SIMULATIONS.max);
+  // The module's own linear memory, which only grows: its size after the search
+  // is the most the search held. Node's `arrayBuffers` figure does not count it.
+  const bytes = fresh.memoryBytes();
+  memory = Math.max(memory, bytes);
+  console.log(
+    `${MASTER_SIMULATIONS.max} simulations on the ${what} position (${at}): ${((performance.now() - t) / 1000).toFixed(1)} s, ` +
+      `module memory ${(bytes / 2 ** 20).toFixed(0)} MB (budget ${MAX_MEMORY_MB})`,
+  );
+}
 const passed = max < MAX_MS && Math.max(memory, corpusMemory) / 2 ** 20 < MAX_MEMORY_MB;
 console.log(passed ? 'passed' : 'FAILED');
 process.exitCode = passed ? 0 : 1;
