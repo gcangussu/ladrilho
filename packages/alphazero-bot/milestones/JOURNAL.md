@@ -497,6 +497,84 @@ at 400 000, 500 000 and 600 000, max 689, 663 and 687 ms at the default and 31 M
 corpus (19 MB at 300 000); the cheaper proof of 10-05 and 10-21 has made the room. So a larger
 cap is affordable and worth nothing measurable; the shipped 300 000 stands.
 
+## Why the second seat loses and simulations stop paying: diagnostics (10-22)
+
+Two questions after the sweep above: could training help the player from the second seat, and why
+does strength stop near 100 000 simulations? Three measurements of `twelfth`/120, none of them a
+run. The scripts are not kept: the tree walk below was added to a `git archive` copy of the crate,
+never to this one.
+
+**The seat split, from self-play.** The 60 000 games of `twelfth`'s generations 111 to 130
+(1 000 simulations, noise, `tempPlies` 10), each game's seats told apart by its aux records
+(final walls and margin; one game in 3 000 ends with identical walls, so the margin is needed too):
+
+| First seat | Wins | Draws | Losses | Points | Mean margin |
+| --- | --- | --- | --- | --- | --- |
+| 60 000 games | 33 960 | 2 094 | 23 946 | 58.4% ± 0.4% | +2.1 (sd 10.7) |
+
+So between equal players the first seat is worth about 58%. The 69% of the cap sweep was 50 games,
+±13%, and agrees with this.
+
+**The value head by seat.** `twelfth`/120's value on every move sample of those games (3.3M), against
+each sample's result:
+
+| Seat | Samples | Mean value | Mean result | Bias | Squared error |
+| --- | --- | --- | --- | --- | --- |
+| first | 1 664 747 | +0.150 | +0.165 | −0.016 | 0.701 |
+| second | 1 637 800 | −0.183 | −0.168 | −0.015 | 0.696 |
+
+In every tenth of the value's range, from −1 to 1, the mean result is within 0.03 of the mean
+value, for both seats alike. The head even predicts the first seat's edge at ply 0 (+0.167 against
+a mean result of +0.167). Only 7.7% of the second seat's samples are valued below −0.9 (3.4% of
+the first's), so a search that cannot tell its moves apart because all of them look lost is rare.
+What the head does not know is the early game: its squared error by round is 0.915, 0.842, 0.748,
+0.606 and 0.368 (the first seat's; the second's within 0.004), against about 0.94 for the best constant. In round 1 it barely beats the seat's
+prior.
+
+So the second seat's deficit is the game's, at this level, and the value is honest about it. A
+training change aimed at the second seat would be correcting an error the network does not make.
+
+**The search at 10 000, 100 000 and 1 000 000** on all 1 978 non-terminal positions of
+`latency/corpus.bin`, with the shipped proof cap (300 000), cpuct 1.25 and fpu 0.25:
+
+| Move after the proof differs | 10 000 → 100 000 | 100 000 → 1 000 000 |
+| --- | --- | --- |
+| all positions | 186 (9.4%) | 127 (6.4%) |
+| 16–20 tiles left in the round | 112 of 611 (18.3%) | 79 (12.9%) |
+| 8–15 | 66 of 760 (8.7%) | 45 (5.9%) |
+| 0–7 | 8 of 607 (1.3%) | 3 (0.5%) |
+
+Where 1 000 000 chooses differently it is usually 100 000's second choice (77 of 127), the move
+it replaces held a median 60% of 100 000's visits, and the root value moves by a median 0.010
+there (0.0015 over all positions): near-ties settled the other way, not errors found.
+
+What the extra simulations do: the share that end at a terminal or boundary leaf **already valued**,
+so that nothing new reaches the network, medians by phase of the round:
+
+| Tiles left in the round | 10 000 | 100 000 | 1 000 000 | New nodes at 1 000 000 |
+| --- | --- | --- | --- | --- |
+| 16–20 | 40% | 81% | 96% | 32 786 |
+| 8–15 | 94% | 98.9% | 99.8% | 1 256 |
+| 0–7 | 99.9% | 100% | 100% | 5 |
+
+The principal variation ends at a leaf in 97.4%, 98.9% and 99.7% of the searches. The search stops
+at the round's boundary ([Z11-15]), and by 100 000 simulations it has reached nearly every line up
+to there: from mid-round on, even 10 000 has. Past that point a simulation only averages boundary
+values the network has already given. So the plateau of the sweep is a horizon, not a search that
+needs more time: strength there is the boundary value's, and that value is weakest exactly where
+the moves still change, early in a round.
+
+**What this rules out and points to:**
+
+- Out: training changes aimed at the second seat, and a larger simulation budget. One million
+  simulations is 96% to 100% repeats.
+- In: a better boundary value. That means capacity, or value targets carrying less of the deal's
+  noise (reanalyse, or blending the search's value into the target, already under *Next*). Or
+  looking past the boundary, over deals sampled from the bag's public counts, which is a change to
+  [Z11-15]'s rule and the user's call.
+- Still cheap to try for the second seat: a small score term from the margin head in the search's
+  utility, tested in matches with no training. The evidence for it is weaker than before.
+
 ## Next
 
 - **Trainer code:** weight averaging (now mostly polish, the dips being small); blending the
