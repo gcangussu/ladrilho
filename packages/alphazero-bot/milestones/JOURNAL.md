@@ -527,9 +527,12 @@ In every tenth of the value's range, from −1 to 1, the mean result is within 0
 value, for both seats alike. The head even predicts the first seat's edge at ply 0 (+0.167 against
 a mean result of +0.167). Only 7.7% of the second seat's samples are valued below −0.9 (3.4% of
 the first's), so a search that cannot tell its moves apart because all of them look lost is rare.
-What the head does not know is the early game: its squared error by round is 0.915, 0.842, 0.748,
-0.606 and 0.368 (the first seat's; the second's within 0.004), against about 0.94 for the best constant. In round 1 it barely beats the seat's
-prior.
+Its squared error against the result by round is 0.915, 0.842, 0.748, 0.606 and 0.368 (the first
+seat's; the second's within 0.004), against about 0.94 for the best constant. That reads as a head
+that knows little of the early game, and was first written here as "in round 1 it barely beats the
+seat's prior". It is mostly the result's own noise instead: measured against the win probability
+itself, on the panel further down, the head is nearly right in round 1 (error 0.022) and worst in
+the last rounds (0.21 and 0.30).
 
 So the second seat's deficit is the game's, at this level, and the value is honest about it. A
 training change aimed at the second seat would be correcting an error the network does not make.
@@ -561,8 +564,8 @@ The principal variation ends at a leaf in 97.4%, 98.9% and 99.7% of the searches
 at the round's boundary ([Z11-15]), and by 100 000 simulations it has reached nearly every line up
 to there: from mid-round on, even 10 000 has. Past that point a simulation only averages boundary
 values the network has already given. So the plateau of the sweep is a horizon, not a search that
-needs more time: strength there is the boundary value's, and that value is weakest exactly where
-the moves still change, early in a round.
+needs more time: strength there is the boundary value's. (Where that value is weakest was first
+written here as early in the game; the panel below measured it, and it is the late game.)
 
 **What this rules out and points to:**
 
@@ -572,8 +575,9 @@ the moves still change, early in a round.
   noise (reanalyse, or blending the search's value into the target, already under *Next*). Or
   looking past the boundary, over deals sampled from the bag's public counts, which is a change to
   [Z11-15]'s rule and the user's call.
-- Tried the same day and dropped: a score term from the margin head in the search's leaf values,
-  below.
+- Tried the same day, both below: a score term from the margin head in the search's leaf values
+  (dropped), and the search's value blended into the value target (a small gain in the value, none
+  in play).
 
 ### A score term in the search, tried (10-22)
 
@@ -611,6 +615,79 @@ So the term buys points, not wins, as the diagnostics above predicted: the value
 behind, and the second seat's deficit is the game's. Dropped. It would also have cost two spec
 changes to ship: exporting the head ([Z11-67] says it is never exported, so it would need its own
 parity check, like [Z11-13]), and the search's leaf values.
+
+### The search's value in the value target, screened (10-22)
+
+The value target is the game's result `z` ([Z11-29]), and early in a game that is mostly the later
+deals' noise. Self-play already computes a quieter estimate and discards it: each move's root value
+`q`. The idea was to train on `(1 − α)·z + α·q`. All of it ran in a `git archive` copy of the crate
+whose self-play also writes each record's `q` beside the sample file (NaN for a boundary sample).
+Its sample and aux files were checked byte for byte against the shipped `selfplay` on 256 games
+first. The copy, the data and the scripts are not kept.
+
+**A panel with the win probability measured.** The usual yardstick, the error against `z` on fresh
+games, ranks any two networks fairly, since `z`'s noise is the same for both. It does not say how
+far either is from the truth, or how noisy `z` is. So: 2 000 positions from held-out self-play
+(generation 9001, one searched ply a game, chosen uniformly), each replayed 16 times to the end by
+self-play's own player, with the displays as dealt and the bag's hidden order reshuffled. A
+position's replays give `p̂`, its estimated win probability, and their spread gives `σ_z²`, the
+result's noise. The replays are faithful: the real games' results sit at a mean squared distance
+of 0.607 from `p̂`, against 0.588 predicted, and the means agree (−0.018 and −0.006).
+
+**The best α.** If `z`'s noise and `q`'s error are independent, the blended target's error is
+`(1 − α)²·σ_z² + α²·ε_q²`, least at `α* = σ_z² / (σ_z² + ε_q²)`. Here `ε_q²` is `q`'s error against
+`p̂`, less `p̂`'s own noise. For the value `v` and the two kinds of search:
+
+| Round | `σ_z²` | Error of `v` | of cheap `q` (200) | of full `q` (1 000) | α\* cheap | α\* full |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 0.899 | 0.022 | 0.006 | 0.006 | 0.99 | 0.99 |
+| 2 | 0.815 | 0.038 | 0.024 | 0.022 | 0.97 | 0.97 |
+| 3 | 0.648 | 0.087 | 0.044 | 0.040 | 0.94 | 0.94 |
+| 4 | 0.390 | 0.212 | 0.145 | 0.140 | 0.73 | 0.74 |
+| 5 | 0.054 | 0.302 | 0.129 | 0.075 | 0.29 (0.21–0.38) | 0.42 (0.33–0.50) |
+
+(Bootstrap intervals for α\* are about ±0.02 in rounds 1 to 3 and ±0.05 in round 4.) So α\* is
+about the round, and only in the last does the search's size matter. Within a round it barely moves.
+And the column that matters most is `v`'s: the head is close to the truth early, where `p` hardly
+varies from position to position and `z` is almost all noise. It is worst in the last two rounds,
+where `z` is nearly settled. There even a full search, which reaches the game's real end, cuts the
+error from 0.30 to 0.075. That is a gap in what the network has learned about the end of the game,
+not noise in its target.
+
+**The screen.** Ten generations of 3 000 games from `twelfth`/120 with `q` recorded (9100 to
+9109, 1.77M samples). Five fine-tunes of `twelfth`/120 on them, each 10 000 steps of [Z11-28]
+step 3 as `twelfth` ran it: its optimiser state, aux heads and augmentation, from one seed so every
+variant drew the same batches. The learning rate was 0.0005, ten times `twelfth`'s, so 10 000 steps
+could show a difference. Judged on 3 000 held-out games (generation 9200), on the panel, and in
+800 games at 200 simulations without the proof, the first 400 wide seeds from both seats, against
+the control:
+
+| Variant | α | Error vs `z`, held out | Error vs `p`, panel | Against the control |
+| --- | --- | --- | --- | --- |
+| `twelfth`/120 | – | −0.0065 (−0.0093 to −0.0038) | −0.0109 (−0.0170 to −0.0053) | the control scored 45.1% (−34 ± 24 Elo) |
+| α 0.5 | 0.5 | −0.0031 (−0.0042 to −0.0020) | −0.0046 (−0.0074 to −0.0022) | 51.0% (+7 ± 24) |
+| α 0.9 | 0.9 | −0.0029 (−0.0049 to −0.0010) | −0.0062 (−0.0105 to −0.0023) | 50.2% (+2) |
+| α\* by round | the table's | −0.0034 (−0.0052 to −0.0018) | −0.0054 (−0.0086 to −0.0021) | 49.1% (−7) |
+| α\* by round, at most 0.8 | | −0.0034 (−0.0049 to −0.0019) | −0.0055 (−0.0086 to −0.0026) | 50.7% (+5) |
+
+The errors are differences from the control (α = 0), with 95% bootstrap intervals by game and by
+position. The control's own errors are 0.7022 and 0.1478.
+
+- **The fine-tune itself does harm:** the control lost 34 Elo to `twelfth`/120. So the screen can
+  rank targets against each other, never against the current player.
+- **Every blend's value beats the control's,** every interval clear of zero, in rounds 1 to 3 as
+  well as overall. By about half of what the fine-tune cost, though, and the four blends cannot
+  be told apart.
+- **The blends are underconfident on losing positions:** a value of −0.49 ends at −0.53 to −0.55
+  (the control's −0.50 ends at −0.49). It fits `q`'s small positive bias on the panel, about
+  +0.02 in rounds 1 and 4: the search takes the mover's best replies, so its root value sits a little above
+  the truth.
+- **In play none of it shows:** every blend is level with the control, within ±24 Elo.
+
+So the target is quieter, as intended, but the noise it removes was never what limited the value.
+The value's real error is the late game's, where the result's noise is smallest. The next lever is
+there: which end-of-game features the head gets wrong (the panel can say), weighting late-round
+samples, or capacity. Blending stays a possible companion to whichever of those, not a run of its own.
 
 ## Next
 
