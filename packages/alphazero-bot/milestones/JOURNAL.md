@@ -572,8 +572,45 @@ the moves still change, early in a round.
   noise (reanalyse, or blending the search's value into the target, already under *Next*). Or
   looking past the boundary, over deals sampled from the bag's public counts, which is a change to
   [Z11-15]'s rule and the user's call.
-- Still cheap to try for the second seat: a small score term from the margin head in the search's
-  utility, tested in matches with no training. The evidence for it is weaker than before.
+- Tried the same day and dropped: a score term from the margin head in the search's leaf values,
+  below.
+
+### A score term in the search, tried (10-22)
+
+The one cheap idea left for the second seat was KataGo's score utility: value every leaf as
+`(1 − λ)·v + λ·tanh(m)`, where `m` is [Z11-67]'s margin head over 20 points (the real final
+margin at a terminal leaf). The idea is that a search behind on the result still prefers losing by
+less, which is where comebacks start. The proof stays on win, draw and loss. This needed no
+training, but the head is never exported, so it ran in a `git archive` copy of the crate, with
+`twelfth`'s `aux/120.pt` head written beside the checkpoint. The copy is not kept.
+
+**The head is worth using.** On generations 111 to 130 it explains 34% of the final margin's
+variance, against 8% for the best line through the current score difference: 7% in round 1, 29%
+in round 3, 73% in round 5. Where the value is near-certain (|v| > 0.9) it still correlates 0.64
+with the real margin, so it does separate positions the value cannot.
+
+**Checked before playing.** The copy's head gives PyTorch's output within 7.6e-7 on the 64 parity
+inputs. At λ = 0 the copy chose the shipped search's 10 000-simulation move on all 1 978 corpus
+positions; at λ = 0.1 it changed 70 of them.
+
+**The matches.** Each λ against λ = 0, at 10 000 simulations with the proof's cap of 300 000, the
+first 100 wide seeds from both seats, natively:
+
+| λ | Points | 95% interval | As first / second | Seeds 2 / 1 / 0 points | Mean margin |
+| --- | --- | --- | --- | --- | --- |
+| 0.05 | 98.5/200 (49.2%) | 42–56% | 58.5% / 40.0% | 8 / 83 / 9 | +1.24 ± 0.56 |
+| 0.1 | 102/200 (51.0%) | 44–58% | 62.5% / 39.5% | 12 / 78 / 10 | +1.99 ± 0.56 |
+| 0.2 | 97/200 (48.5%) | 42–55% | 56.5% / 40.5% | 12 / 73 / 15 | +2.23 ± 0.55 |
+
+The term does what it says: the final margin moves by one to two points, two to four standard
+errors. The result does not move. Every λ is level with the shipped player, and from the second
+seat each scores about 40%, against 41.6% for the second seat in self-play. Games the subject trailed
+by 10 or more after three rounds number only 11 to 14 per λ, too few to show a comeback effect.
+
+So the term buys points, not wins, as the diagnostics above predicted: the value is not flat when
+behind, and the second seat's deficit is the game's. Dropped. It would also have cost two spec
+changes to ship: exporting the head ([Z11-67] says it is never exported, so it would need its own
+parity check, like [Z11-13]), and the search's leaf values.
 
 ## Next
 
