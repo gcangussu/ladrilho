@@ -122,11 +122,15 @@ milestone, pool rating) keep their meaning.
 | `MASTER_SIMULATIONS.min` | 100 |
 | `MASTER_SIMULATIONS.max` | 200 000 |
 
-*The maximum is set by memory, not time. A search keeps every node it visits, plus the memo, at
-about 1.2 KB a simulation. 200 000 measured 254 MB on one heavy position, where 1 000 000 would
-need over a gigabyte. Its slowest moves take about 13 s on the machine of record.* *(Since 10-21
-about 0.36 KB a simulation: 72 MB at 200 000 on the heaviest corpus position; see [T12-25]. The
-maximum has not been revisited.)*
+*The maximum was set by memory while a search kept about 1.2 KB a simulation: 200 000 measured
+254 MB on one heavy position, where 1 000 000 would have needed over a gigabyte. Since the 10-21
+layout it keeps about 0.29 KB, and on 10-22 the heaviest corpus position measured 72 MB at
+200 000 and 290 MB at 1 000 000, both inside [T12-25]'s 512 MB. So memory no longer decides it;
+strength does. Played natively on 10-22, 100 000 against the default scored 62.5% (about +90
+Elo), and 200 000, 500 000 and 1 000 000 against 100 000 scored 57%, 50% and 47%: past 100 000
+to 200 000 the setting buys waiting, not strength (`milestones/JOURNAL.md`, 10-22). The maximum
+stays 200 000, where "more simulations play stronger" is still true. Its slowest moves take
+about 9 s on the machine of record.*
 
 ## Data model
 
@@ -446,8 +450,11 @@ These requirements were proposals for *0006*, in the manner of [0008 A8-33]. Eac
   With the machine otherwise idle, `max` MUST be under 1000 ms on the machine of record.
 
   It MUST also time one search at `MASTER_SIMULATIONS.max` on the corpus position slowest at the
-  default, on a fresh `Master`, and print `memoryBytes()` after it. That size, and the size after
-  the corpus, MUST each be under 512 MB. Node's own `arrayBuffers` figure does not count
+  default, and one on the position whose search holds the most memory, each on a fresh `Master`,
+  and print `memoryBytes()` after each. Those sizes, and the size after the corpus, MUST each be
+  under 512 MB. The heaviest position is named in the lane by its index and re-found when the
+  corpus is re-recorded: the slowest at the default is usually a late position whose proof is
+  slow and whose tree is small. Node's own `arrayBuffers` figure does not count
   WebAssembly memory, and reads 0. `--endgame <nodes>` runs the lane at another cap, which is how
   [T12-33]'s is chosen.
 
@@ -478,6 +485,15 @@ These requirements were proposals for *0006*, in the manner of [0008 A8-33]. Eac
   after the search at the maximum, against 53 MB and 436 MB before. On every fourth corpus
   position, four interleaved A/B pairs: 17.4 MB against 50.7 MB, moves 2.7% faster in total; six
   pairs of the search at the maximum: 0.7% slower at the median.*
+
+  *Remeasured on 10-22, when the lane learned to search the heaviest position (498) at the
+  maximum too, found by a sweep of every third corpus position at 50 000 simulations: the
+  slowest at the default is usually a late position whose proof is slow and whose tree is
+  small, and on 10-22 one such held 14 MB at 1 000 000. p50 36 ms, p95 419 ms, p99 532 ms, max
+  700 ms, 19 MB after the corpus, and 9.1 s and 72 MB at the maximum on the heaviest. Rerun at
+  endgame caps of 400 000, 500 000 and 600 000 it also passed (max 689, 663 and 687 ms, 31 MB
+  after the corpus), where 500 000 failed on 10-05; the journal's sweep found that no cap above
+  300 000 changes a move worth measuring, so the shipped cap stands ([T12-33]).*
 
 ## Verification
 
