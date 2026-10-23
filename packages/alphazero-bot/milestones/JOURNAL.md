@@ -814,6 +814,23 @@ scarce targets and towards what the network can represent about the end of the g
 inputs that give it the scoring it now has to compute (each wall cell's placement points, tiles
 still needed per line), or a search at that one boundary.
 
+A probe of the first, on the same harvest: a small head (128 hidden) on the trunk's frozen
+features, with and without 100 hand-computed scoring features per position. Those were each empty
+wall cell's placement points, the tiles each pattern line still needs and what completing it would
+score, and row, column and colour progress, for both seats. Both memorised the 32 000 within a few
+epochs (training error 0.031). At their best held-out epoch:
+
+| | Held-out harvest vs label | Boundary panel vs `p` |
+| --- | --- | --- |
+| the shipped head | 0.178 | **0.155** |
+| frozen features | 0.182 | 0.177 |
+| frozen features and scoring features | 0.171 | 0.170 |
+
+The features help a little (−0.011) but not enough to make the value learnable from this much
+data, and neither probe beats the shipped head. The value of the boundary into the last round
+hinges on how that round plays out given the deal, which a static evaluator does not capture and a
+search on sampled deals does. Of everything tried, only searching past it has won games.
+
 **Weight averaging, tried: nothing.** The mean of `twelfth`'s checkpoints 60 to 170, and of 100 to
 170. Their value improved slightly on the panels (held-out error −0.0019 in rounds 4 and 5, its
 interval clear of zero), but in 2 000 games each against `twelfth`/120 at 200 simulations they
