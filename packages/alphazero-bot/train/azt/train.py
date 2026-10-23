@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from . import auxiliary
+from . import auxiliary, lookahead
 from .augment import permute_samples, random_perms
 from .measure import FitData, predict_values, value_by_round
 from .formats import (legal_bits, read_checkpoint, read_samples, sha256, write_atomic,
@@ -237,6 +237,10 @@ def train_generation(run: Path, g: int) -> None:
     window = np.concatenate(parts)
     del parts
     aux_window = auxiliary.window_aux(files, counts) if use_aux else None
+    # [Z11-82]: the lookahead's share of the value target, and each window
+    # sample's lookahead value, NaN where it has none.
+    alpha = lookahead.settings(config)
+    look_window = lookahead.window_look(files, counts) if alpha is not None else None
     augment = config.get("augment", "none")
     if augment not in ("none", "displays"):
         raise ValueError(f"config: augment {augment!r} is neither none nor displays")
@@ -244,6 +248,7 @@ def train_generation(run: Path, g: int) -> None:
     restore(opt, torch.load(p["optimiser"]), config)
     steps, batch = config["stepsPerGeneration"], config["batch"]
     sum_p = sum_v = sum_m = sum_w = 0.0
+    looked = 0
     net.train()
     for _ in range(steps):
         idx = rng.integers(0, len(window), size=batch)
@@ -251,6 +256,11 @@ def train_generation(run: Path, g: int) -> None:
         if augment == "displays":
             drawn = permute_samples(drawn, random_perms(perm_rng, batch))
         obs, legal, visits, result, kind = batch_tensors(drawn)
+        if look_window is not None:
+            # A display permutation leaves the lookahead value as it is ([Z11-65]).
+            look = look_window[idx]
+            result = torch.from_numpy(lookahead.targets(drawn["result"], look, alpha))
+            looked += int(np.isfinite(look).sum())
         h = net.features(obs)
         logits, value = net.heads(h)
         pol, val = losses(logits, value, legal, visits, result, kind, bw)
@@ -277,6 +287,9 @@ def train_generation(run: Path, g: int) -> None:
         entry["training"]["aux"] = {"margin": sum_m / steps, "walls": sum_w / steps,
                                     "marginWeight": wm, "wallsWeight": ww,
                                     "withTargets": float(aux_window["has"].mean())}
+    if look_window is not None:
+        entry["training"]["lookahead"] = {"alpha": alpha, "withTargets": looked / (steps * batch),
+                                          "windowWithTargets": float(np.isfinite(look_window).mean())}
     entry["window"] = {"generations": [first, g], "samples": int(len(window))}
     if inherited:
         entry["window"]["inherited"] = {"run": config["from"]["run"], "generations": inherited}

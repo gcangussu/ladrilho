@@ -36,8 +36,10 @@ fn round_of(observation: &[f32; ENCODED_SIZE]) -> u32 {
 /// writes, at one thread and at eight; the lookahead file is the same at both;
 /// and every file is that of the same games played one at a time, unbatched.
 ///
-/// Mutation, seen red ([Z11-48]): the lookahead's deals drawn from the game's
-/// own generator (`&mut self.rng` for `&mut self.look_rng` in `Game::play`).
+/// Mutations, seen red ([Z11-48]), each in a copy with its anchor confirmed:
+/// the lookahead's deals drawn from the game's own generator (`&mut self.rng`
+/// for `&mut self.look_rng` in `Game::play`); and in `Boundary::supply`, every
+/// waiting deal of a boundary handed the first one's evaluation.
 #[test]
 fn the_lookahead_changes_no_sample_at_any_thread_count() {
     let net = fixture();
@@ -122,6 +124,13 @@ fn reference_look(s: &Settings, seed: u64, generation: u64, index: u64, deals: u
 /// have a finite value, every other sample NaN; and each value is the
 /// reference's — `selfPlaySimulations`, no noise, from the opener's seat,
 /// the deals in the order drawn — bit for bit.
+///
+/// Mutations, seen red ([Z11-48]), each in a copy with its anchor confirmed:
+/// boundaries into round 4 looked past too (`FROM_ROUND_INDEX - 1` in
+/// `looked_past`); a value stored on the sample before its boundary's
+/// (`len() - 2` in `Game::play`); the deals searched with half the
+/// simulations; and the deals' evaluations handed out in reverse in
+/// `Boundary::supply`.
 #[test]
 fn the_lookahead_file_labels_exactly_the_late_boundaries() {
     let deals = 3;
@@ -174,8 +183,9 @@ fn late_boundaries() -> Vec<(AzulState<Seeded>, Action, bool)> {
 /// non-zero network. The one test that sees a lookahead dealing even one of
 /// its deals from the real bag, which every other test would pass.
 ///
-/// Mutation, seen red ([Z11-48]): in `draw_deals`, the first deal dealt from
-/// `before`'s bag as it lies instead of the shuffled public counts.
+/// Mutation, seen red ([Z11-48]), in a copy with its anchor confirmed: in
+/// `draw_deals`, the first deal dealt from `before`'s bag as it lies, unshuffled,
+/// instead of from the shuffled public counts.
 #[test]
 fn the_lookahead_never_reads_the_bags_order() {
     let net = fixture();
