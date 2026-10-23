@@ -864,6 +864,55 @@ search on sampled deals does. Of everything tried, only searching past it has wo
 interval clear of zero), but in 2 000 games each against `twelfth`/120 at 200 simulations they
 scored 51.2% (+9, −7 to +24) and 50.5% (+4, −11 to +19).
 
+## Before `thirteenth`: the panel as a lane, and what it says (10-23)
+
+`thirteenth` asks whether the current network (4 × 256) can learn more, and specifically the value
+of the boundary into the final round, given cleaner targets there in a real run. The two-pass
+search is parked: the question is learning, not a stronger `master`. These measurements came first.
+
+**The panel is now a lane** ([Z11-83]). `panel/positions.bin` holds both panels, 2 000 move
+positions and 2 000 boundary views from `twelfth`/120's held-out self-play, each with its 16
+replays, and `pnpm -F alphazero-bot panel <checkpoint> [--against <checkpoint>]` reports the
+error against `p` by round, noise-corrected, with the bias and a paired difference with bootstrap
+intervals, in seconds. It reproduces `twelfth`/120's 0.155 into round 5.
+
+**The boundary into round 5 has not moved since `ninth`.** Within `twelfth` it sat at 0.153–0.159
+over all 17 milestones (sd 0.0019; the largest paired difference from 120 is 0.003, a paired
+interval about ±0.0055). Across every run it fell steeply, then flattened:
+
+| Milestone | `first`/10 | `fourth`/10 | `fifth`/10 | `seventh`/10 | `eighth`/100 | `ninth`/10 | `twelfth`/120 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Into round 5 | 1.15 | 0.51 | 0.29 | 0.22 | 0.18 | 0.162 | 0.155 |
+| Into round 3 | 0.69 | 0.16 | 0.054 | 0.019 | 0.014 | 0.011 | 0.009 |
+
+(The positions are `twelfth`/120's, so older networks are scored a little off their own play.)
+Earlier boundaries fell almost to zero; this one has stayed near 0.16 for about 550 generations.
+So `thirteenth` has a sharp criterion: a paired fall of more than about 0.006 against
+`twelfth`/120 (an error below about 0.149), its interval clear of zero, is movement this network
+has not shown in four runs.
+
+**The pool can see it.** Step 0 again at the pool's 200 simulations, on the same 621 round-4
+positions: valuing the boundary by 8 searched deals is worth +37 Elo (+12 to +63), against +65
+at 10 000. Almost none comes from early round-4 moves, where 200 simulations don't reach the
+boundary.
+
+**A bigger network grown from `twelfth`/120 can't be tested this way.** Trained on `twelfth`'s
+archived games (0–149 training, 150–169 held out), new blocks never took a real share of the
+residual stream. Grown by identity, they reached 2–3.5% and then shrank; started at 13.8% by a
+small random init, they were pushed back to 4.5% in 10 000 steps. A network grown from this one
+stays in its optimum, so the question of size needs networks trained from scratch, which is weeks
+here. Parked. (A learning-rate sweep on the continued network, 5e-5 to 5e-4, gave nothing better
+than `twelfth`'s 5e-5; and a fresh 2 × 128 was nowhere near after 70 000 steps.)
+
+**`thirteenth`**, from `twelfth`/120, with one change: each boundary sample into round 5 or later
+trains on `z + 0.9·(L − z)`, `L` the mean value of 8 deals drawn from the bag's public counts,
+each searched at 1 000 simulations ([Z11-80] to [Z11-82]). The games are byte-identical with it
+on or off. Judged by the panel at every milestone first, then the pool; any stop before generation
+80 is overridden, since `twelfth`'s climb began at 50. The lookahead costs more than the plan's
++35–50%: the throughput lane gives 5.5 minutes of self-play a generation against `twelfth`'s 1.9,
+at the same evaluations a second (16 000 against 16 800), so the extra is all in the lookahead's
+own searches, which share little with the games' memo. It is well under the 30-minute limit.
+
 ## Next
 
 - **The boundary into the final round** is where the value limits play: fixing it is worth up to
@@ -878,7 +927,7 @@ scored 51.2% (+9, −7 to +24) and 50.5% (+4, −11 to +19).
   move samples' targets, a margin score term.
 - **Self-play code:** Gumbel search, for better policy targets at low simulation counts;
   restarts from saved round starts; reanalyse.
-- **Capacity:** a bigger network once the cheaper ideas run out; it needs a new latency record.
+- **Capacity:** only testable from scratch (10-23); it needs a new latency record.
 - **Shipping:** the latency record has room (p95 551 ms against 1.5 s), so a shipped move could
   use about twice the simulations. That is a new latency lane, and the user's call.
 
