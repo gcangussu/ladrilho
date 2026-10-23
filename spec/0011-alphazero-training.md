@@ -1555,6 +1555,14 @@ this package, and MUST be corrected in the same change.
   | The proof searching on past the round's end | [Z11-76]'s rule case |
   | `choose_memoised` leaving the proof out | [Z11-72]'s case with the proof on |
   | `playEndgameNodes` reaching `--search milestone` | [Z11-77]'s case |
+| The lookahead's deals drawn from the game's own generator | [Z11-80]'s case at one and eight threads ([Z11-70]'s byte identity with the lookahead's lanes present) |
+| Every waiting deal of a boundary handed the first one's evaluation | [Z11-80]'s case at one and eight threads |
+| One deal dealt from the real bag as it lies, unshuffled | [Z11-80]'s bag-order case |
+| A deal's root value negated | [Z11-80]'s seat case |
+| The lookahead's seed without the generation and the index | [Z11-80]'s determinism case |
+| Boundaries into round 4 looked past; a value stored on the sample before its boundary's; the deals searched with half the simulations; the deals' evaluations handed out in reverse | [Z11-80]'s alignment case, against its reference |
+| The check that the two keys go together dropped from `train init` | [Z11-81]'s `--set` case |
+| α dropped from the blend; the drawn targets left as the results | [Z11-82]'s target case; its training case |
 
 - **[Z11-49]** Every requirement in this document MUST be either cited by at least one test — Rust,
   TypeScript or Python — by identifier, or listed with a reason in *Traceability exemptions*,
