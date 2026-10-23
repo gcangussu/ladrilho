@@ -793,6 +793,27 @@ At this learning rate 20 000 steps barely move the network, and 30 000 targets a
 samples. So this neither shows that capacity or better targets fail nor that they work. A real
 test needs far more final-boundary positions or a run.
 
+**More final-boundary positions, tried: memorised, not learnt.** 32 000 boundaries into round 5
+were harvested from the first position of round 4 in 2 000 fresh games (generation 9300), 16
+replays of round 4 each, with the bag reshuffled and self-play's cheap search making the moves.
+Each was labelled `2Φ(m̄/5) − 1` from 16 policy rollouts' mean margin, an error of 0.090 against
+`p` on the panel and independent of the head. Fine-tunes at learning rate 1e-4, 10 000 steps,
+mixed these into every batch:
+
+| Arm | Error vs label, harvested training positions | Held-out harvest (other games) | Boundary panel into round 5, vs control |
+| --- | --- | --- | --- |
+| control (no harvest) | 0.168 | 0.183 | – |
+| 4% of each batch | 0.135 | 0.174 | +0.0004 (−0.0046 to +0.0057) |
+| 4%, 6 blocks | 0.134 | 0.174 | +0.0013 (−0.0047 to +0.0071) |
+| 10% of each batch | **0.110** | **0.170** | +0.0014 (−0.0074 to +0.0104) |
+
+The network fits the positions it is shown (−0.058) and barely carries it to new games (−0.013
+on positions like them, nothing on the panel's). Self-play already supplies far more distinct
+games than these 2 000, and the head fails there anyway. So this points away from noisy or
+scarce targets and towards what the network can represent about the end of the game. That means
+inputs that give it the scoring it now has to compute (each wall cell's placement points, tiles
+still needed per line), or a search at that one boundary.
+
 **Weight averaging, tried: nothing.** The mean of `twelfth`'s checkpoints 60 to 170, and of 100 to
 170. Their value improved slightly on the panels (held-out error −0.0019 in rounds 4 and 5, its
 interval clear of zero), but in 2 000 games each against `twelfth`/120 at 200 simulations they
@@ -802,9 +823,9 @@ scored 51.2% (+9, −7 to +24) and 50.5% (+4, −11 to +19).
 
 - **The boundary into the final round** is where the value limits play: fixing it is worth up to
   about +65 Elo (10-23). Two routes:
-  - teach the network a sampled-deal estimate there, which needs far more final-boundary
-    positions than self-play's one a game: harvested from search trees or from restarts at
-    round 4, each labelled by rollouts or searches on sampled deals;
+  - teach the network the value there. More labelled positions alone were memorised, not learnt
+    (10-23), so it likely needs inputs carrying the end-of-game scoring: added as zero-initialised
+    input columns the network is unchanged at step 0, but it is a change to [Z11-8];
   - or a cheaper search past it in play than 16 rollouts at every leaf, for example only at the
     leaves the search keeps revisiting. That is a change to [Z11-15] and the user's call.
 - **Tried and dropped (10-22, 10-23):** weight averaging, blending the search's value into
