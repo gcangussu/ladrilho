@@ -777,6 +777,34 @@ unless it lifts the ceiling that more search hits. At 100 000 simulations for bo
 leaves a game. That is no measurable lift at this sample size: consistent with the +25 at 10 000,
 and not told apart from nothing.
 
+**A cheaper form: two passes.** Search as shipped; value only the 16 most-visited boundary leaves
+into round 5 by the head and 16 rollouts; search again from scratch with those values in place of
+the head's. With 0 leaves re-valued the second pass chose the shipped move on all 621 Step 0
+positions, so the machinery changes nothing else. Step 0's estimate, and the cost on the latency
+corpus's 398 round-4 positions, single-threaded on a quiet machine:
+
+| | Step 0 estimate | p50 | p95 | max |
+| --- | --- | --- | --- | --- |
+| shipped | – | 30 ms | 463 ms | 515 ms |
+| rollouts at every leaf | +54 (+13 to +97) | 945 ms | 7 061 ms | 14 480 ms |
+| **two passes, top 16** | **+38 (+4 to +73)** | **199 ms** | **1 044 ms** | **1 168 ms** |
+| two passes, top 48 | +28 (−3 to +62) | – | – | – |
+
+That fits the native move budget (p95 1.5 s), though the module is about 1.5 times slower, so the
+browser's p95 would sit near its limit. In games, the same way as above, on the first 500 wide
+seeds from both seats:
+
+| Games | Points | 95% interval | Elo | As first / second | Seeds 2 / 1 / 0 points |
+| --- | --- | --- | --- | --- | --- |
+| 1 000 | 529 (52.9%) | 49.8–56.0% | **+20 (−1 to +42)** | 63.5% / 42.3% | 68 / 389 / 43 |
+
+The first 500 games scored 51.6% and the next 500 54.2%. It changed 1.3 of a seat's round-4 moves
+a game and re-valued about 72 leaves. With the every-leaf form's +25 (+3 to +47), the two matches
+agree: a search past the boundary into the last round is worth about +20 to +25 Elo at the
+default. In this form it costs about twice the thinking on round-4 moves and nothing elsewhere.
+Shipping it would change [Z11-15]'s rule (the deals sampled from the bag's public counts), need it
+in the WebAssembly build, and need a new latency record. That is the user's call.
+
 **Distilling it into the network, screened: inconclusive.** Seven fine-tunes of `twelfth`/120,
 20 000 steps on `twelfth`'s generations 100 to 119 and the recorded 9100 to 9109 (5.3M samples,
 the same batches for all). The old tensors stayed at `twelfth`'s 5e-5; the new blocks of the
@@ -843,8 +871,9 @@ scored 51.2% (+9, −7 to +24) and 50.5% (+4, −11 to +19).
   - teach the network the value there. More labelled positions alone were memorised, not learnt
     (10-23), so it likely needs inputs carrying the end-of-game scoring: added as zero-initialised
     input columns the network is unchanged at step 0, but it is a change to [Z11-8];
-  - or a cheaper search past it in play than 16 rollouts at every leaf, for example only at the
-    leaves the search keeps revisiting. That is a change to [Z11-15] and the user's call.
+  - or a search past it in play: the two-pass form (the 16 most-visited leaves re-valued by the
+    head and 16 rollouts) won 52.9% of 1 000 games at the default (+20, −1 to +42) at p95 1.0 s
+    native on round-4 moves. That is a change to [Z11-15] and the user's call.
 - **Tried and dropped (10-22, 10-23):** weight averaging, blending the search's value into
   move samples' targets, a margin score term.
 - **Self-play code:** Gumbel search, for better policy targets at low simulation counts;
