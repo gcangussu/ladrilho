@@ -689,10 +689,126 @@ The value's real error is the late game's, where the result's noise is smallest.
 there: which end-of-game features the head gets wrong (the panel can say), weighting late-round
 samples, or capacity. Blending stays a possible companion to whichever of those, not a run of its own.
 
+## The boundary into the final round: what it costs, and what fixes it (10-22 to 10-23)
+
+An overnight session, decided without the user, with the plan reviewed by a second agent before
+it ran. Every measurement is of `twelfth`/120, in `git archive` copies of the crate and scratch
+scripts that are not kept. None of it changes the repo except this entry.
+
+**Where the value is wrong.** A second panel, of 2 000 pre-deal views from held-out self-play
+(generation 9002), each replayed 16 times from the round's last move with the bag reshuffled
+(faithful: 0.707 against 0.721 predicted). The head's error against `p`, and that of a search past
+the boundary (the boundary move played on sampled deals, each searched at 1 000 simulations,
+averaged), by the round about to be dealt:
+
+| Boundary into round | 2 | 3 | 4 | 5 |
+| --- | --- | --- | --- | --- |
+| head | 0.005 | 0.009 | 0.037 | **0.155** |
+| 1 deal searched | 0.028 | 0.042 | 0.064 | 0.111 |
+| 8 deals searched | 0.003 | 0.003 | 0.024 | **0.048** |
+
+Only the boundary into the last round is badly wrong, and every round-4 decision rests on it. A
+linear recalibration of the head gets 0.154 there, so it is not calibration.
+
+**Why the head is wrong there.**
+- **No overfitting.** Its error against `z` on the generations it trained on (110 to 119) and on
+  held-out generation 9200 agrees in every round (gaps within ±0.02). It underfits the late game.
+- **The trunk's features don't carry it.** A 4× larger value head on frozen features fits rounds 4
+  and 5 no better (0.31 against 0.30). A fresh 512-wide network on the raw input memorises
+  instead (training 0.32, held-out 0.93).
+- **It isn't the bonuses.** Bonus gaps, near-complete rows, columns and colours, whether the game
+  ends this round, floor penalties and score difference explain 1–4% of the error (R²). What it
+  misses is how the rest of the round plays out.
+
+**What fixing it would buy (Step 0).** 621 round-4 positions from 160 held-out games, each
+searched at the default (10 000 simulations, the proof at 300 000). Each was searched as
+shipped, and again with every boundary leaf into round 5 valued by the 8-deal search. Where the
+moves differed, each move was scored by 16 replays with common reshuffle seeds:
+
+| Phase of round 4 | Positions | Over the 300-leaf cap | Moves differ | Gain in `p` per decision |
+| --- | --- | --- | --- | --- |
+| 0–7 tiles left | 301 | 1 | 53 (18%) | +0.031 (+0.013 to +0.050) |
+| 8–15 | 160 | 27 | 47 (35%) | +0.025 (−0.021 to +0.075) |
+| 16–20 | 160 | 66 | 22 (23%) | +0.049 (+0.003 to +0.098) |
+
+Summed over the 5.5 round-4 decisions a seat makes in a game, that is **+0.094 in expected score,
+about +65 Elo (+17 to +115)**. Positions over the cap count as no gain. So the boundary is worth
+fixing; the plan's threshold was 30.
+
+**A cheap search past it: policy rollouts.** One greedy rollout of the policy head per sampled deal
+is about 10 network calls. Its ±1 result is noisy, but its final margin is not: `p` at this boundary
+is nearly a function of the expected margin. So each estimate below is the head blended with
+`2Φ(m̄/σ) − 1` of the rollouts' mean margin, with σ and the weight cross-validated on the panel:
+
+| Valuing the boundary into round 5 | Network calls | Error vs `p` |
+| --- | --- | --- |
+| the head | 1 | 0.155 |
+| head and 4 rollouts | about 40 | 0.105 |
+| **head and 16 rollouts** | **about 160** | **0.066** |
+| head and 16 rollouts of 20-simulation searches | about 3 300 | 0.047 |
+| 8 deals, 1 000-simulation searches | about 8 000 | 0.048 |
+
+With 16 rollouts (σ 3.5 points, weight 0.625) in Step 0, on the same 621 positions, the gain was
+**+54 Elo (+13 to +97)**; 4 rollouts gave −17 (−61 to +24).
+
+**In games.** One seat valued the boundary into round 5 that way on its round-4 moves; every other
+move, and the other seat, played as shipped, at 10 000 simulations, on the first 500 wide seeds
+from both seats:
+
+| Games | Points | 95% interval | Elo | As first / second | Seeds 2 / 1 / 0 points |
+| --- | --- | --- | --- | --- | --- |
+| 1 000 | 536 (53.6%) | 50.5–56.7% | **+25 (+3 to +47)** | 64.3% / 42.9% | 73 / 383 / 44 |
+
+The first 400 games scored +30 and the next 600 +22. It changed 1.7 of a seat's 5.5 round-4 moves
+a game, and valued about 830 boundary leaves a game.
+
+**But it is too slow to ship.** Single-threaded on the 398 round-4 positions of the latency corpus,
+on a quiet machine:
+
+| | p50 | p95 | max |
+| --- | --- | --- | --- |
+| shipped | 30 ms | 450 ms | 524 ms |
+| with 16 rollouts | 945 ms | 7 061 ms | 14 480 ms |
+
+That is about 16 times the thinking on those moves, for +25 Elo. Ten times the simulations bought
++89 for about 3.5 times the time. So as a play-time change it loses to simply searching more,
+unless it lifts the ceiling that more search hits. At 100 000 simulations for both seats it scored
+208.5 of 400 (52.1%, **+15, −19 to +49**; 63.0% / 41.2% by seat), valuing about 3 000 boundary
+leaves a game. That is no measurable lift at this sample size: consistent with the +25 at 10 000,
+and not told apart from nothing.
+
+**Distilling it into the network, screened: inconclusive.** Seven fine-tunes of `twelfth`/120,
+20 000 steps on `twelfth`'s generations 100 to 119 and the recorded 9100 to 9109 (5.3M samples,
+the same batches for all). The old tensors stayed at `twelfth`'s 5e-5; the new blocks of the
+6-block arms, identity-initialised, ran at 5e-4. The arms crossed 4 or 6 blocks with three
+targets for the 30 000 boundary samples into round 5: `z`, the recorded root value of round 5's
+first move (free; α 0.7), or the 8-deal search (α 0.9). A seventh added a boundary weight of 3
+to the free target. Against the 4-block `z` control, nothing moved:
+- every arm was within ±0.0006 of it on the boundary into round 5;
+- the weighted arm was −0.0018 (−0.0035 to −0.0001);
+- the 6-block arms fitted rounds 4 and 5 no better in training (+0.0002), and their new blocks
+  carried only 1.2–1.5% of the residual stream.
+
+At this learning rate 20 000 steps barely move the network, and 30 000 targets are 0.6% of the
+samples. So this neither shows that capacity or better targets fail nor that they work. A real
+test needs far more final-boundary positions or a run.
+
+**Weight averaging, tried: nothing.** The mean of `twelfth`'s checkpoints 60 to 170, and of 100 to
+170. Their value improved slightly on the panels (held-out error −0.0019 in rounds 4 and 5, its
+interval clear of zero), but in 2 000 games each against `twelfth`/120 at 200 simulations they
+scored 51.2% (+9, −7 to +24) and 50.5% (+4, −11 to +19).
+
 ## Next
 
-- **Trainer code:** weight averaging (now mostly polish, the dips being small); blending the
-  game's result with the search's value as the value target, against early-game noise.
+- **The boundary into the final round** is where the value limits play: fixing it is worth up to
+  about +65 Elo (10-23). Two routes:
+  - teach the network a sampled-deal estimate there, which needs far more final-boundary
+    positions than self-play's one a game: harvested from search trees or from restarts at
+    round 4, each labelled by rollouts or searches on sampled deals;
+  - or a cheaper search past it in play than 16 rollouts at every leaf, for example only at the
+    leaves the search keeps revisiting. That is a change to [Z11-15] and the user's call.
+- **Tried and dropped (10-22, 10-23):** weight averaging, blending the search's value into
+  move samples' targets, a margin score term.
 - **Self-play code:** Gumbel search, for better policy targets at low simulation counts;
   restarts from saved round starts; reanalyse.
 - **Capacity:** a bigger network once the cheaper ideas run out; it needs a new latency record.
