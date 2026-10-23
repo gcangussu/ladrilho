@@ -13,6 +13,7 @@
 
 pub mod config;
 pub mod endgame;
+pub mod lookahead;
 pub mod memo;
 pub mod network;
 pub mod parity;

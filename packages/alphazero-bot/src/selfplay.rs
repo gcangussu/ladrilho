@@ -7,9 +7,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use azul_engine::{ACTION_SPACE, AzulState, Outcome, Player, Seeded, Shuffler};
 
 use crate::config::Settings;
-use crate::memo::{Key, Memo};
+use crate::lookahead::{Boundary, Lane, looked_past};
 use crate::network::{BATCH, Evaluation, Evaluator, Request};
-use crate::rng::{Rng, cap_seed, game_seed, noise_seed};
+use crate::rng::{Rng, cap_seed, game_seed, look_seed, noise_seed};
 use crate::samples::{Aux, Kind, LEGAL_BYTES, Sample, legal_mask, wall_mask};
 use crate::search::{Search, SearchConfig};
 use crate::view::{is_boundary, pre_deal_view};
@@ -40,9 +40,6 @@ pub fn final_aux<S: Shuffler>(state: &AzulState<S>, seat: Player) -> Aux {
 /// One game's records: its samples, each beside what the game ended as from
 /// its seat ([Z11-67]).
 pub type Records = Vec<(Sample, Aux)>;
-
-/// One game's bytes: its sample records and its aux records.
-type GameBytes = (Vec<u8>, Vec<u8>);
 
 /// Picks the move from root visits: sampled in proportion to `N^(1/τ)` for the
 /// first `temp_plies` plies, then the most visited, ties to the lowest index.
@@ -83,23 +80,30 @@ fn pick(visits: &[u32; ACTION_SPACE], ply: usize, settings: &Settings, rng: &mut
 /// in one batch ([Z11-70]).
 pub const GAMES_PER_THREAD: usize = BATCH;
 
-/// One game in progress: its state, its generator, the samples so far, the
-/// search of the current move, and its memo.
+/// One game in progress: its state, its generators, the samples so far, the
+/// lane of its current move's search with the game's memo, and its
+/// lookaheads ([Z11-80]).
 struct Game {
     index: u64,
     state: AzulState<Seeded>,
     rng: Rng,
     /// The playout cap's draws ([Z11-75]), apart from the noise's.
     cap_rng: Rng,
+    /// The lookahead's deals ([Z11-80]), apart from both.
+    look_rng: Rng,
     /// Whether the current move's search is a full one ([Z11-75]).
     full: bool,
     samples: Vec<(Sample, Player)>,
+    /// Per sample, its lookahead value; NaN for none ([Z11-80]).
+    look: Vec<f32>,
     ply: usize,
-    search: Option<Search<Seeded>>,
-    memo: Memo,
-    /// The memo key of the input the search is paused on, once the memo has
-    /// missed it: the game is waiting for the network.
-    waiting: Option<Key>,
+    /// The current move's search, and the memo the game keeps across moves
+    /// ([Z11-69]).
+    lane: Lane,
+    /// Whether the game itself has ended; its lookaheads may still run.
+    over: bool,
+    /// Lookaheads still running, each with the sample it labels.
+    looks: Vec<(usize, Boundary)>,
 }
 
 impl Game {
@@ -109,23 +113,22 @@ impl Game {
             state: AzulState::new_game(Seeded::new(game_seed(seed, generation, index))),
             rng: Rng::new(noise_seed(seed, generation, index)),
             cap_rng: Rng::new(cap_seed(seed, generation, index)),
+            look_rng: Rng::new(look_seed(seed, generation, index)),
             full: true,
             samples: Vec::new(),
+            look: Vec::new(),
             ply: 0,
-            search: None,
-            memo: Memo::new(),
-            waiting: None,
+            lane: Lane::default(),
+            over: false,
+            looks: Vec::new(),
         }
     }
 
     /// Plays on until the game needs the network (`true`) or is over
     /// (`false`). The memo answers what it can on the way.
-    fn advance(&mut self, settings: &Settings) -> bool {
-        if self.waiting.is_some() {
-            return true;
-        }
+    fn advance_play(&mut self, settings: &Settings) -> bool {
         loop {
-            let Some(search) = self.search.as_mut() else {
+            if self.lane.search.is_none() {
                 if self.state.is_terminal() || self.ply >= MAX_PLIES {
                     return false;
                 }
@@ -147,22 +150,14 @@ impl Game {
                     }
                 };
                 match created {
-                    Some(s) => self.search = Some(s),
+                    Some(s) => self.lane.search = Some(s),
                     None => return false,
                 }
-                continue;
-            };
-            if let Some(request) = search.wants() {
-                match self.memo.lookup(request) {
-                    Ok(e) => search.supply(&e),
-                    Err(k) => {
-                        self.waiting = Some(k);
-                        return true;
-                    }
-                }
-                continue;
             }
-            let Some(search) = self.search.take() else { return false };
+            if self.lane.advance() {
+                return true;
+            }
+            let Some(search) = self.lane.search.take() else { return false };
             let (result, _) = search.finish();
             if !self.play(&result.visits, settings) {
                 return false;
@@ -170,87 +165,132 @@ impl Game {
         }
     }
 
-    /// The input the game is waiting on.
-    fn request(&self) -> Option<Request<'_>> {
-        self.search.as_ref()?.wants()
+    /// Plays on, and runs every lookahead on, until each needs the network.
+    /// `false` once the game is over and its lookaheads have all finished:
+    /// it is done. Otherwise something of it is waiting.
+    fn advance(&mut self, settings: &Settings) -> bool {
+        if !self.over && !self.advance_play(settings) {
+            self.over = true;
+        }
+        let mut i = 0;
+        while i < self.looks.len() {
+            if self.looks[i].1.advance() {
+                i += 1;
+            } else {
+                let (k, b) = self.looks.remove(i);
+                self.look[k] = b.value();
+            }
+        }
+        !self.over || !self.looks.is_empty()
     }
 
-    /// The network's answer to `request`: remembered, then handed to the
-    /// search.
-    fn supply(&mut self, eval: &Evaluation) {
-        if let (Some(k), Some(search)) = (self.waiting.take(), self.search.as_mut()) {
-            self.memo.insert(k, eval);
-            search.supply(eval);
+    /// The inputs the game is waiting on: its own search's, then its
+    /// lookaheads', in order.
+    fn requests<'a>(&'a self, out: &mut Vec<Request<'a>>) {
+        if !self.over {
+            out.extend(self.lane.request());
+        }
+        for (_, b) in &self.looks {
+            b.requests(out);
         }
     }
 
+    /// The network's answers, taken from `answers` in the order of `requests`.
+    fn supply<'e>(&mut self, answers: &mut impl Iterator<Item = &'e Evaluation>) {
+        if !self.over
+            && self.lane.is_waiting()
+            && let Some(e) = answers.next()
+        {
+            self.lane.supply(e);
+        }
+        for (_, b) in &mut self.looks {
+            b.supply(answers);
+        }
+    }
+
+    fn push(&mut self, sample: Sample, seat: Player) {
+        self.samples.push((sample, seat));
+        self.look.push(f32::NAN);
+    }
+
     /// The move sample, the move, and a boundary sample if the move resolved
-    /// a round. `false` if the move could not be played.
+    /// a round, with its lookahead started if [Z11-80] looks past it. `false`
+    /// if the move could not be played.
     fn play(&mut self, root_visits: &[u32; ACTION_SPACE], settings: &Settings) -> bool {
-        let state = &mut self.state;
-        let legal = state.legal_actions();
+        let legal = self.state.legal_actions();
         let mut visits = [0u16; ACTION_SPACE];
         for (v, &n) in visits.iter_mut().zip(root_visits) {
             *v = n.min(u32::from(u16::MAX)) as u16;
         }
-        let seat = state.current_player();
+        let seat = self.state.current_player();
         let sample = if self.full {
-            Sample { kind: Kind::Move, result: 0, observation: state.encode(), legal: legal_mask(legal.as_slice()), visits }
+            Sample { kind: Kind::Move, result: 0, observation: self.state.encode(), legal: legal_mask(legal.as_slice()), visits }
         } else {
             // [Z11-75]: a cheap search's visits are no target; its position
             // still learns the game's result.
-            Sample { kind: Kind::Cheap, result: 0, observation: state.encode(), legal: [0; LEGAL_BYTES], visits: [0; ACTION_SPACE] }
+            Sample { kind: Kind::Cheap, result: 0, observation: self.state.encode(), legal: [0; LEGAL_BYTES], visits: [0; ACTION_SPACE] }
         };
-        self.samples.push((sample, seat));
+        self.push(sample, seat);
         let action = pick(root_visits, self.ply, settings, &mut self.rng);
-        let before = state.clone();
-        if state.apply(action).is_err() {
+        let before = self.state.clone();
+        if self.state.apply(action).is_err() {
             return false;
         }
         self.ply += 1;
-        let boundary = is_boundary(&before, state);
+        let boundary = is_boundary(&before, &self.state);
         if boundary {
             // The memo holds one round: an input from before the deal is all
             // but never asked again after it, since the observation carries
             // the round index. That is for memory only; what the memo answers
             // is exact however often it is emptied.
-            self.memo.clear();
+            self.lane.memo.clear();
         }
-        if !state.is_terminal() && boundary {
-            self.samples.push((
-                Sample {
-                    kind: Kind::Boundary,
-                    result: 0,
-                    observation: pre_deal_view(&before, state),
-                    legal: [0; LEGAL_BYTES],
-                    visits: [0; ACTION_SPACE],
-                },
-                state.current_player(),
-            ));
+        if !self.state.is_terminal() && boundary {
+            let sample = Sample {
+                kind: Kind::Boundary,
+                result: 0,
+                observation: pre_deal_view(&before, &self.state),
+                legal: [0; LEGAL_BYTES],
+                visits: [0; ACTION_SPACE],
+            };
+            self.push(sample, self.state.current_player());
+            if let Some(deals) = settings.lookahead_deals
+                && looked_past(&self.state)
+            {
+                // The deals come from the lookahead's own generator and the
+                // bag's counts, never the game's state or generators: the
+                // game plays on exactly as it would without them.
+                let b = Boundary::new(&before, action, deals, &settings.search, &mut self.look_rng);
+                self.looks.push((self.samples.len() - 1, b));
+            }
         }
         true
     }
 
     /// The samples, results filled in from the final outcome, each beside
-    /// what the game ended as from its seat ([Z11-67]).
-    fn into_records(self) -> Records {
+    /// what the game ended as from its seat ([Z11-67]); and each sample's
+    /// lookahead value ([Z11-80]).
+    fn into_records(self) -> (Records, Vec<f32>) {
         let outcome = self.state.outcome();
         let state = &self.state;
-        self.samples
+        let records = self
+            .samples
             .into_iter()
             .map(|(mut s, seat)| {
                 s.result = result_for(outcome, seat);
                 (s, final_aux(state, seat))
             })
-            .collect()
+            .collect();
+        (records, self.look)
     }
 }
 
 /// [Z11-70]: plays the games `next` hands out, up to `lanes` at once, and
-/// gives each to `done` when it ends. Each round of the loop advances every
-/// game to its next network call and values them all in one batch. A game
-/// sees only its own evaluations, each the bits it would get alone, so what
-/// it plays does not depend on which games shared its batches.
+/// gives each to `done` when it and its lookaheads end. Each round of the
+/// loop advances every game, and every lookahead deal ([Z11-80]), to its next
+/// network call and values them all in one batch. A search sees only its own
+/// evaluations, each the bits it would get alone, so what it plays does not
+/// depend on which searches shared its batches.
 fn play_games<E: Evaluator>(
     net: &E,
     settings: &Settings,
@@ -258,11 +298,11 @@ fn play_games<E: Evaluator>(
     generation: u64,
     lanes: usize,
     mut next: impl FnMut() -> Option<u64>,
-    mut done: impl FnMut(u64, Records),
+    mut done: impl FnMut(u64, Records, Vec<f32>),
 ) {
     let lanes = lanes.max(1);
     let mut games: Vec<Game> = Vec::with_capacity(lanes);
-    let mut evals = vec![Evaluation::default(); lanes];
+    let mut answers = Vec::new();
     loop {
         let mut k = 0;
         while k < lanes {
@@ -276,19 +316,28 @@ fn play_games<E: Evaluator>(
                 k += 1;
             } else {
                 let g = games.swap_remove(k);
-                done(g.index, g.into_records());
+                let index = g.index;
+                let (records, look) = g.into_records();
+                done(index, records, look);
             }
         }
         if games.is_empty() {
             return;
         }
-        // Every game left is waiting: `advance` said so.
-        let requests: Vec<Request<'_>> = games.iter().filter_map(Game::request).collect();
-        debug_assert_eq!(requests.len(), games.len());
-        net.evaluate_batch(&requests, &mut evals[..requests.len()]);
+        // Every game left is waiting on something: `advance` said so.
+        let mut requests: Vec<Request<'_>> = Vec::new();
+        for g in &games {
+            g.requests(&mut requests);
+        }
+        debug_assert!(!requests.is_empty());
+        if answers.len() < requests.len() {
+            answers.resize(requests.len(), Evaluation::default());
+        }
+        net.evaluate_batch(&requests, &mut answers[..requests.len()]);
         drop(requests);
-        for (g, e) in games.iter_mut().zip(&evals) {
-            g.supply(e);
+        let mut given = answers.iter();
+        for g in &mut games {
+            g.supply(&mut given);
         }
     }
 }
@@ -296,24 +345,45 @@ fn play_games<E: Evaluator>(
 /// One self-play game on its own, unbatched: its samples, results filled in
 /// from the final outcome, each beside its aux record ([Z11-67]).
 pub fn play_game<E: Evaluator>(net: &E, settings: &Settings, seed: u64, generation: u64, index: u64) -> Records {
-    let mut out = Vec::new();
+    play_game_looked(net, settings, seed, generation, index).0
+}
+
+/// [`play_game`], with each sample's lookahead value beside it: NaN for a
+/// sample [Z11-80] does not look past, and for every sample while
+/// `settings.lookahead_deals` is unset.
+pub fn play_game_looked<E: Evaluator>(
+    net: &E,
+    settings: &Settings,
+    seed: u64,
+    generation: u64,
+    index: u64,
+) -> (Records, Vec<f32>) {
+    let mut out = (Vec::new(), Vec::new());
     let mut once = Some(index);
-    play_games(net, settings, seed, generation, 1, || once.take(), |_, s| out = s);
+    play_games(net, settings, seed, generation, 1, || once.take(), |_, s, l| out = (s, l));
     out
 }
+
+/// What `self_play` writes: the sample file's bytes, its aux file's
+/// ([Z11-67]), and its lookahead file's while `lookahead_deals` is set
+/// ([Z11-80]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Written {
+    pub samples: Vec<u8>,
+    pub aux: Vec<u8>,
+    pub look: Option<Vec<u8>>,
+}
+
+/// One game's bytes: its sample, aux and lookahead records.
+type GameBytes = (Vec<u8>, Vec<u8>, Vec<u8>);
 
 /// Games `0..games` of generation `generation`, on `settings.threads` threads
 /// over one shared network, each playing `GAMES_PER_THREAD` at once, as the
 /// bytes of a sample file in game order. The order of the file does not
 /// depend on which thread played which game, nor on which games shared a
-/// batch; and the bytes of its aux file, in the same order ([Z11-67]).
-pub fn self_play<E: Evaluator>(
-    net: &E,
-    settings: &Settings,
-    seed: u64,
-    generation: u64,
-    games: usize,
-) -> (Vec<u8>, Vec<u8>) {
+/// batch; and the bytes of its aux file ([Z11-67]) and its lookahead file
+/// ([Z11-80]), in the same order.
+pub fn self_play<E: Evaluator>(net: &E, settings: &Settings, seed: u64, generation: u64, games: usize) -> Written {
     let next = AtomicUsize::new(0);
     let done: Mutex<Vec<Option<GameBytes>>> = Mutex::new(vec![None; games]);
     std::thread::scope(|scope| {
@@ -323,15 +393,17 @@ pub fn self_play<E: Evaluator>(
                     let i = next.fetch_add(1, Ordering::Relaxed);
                     (i < games).then_some(i as u64)
                 };
-                let finish = |i: u64, records: Records| {
-                    let mut bytes = Vec::new();
-                    let mut aux = Vec::new();
+                let finish = |i: u64, records: Records, look: Vec<f32>| {
+                    let (mut bytes, mut aux, mut looked) = (Vec::new(), Vec::new(), Vec::new());
                     for (s, a) in records {
                         s.write(&mut bytes);
                         a.write(&mut aux);
                     }
+                    for v in look {
+                        looked.extend_from_slice(&v.to_le_bytes());
+                    }
                     if let Ok(mut d) = done.lock() {
-                        d[i as usize] = Some((bytes, aux));
+                        d[i as usize] = Some((bytes, aux, looked));
                     }
                 };
                 play_games(net, settings, seed, generation, GAMES_PER_THREAD, take, finish);
@@ -339,10 +411,11 @@ pub fn self_play<E: Evaluator>(
         }
     });
     let done = done.into_inner().unwrap_or_default();
-    let (mut samples, mut aux) = (Vec::new(), Vec::new());
-    for (s, a) in done.into_iter().flatten() {
+    let (mut samples, mut aux, mut look) = (Vec::new(), Vec::new(), Vec::new());
+    for (s, a, l) in done.into_iter().flatten() {
         samples.extend(s);
         aux.extend(a);
+        look.extend(l);
     }
-    (samples, aux)
+    Written { samples, aux, look: settings.lookahead_deals.map(|_| look) }
 }

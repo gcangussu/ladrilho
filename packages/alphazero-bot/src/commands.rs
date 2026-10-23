@@ -9,7 +9,7 @@ use azul_alphazero::config::{RunConfig, SearchKind, Settings, settings};
 use azul_alphazero::network::{Evaluation, Evaluator, Network};
 use azul_alphazero::parity;
 use azul_alphazero::memo::{Memo, search_memoised_until};
-use azul_alphazero::samples::aux_path;
+use azul_alphazero::samples::{aux_path, look_path};
 use azul_alphazero::endgame::refine;
 use azul_alphazero::search::{SearchResult, choose, search_until};
 use azul_alphazero::selfplay::{GAMES_PER_THREAD, self_play};
@@ -262,12 +262,15 @@ fn serve(checkpoint: &Path, config: &Path, search: Search, timing: Timing) -> Re
 fn selfplay(checkpoint: &Path, config: &Path, generation: u64, games: u64, out: &Path) -> Result<(), String> {
     let loaded = load(checkpoint, config, true)?;
     let s = settings(&loaded.config, SearchKind::SelfPlay)?;
-    let (bytes, aux) = self_play(&loaded.net, &s, loaded.config.seed, generation, games as usize);
-    // The aux file first: a complete sample file then always has its aux file
-    // beside it, and the loop takes the sample file as self-play's commit
-    // point ([Z11-28], [Z11-67]).
-    write_atomic(&aux_path(out), &aux)?;
-    write_atomic(out, &bytes)
+    let written = self_play(&loaded.net, &s, loaded.config.seed, generation, games as usize);
+    // The lookahead and aux files first: a complete sample file then always
+    // has them beside it, and the loop takes the sample file as self-play's
+    // commit point ([Z11-28], [Z11-67], [Z11-80]).
+    if let Some(look) = &written.look {
+        write_atomic(&look_path(out), look)?;
+    }
+    write_atomic(&aux_path(out), &written.aux)?;
+    write_atomic(out, &written.samples)
 }
 
 #[derive(Serialize)]
@@ -356,7 +359,8 @@ fn throughput(checkpoint: &Path, config: &Path) -> Result<(), String> {
     let games = u64::from(s.threads) * GAMES_PER_THREAD as u64 * 2;
     let started = Instant::now();
     // Seeded apart from any generation a run will play: the games are thrown away.
-    let (bytes, _) = self_play(&loaded.net, &s, loaded.config.seed ^ 0x7468_726f_7567_6870, u64::MAX, games as usize);
+    // With the lookahead on, its searches are timed with the games ([Z11-80]).
+    let bytes = self_play(&loaded.net, &s, loaded.config.seed ^ 0x7468_726f_7567_6870, u64::MAX, games as usize).samples;
     let seconds = started.elapsed().as_secs_f64();
     let per_hour = games as f64 / seconds * 3600.0;
     let minutes = f64::from(loaded.config.games_per_generation) / per_hour * 60.0;

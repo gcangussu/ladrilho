@@ -62,6 +62,15 @@ export interface RunConfig {
    */
   cheapSimulations?: number;
   fullSearchFraction?: number;
+  /**
+   * [Z11-81]: self-play searches `lookaheadDeals` deals past each boundary
+   * into round 5 or later and writes their mean value beside the samples
+   * ([Z11-80]); the trainer trains those samples' values on
+   * `(1 - lookaheadAlpha) * z + lookaheadAlpha * L` ([Z11-82]). Both absent
+   * is off; one without the other is refused.
+   */
+  lookaheadDeals?: number;
+  lookaheadAlpha?: number;
   /** [Z11-66]: the run and generation this run's checkpoint 0 was taken from. */
   from?: RunOrigin;
 }

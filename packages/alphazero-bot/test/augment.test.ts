@@ -97,4 +97,29 @@ describe('a run started from another [Z11-66]', () => {
       fullSearchFraction: { parent: 0, run: 0.25 },
     });
   });
+
+  /**
+   * [Z11-81]: `thirteenth` is `--set lookaheadDeals=8 --set lookaheadAlpha=0.9`,
+   * recorded as changes from an absent 0; one without the other, or either
+   * out of range, is refused before a run exists. Mutation, seen red: the
+   * check that the two go together dropped from `childConfig`.
+   */
+  it('takes the lookahead keys together, or not at all', () => {
+    expect(parseSet('lookaheadDeals=8')).toEqual(['lookaheadDeals', 8]);
+    expect(parseSet('lookaheadAlpha=0.9')).toEqual(['lookaheadAlpha', 0.9]);
+    const c = childConfig(parent, origin, 42, undefined, { lookaheadDeals: 8, lookaheadAlpha: 0.9 });
+    expect([c.lookaheadDeals, c.lookaheadAlpha]).toEqual([8, 0.9]);
+    expect(c.from?.changes).toEqual({
+      lookaheadDeals: { parent: 0, run: 8 },
+      lookaheadAlpha: { parent: 0, run: 0.9 },
+    });
+    expect('lookaheadDeals' in childConfig(parent, origin, 42, undefined, {})).toBe(false);
+    // A child of a run with the lookahead keeps it, and may change one key.
+    const child = childConfig(c, origin, 43, undefined, { lookaheadAlpha: 0.5 });
+    expect([child.lookaheadDeals, child.lookaheadAlpha]).toEqual([8, 0.5]);
+    for (const bad of [{ lookaheadDeals: 8 }, { lookaheadAlpha: 0.9 }, { lookaheadDeals: 8.5, lookaheadAlpha: 0.9 },
+      { lookaheadDeals: 65, lookaheadAlpha: 0.9 }, { lookaheadDeals: 8, lookaheadAlpha: 1.5 }]) {
+      expect(() => childConfig(parent, origin, 42, undefined, bad)).toThrow(/lookahead/);
+    }
+  });
 });

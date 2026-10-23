@@ -97,6 +97,8 @@ export const CHANGEABLE = [
   'torchThreads',
   'auxMarginWeight',
   'auxWallsWeight',
+  'lookaheadDeals',
+  'lookaheadAlpha',
 ] as const;
 export type Changeable = (typeof CHANGEABLE)[number];
 
@@ -109,6 +111,24 @@ export function parseSet(text: string): [Changeable, number] {
   const value = Number(m[2]);
   if (!(Number.isFinite(value) && value > 0)) throw new Error(`--set ${key} needs a positive number, not ${m[2]}`);
   return [key, value];
+}
+
+/**
+ * [Z11-81]: `lookaheadDeals` and `lookaheadAlpha` together or not at all, the
+ * deals a whole number in 1..=64 and alpha in (0, 1], as the crate will
+ * insist when self-play first reads them. Refused here, before a run exists.
+ */
+export function checkLookahead(config: Pick<RunConfig, 'lookaheadDeals' | 'lookaheadAlpha'>): void {
+  const { lookaheadDeals: deals, lookaheadAlpha: alpha } = config;
+  if ((deals === undefined) !== (alpha === undefined)) {
+    throw new Error('lookaheadDeals and lookaheadAlpha go together ([Z11-81])');
+  }
+  if (deals !== undefined && !(Number.isInteger(deals) && deals >= 1 && deals <= 64)) {
+    throw new Error(`lookaheadDeals must be a whole number in 1..=64, not ${deals}`);
+  }
+  if (alpha !== undefined && !(alpha > 0 && alpha <= 1)) {
+    throw new Error(`lookaheadAlpha must be in (0, 1], not ${alpha}`);
+  }
 }
 
 /**
@@ -127,10 +147,12 @@ export function childConfig(
   const { from: _grandparent, augment: parentAugment, gate: parentGate, yardstick: parentYardstick, ...inherited } = pc;
   const changes: RunOrigin['changes'] = {};
   for (const [k, v] of Object.entries(set) as [Changeable, number][]) {
-    // An absent aux weight is 0, off ([Z11-67]); so is an absent playout cap ([Z11-75]).
+    // An absent aux weight is 0, off ([Z11-67]); so is an absent playout cap
+    // ([Z11-75]), and an absent lookahead ([Z11-81]).
     const was = inherited[k] ?? 0;
     if (was !== v) changes[k] = { parent: was, run: v };
   }
+  checkLookahead({ ...inherited, ...set });
   return {
     ...inherited,
     ...set,

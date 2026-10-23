@@ -271,7 +271,9 @@ fn batched_self_play_is_each_game_alone() {
     let s = settings(&cfg, SearchKind::SelfPlay).unwrap();
     let net = fixture();
     let games = 11;
-    let (batched, batched_aux) = self_play(&net, &s, cfg.seed, 4, games);
+    let w = self_play(&net, &s, cfg.seed, 4, games);
+    let (batched, batched_aux) = (w.samples, w.aux);
+    assert_eq!(w.look, None, "a lookahead file without the lookahead ([Z11-80])");
     let (mut alone, mut alone_aux) = (Vec::new(), Vec::new());
     for i in 0..games as u64 {
         for (sample, aux) in play_game(&net, &s, cfg.seed, 4, i) {
