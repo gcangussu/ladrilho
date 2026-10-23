@@ -15,6 +15,7 @@
     "train": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs train",
     "stop-simulation": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs stop-simulation",
     "milestone": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs milestone",
+    "panel": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs panel",
     "gate": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs gate",
     "latency": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs latency",
     "latency-corpus": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs latency-corpus",

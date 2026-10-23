@@ -1184,6 +1184,36 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
   The loop calls `due`, runs the gate if it says so, then calls `decide`. `override` entries enter
   both only as fresh starts; `manual-gate` entries end the run and are never passed to either.
 
+### The value against the measured win probability
+
+The pool says whether a checkpoint plays better, not whether its value improved, and the error
+against `z` on fresh games says which of two networks is closer to the truth, not how far either
+is from it. The panel measures that distance. Its positions come from `twelfth`/120's held-out
+self-play: 2 000 searched move positions (generation 9001, one ply a game, chosen uniformly) and
+2 000 pre-deal views of round boundaries (generation 9002). Each was replayed 16 times to the end
+of the game by self-play's own player with the bag's hidden order reshuffled (a boundary view from
+the round's last move), so the mean of its 16 results, `p̂`, estimates its win probability `p`.
+They were recorded once, by scratch code the journal's 10-22 entry describes, and are committed
+as data.
+
+- **[Z11-83]** `panel/positions.bin` MUST hold the panel: the bytes `AZPN`, then little-endian
+  `u32`s for the version (1), the record count, the replays a record (16) and the observation's
+  length ([Z11-8]), then the records, each a `u8` kind (0 a move position, 1 a boundary view), a
+  `u8` round (0-based: the round a move is played in, or the round a boundary view is about to
+  deal), 16 `i8` results from the mover's seat (−1, 0 or 1), `twelfth`/120's value on it as an
+  `f32`, and the observation as `f32`s. `pnpm -F alphazero-bot panel <checkpoint> [--against
+  <checkpoint>] [--json <out>]` MUST load each checkpoint only if it reproduces its parity file
+  ([Z11-13]), and print, for all moves, all boundaries, and each round's moves and boundaries
+  with at least 50 positions:
+  - the error against `p`, as `mean((v − p̂)²) − mean(s²)/R`, where `s²` is a position's
+    replays' sample variance and `R` their count: `(v − p̂)²` alone overstates `(v − p)²` by
+    `p̂`'s own variance, so an uncorrected figure flatters no checkpoint but hides a gain where
+    `p̂` is noisiest;
+  - the mean bias `mean(v − p̂)`;
+  - with `--against`, the other checkpoint's error and the paired difference between the two;
+  - for the error and the difference, a 95% percentile bootstrap interval over positions, 2 000
+    draws from a fixed seed per row, the same positions drawn for both checkpoints.
+
 ## Latency and throughput
 
 Intent 0009: on an ordinary modern processor, "half of its moves take under 3 seconds and all but

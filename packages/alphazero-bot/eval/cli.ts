@@ -9,6 +9,7 @@ import { resolve } from 'node:path';
 import { DISPLAYS_FIXTURE, LAYOUT, displayFixture, displayLayout } from './augment.js';
 import { writeAtomic, writeJson } from './files.js';
 import { recordCorpus } from './latency.js';
+import { trainer } from './crate.js';
 import {
   gateCommand,
   initRun,
@@ -88,6 +89,18 @@ async function main(): Promise<void> {
       return throughputLane(run());
     case 'milestone':
       return milestoneCommand(resolve(rest[0] ?? ''), workers(rest));
+    case 'panel': {
+      // [Z11-83]: the value against the measured win probability, by round.
+      if (rest[0] === undefined || rest[0].startsWith('--')) throw new Error('usage: panel <checkpoint> [--against <checkpoint>] [--json <out>]');
+      const against = option(rest, 'against');
+      const json = option(rest, 'json');
+      return trainer([
+        'panel',
+        resolve(rest[0]),
+        ...(against === undefined ? [] : ['--against', resolve(against)]),
+        ...(json === undefined ? [] : ['--json', resolve(json)]),
+      ]);
+    }
     case 'gate':
       return gateCommand(resolve(rest[0] ?? ''), workers(rest));
     case 'pool': {
@@ -122,7 +135,7 @@ async function main(): Promise<void> {
     default:
       throw new Error(
         'usage: train init --run <name> [--from <run>:<generation>] [--augment none|displays] [--set <setting>=<n>]… [--gate end|off] [--yardstick ladder|pool] | train --run <name> [--override "<reason>"] | latency --run <name> | ' +
-          'throughput --run <name> | milestone <checkpoint> | gate <checkpoint> | stop-simulation | latency-corpus | ' +
+          'throughput --run <name> | milestone <checkpoint> | panel <checkpoint> [--against <checkpoint>] | gate <checkpoint> | stop-simulation | latency-corpus | ' +
           'augment-fixtures | pool init --members <run>:<g>,… --games <n>',
       );
   }

@@ -200,6 +200,9 @@ pnpm -F alphazero-bot throughput --run <name>  # [Z11-53]: minutes per generatio
 pnpm -F alphazero-bot train --run <name>       # [Z11-28]: the loop, over days; resumes where it stopped
 pnpm -F alphazero-bot milestone <checkpoint>   # [Z11-31] on one logged milestone, printed
 pnpm -F alphazero-bot gate <checkpoint>        # [Z11-35]: hours; writes gate/<run>/<generation>.json
+pnpm -F alphazero-bot panel <checkpoint> [--against <checkpoint>]
+                                               # [Z11-83]: the value's error against the measured win
+                                               # probability, by round; seconds, forward passes only
 pnpm -F alphazero-bot stop-simulation          # [Z11-56]: the stop rule's table
 pnpm -F alphazero-bot latency-corpus           # [Z11-38]: re-record latency/corpus.bin; deliberate act
 pnpm -F alphazero-bot augment-fixtures         # [Z11-65]: train/layout.json and the display fixture
