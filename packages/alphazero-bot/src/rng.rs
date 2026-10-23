@@ -49,6 +49,17 @@ pub fn cap_seed(seed: u64, generation: u64, index: u64) -> u64 {
     splitmix64(game_seed(seed, generation, index) ^ CAP_SALT)
 }
 
+/// The lookahead's deals' salt ([Z11-80]), apart from the noise's and the
+/// cap's.
+pub const LOOK_SALT: u64 = 0x6c6f_6f6b_5f7a_3830; // "look_z80"
+
+/// The lookahead's generator's seed for the same game ([Z11-80]): the triple
+/// mixed with a constant of its own, so the deals it draws never move the
+/// noise's draws or the cap's, and are never the bag order read another way.
+pub fn look_seed(seed: u64, generation: u64, index: u64) -> u64 {
+    splitmix64(game_seed(seed, generation, index) ^ LOOK_SALT)
+}
+
 /// The crate's generator. Seeded explicitly, always: nothing here can reach
 /// the operating system's entropy (`rand` is built without it).
 #[derive(Clone, Debug, PartialEq, Eq)]

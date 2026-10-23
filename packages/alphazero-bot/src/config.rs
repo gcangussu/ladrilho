@@ -30,7 +30,22 @@ pub struct RunConfig {
     pub playout_cap: Option<PlayoutCap>,
     /// [Z11-77]: the endgame proof's node cap in play; 0, the default, is off.
     pub play_endgame_nodes: u32,
+    /// [Z11-81]: the lookahead past boundaries into round 5 or later, or
+    /// `None` for none.
+    pub lookahead: Option<Lookahead>,
 }
+
+/// [Z11-81]: how many deals a boundary's lookahead searches ([Z11-80]), and
+/// the share of its value in the training target ([Z11-82]), which only the
+/// trainer reads.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Lookahead {
+    pub deals: u32,
+    pub alpha: f64,
+}
+
+/// The most deals a lookahead may search ([Z11-81]).
+pub const MAX_LOOKAHEAD_DEALS: u64 = 64;
 
 /// [Z11-75]: a cheap search's count, and the share of moves searched fully.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -65,6 +80,10 @@ struct Raw {
     full_search_fraction: Option<f64>,
     #[serde(default)]
     play_endgame_nodes: Option<u64>,
+    #[serde(default)]
+    lookahead_deals: Option<u64>,
+    #[serde(default)]
+    lookahead_alpha: Option<f64>,
 }
 
 fn whole(key: &str, n: u64, min: u64, max: u64) -> Result<u32, String> {
@@ -118,6 +137,18 @@ impl RunConfig {
                 return Err("config: \"cheapSimulations\" and \"fullSearchFraction\" go together ([Z11-75])".into());
             }
         };
+        let lookahead = match (r.lookahead_deals, r.lookahead_alpha) {
+            (None, None) => None,
+            (Some(n), Some(alpha)) => {
+                if !(alpha > 0.0 && alpha <= 1.0) {
+                    return Err("config: \"lookaheadAlpha\" must be in (0, 1]".into());
+                }
+                Some(Lookahead { deals: whole("lookaheadDeals", n, 1, MAX_LOOKAHEAD_DEALS)?, alpha })
+            }
+            _ => {
+                return Err("config: \"lookaheadDeals\" and \"lookaheadAlpha\" go together ([Z11-81])".into());
+            }
+        };
         Ok(RunConfig {
             width: whole("width", r.width, 1, u64::from(crate::network::MAX_WIDTH))?,
             blocks: whole("blocks", r.blocks, 0, 64)?,
@@ -142,6 +173,7 @@ impl RunConfig {
                 None => 0,
                 Some(n) => whole("playEndgameNodes", n, 0, MAX_ENDGAME_NODES)?,
             },
+            lookahead,
         })
     }
 }
@@ -170,6 +202,8 @@ pub struct Settings {
     pub threads: u32,
     /// Self-play only ([Z11-75]).
     pub playout_cap: Option<PlayoutCap>,
+    /// Self-play only: the deals each lookahead searches ([Z11-80]).
+    pub lookahead_deals: Option<u32>,
 }
 
 /// The only place in the crate that reads search settings ([Z11-60]).
@@ -205,5 +239,6 @@ pub fn settings(config: &RunConfig, kind: SearchKind) -> Result<Settings, String
         tau: config.tau,
         threads: config.threads,
         playout_cap: if kind == SearchKind::SelfPlay { config.playout_cap } else { None },
+        lookahead_deals: if kind == SearchKind::SelfPlay { config.lookahead.map(|l| l.deals) } else { None },
     })
 }

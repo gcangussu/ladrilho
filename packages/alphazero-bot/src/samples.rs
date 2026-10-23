@@ -154,3 +154,18 @@ pub fn read_all_aux(bytes: &[u8]) -> Result<Vec<Aux>, String> {
 pub fn aux_path(samples: &std::path::Path) -> std::path::PathBuf {
     samples.with_extension("aux.bin")
 }
+
+/// The lookahead file beside a sample file ([Z11-80]): `16.bin` →
+/// `16.look.bin`. One little-endian `f32` per sample, NaN for a sample with
+/// no lookahead value.
+pub fn look_path(samples: &std::path::Path) -> std::path::PathBuf {
+    samples.with_extension("look.bin")
+}
+
+/// Every value of a lookahead file ([Z11-80]).
+pub fn read_all_look(bytes: &[u8]) -> Result<Vec<f32>, String> {
+    if !bytes.len().is_multiple_of(4) {
+        return Err(format!("{} bytes is not a whole number of 4-byte lookahead values", bytes.len()));
+    }
+    Ok(bytes.as_chunks::<4>().0.iter().map(|w| f32::from_le_bytes(*w)).collect())
+}

@@ -685,7 +685,8 @@ The binary's commands, each loading one checkpoint and one run's settings:
   | legal | 23 bytes | a 180-bit mask, action `a` at bit `a % 8` of byte `a / 8`; all zero for a boundary or cheap sample |
   | visits | 180 × u16 | root visits; all zero for a boundary or cheap sample |
 
-  Beside it, `selfplay` MUST write the sample file's **aux file** of [Z11-67].
+  Beside it, `selfplay` MUST write the sample file's **aux file** of [Z11-67], and, while a run
+  sets [Z11-81]'s keys, its **lookahead file** of [Z11-80].
 
 - **[Z11-28]** The loop MUST, per generation `g`:
   1. run `selfplay` with checkpoint `g` for `gamesPerGeneration` games, unless generation `g`'s
@@ -730,7 +731,8 @@ The binary's commands, each loading one checkpoint and one run's settings:
   refuse every setting but those of how a run trains and self-plays — `gamesPerGeneration`,
   `window`, `stepsPerGeneration`, `batch`, `learningRate`, `momentum`, `weightDecay`,
   `boundaryWeight`, `selfPlaySimulations`, `cheapSimulations`, `fullSearchFraction`, `threads`,
-  `torchThreads`, `auxMarginWeight` and `auxWallsWeight` — and any value that is not
+  `torchThreads`, `auxMarginWeight`, `auxWallsWeight`, `lookaheadDeals` and `lookaheadAlpha`
+  ([Z11-81]) — and any value that is not
   a positive number: the network, the searches the ladder and the gate measure, and the count the
   latency record stands behind stay the parent's. Checkpoint `0` MUST be
   the parent's checkpoint `g` with its generation relabelled `0` and a parity file of its own, and
@@ -816,6 +818,66 @@ The binary's commands, each loading one checkpoint and one run's settings:
   (learning 1.65× slower without them); the final walls are Azul's ownership. Not exported, so
   latency, parity and the search stay as they were, and the weights are a run's settings, so a run
   tests them as its one change.*
+
+- **[Z11-80]** While a run's config sets [Z11-81]'s keys, `selfplay` MUST write, beside each
+  sample file `<g>.bin`, its **lookahead file** `<g>.look.bin`: one little-endian `f32` per
+  sample, in the sample file's order — the **lookahead value** `L` of each boundary sample into
+  round 5 or later (a non-terminal boundary ply whose `after.round_index()` is at least 4), NaN
+  for every other sample.
+  - **Deals.** `L` is valued on `lookaheadDeals` deals of the boundary ply, each the ply applied
+    again to the position before it with the bag's order and the shuffler replaced: the bag's
+    tiles laid out in colour order — its public counts, nothing of its order — then shuffled by
+    Fisher–Yates, descending, and the state given a `Seeded` shuffler for any recycle the deal
+    makes, both drawn from a fourth generator of the crate's own, seeded from the triple of
+    [Z11-26] mixed with a constant apart from the noise's and the cap's ([Z11-20], [Z11-75]). The
+    game's generators, its state's bag order and its shuffler are never read. A game draws its
+    deals in the order its boundaries come, `lookaheadDeals` at each.
+  - **Searches.** Each deal is searched as a self-play move is, with `selfPlaySimulations`, no
+    noise and no proof, from the seat that opens the next round — the seat the boundary sample's
+    result is from ([Z11-26]) — and `L` is the mean of the root values of [Z11-14]'s search,
+    summed in `f64` in the order the deals were drawn and rounded to `f32`. The searches MUST
+    run as lanes of [Z11-70]'s batched loop, beside the games and sharing their batches, each
+    with a memo of its own ([Z11-69]).
+  - **Writing.** Like the aux file: the lookahead file first, then the aux file, then the sample
+    file, each atomically ([Z11-30]). The sample and aux files MUST be byte for byte those the
+    same config without the keys writes, at any thread count; the lookahead file, likewise,
+    does not depend on the thread count.
+
+  *The searches read the tiles their own deals put out, which [Z11-15] keeps from a search that
+  chooses a move. These choose nothing: the move a game plays is its own search's, and the
+  lookahead only labels a sample. So the information barrier is unchanged, and the test that
+  stands in for it here is [Z11-21]'s analogue: a lookahead value does not move when the bag's
+  order and the shuffler's seed do. A lookahead that dealt even one of its deals from the real
+  bag would pass every other test, while giving, measured on `twelfth`/120, the 1-deal estimate
+  (error 0.111 against the measured win probability) in place of the 8-deal one (0.048).*
+
+- **[Z11-81]** A run's config MAY set `lookaheadDeals`, a whole number in 1..=64, and
+  `lookaheadAlpha`, a number in (0, 1], together or not at all; absent means no lookahead file and
+  nothing else changed. The crate MUST refuse a config that sets one without the other, or
+  either out of its range, and only `selfplay` (and `throughput`, which measures it) reads
+  `lookaheadDeals`; the trainer reads `lookaheadAlpha`. `train init --from … --set` MUST accept
+  both ([Z11-66]) and refuse a child config that would hold one without the other: run
+  `thirteenth` is `--set lookaheadDeals=8 --set lookaheadAlpha=0.9`.
+
+  *α\* = σ_z² / (σ_z² + ε²): with the result's variance at the boundary into round 5, 0.38, and
+  the 8-deal lookahead's error, 0.048, both measured on `twelfth`/120, about 0.89. Boundaries into
+  round 6 or later, about 4% of games, take the same α, unmeasured there.*
+
+- **[Z11-82]** While `lookaheadAlpha` is set, step 3 of [Z11-28] MUST train the value of each
+  drawn sample whose lookahead value `L` is finite on `(1 − α)·z + α·L`, computed as
+  `z + α·(L − z)` in `f64` and rounded to `f32`, where `z` is its result and α is
+  `lookaheadAlpha`; every other sample on `z`, as before — among them every sample of a file with
+  no lookahead file beside it, such as a parent's inherited window ([Z11-66]). `boundaryWeight`
+  ([Z11-29]) still weights a boundary sample's term, and [Z11-54]'s `before` losses stay against
+  `z`, so they are comparable across runs. A display permutation ([Z11-65]) leaves `L` as it is.
+  The generation's record in `losses.json` MUST carry, as `training.lookahead`, α, the share of
+  drawn samples that had a value (`withTargets`), and the share of the window that had one.
+
+  *A result is noisy at the boundary into the final round (σ_z² = 0.38), and there the network
+  is off by 0.155 where searching past the boundary is off by 0.048. Fine-tunes on fixed data did
+  not teach it; this asks whether the target present through a whole run does. `L` is the
+  checkpoint's own search, so at α = 0.9 the target is mostly bootstrapped: the value can drift
+  where nothing checks it but a panel against the measured win probability.*
 
 - **[Z11-30]** Everything a run writes MUST live under `packages/alphazero-bot/runs/<name>/`, which
   is git-ignored, except the files of [Z11-34], [Z11-35] and [Z11-40], which are written where
@@ -1281,6 +1343,7 @@ not required: [Z11-25] makes the file the record, and a later run MAY change any
 | `playSimulations` | set by [Z11-57] | the shipped setting |
 | `selfPlaySimulations` | 200 | |
 | `cheapSimulations`, `fullSearchFraction` | absent, meaning off | [Z11-75] |
+| `lookaheadDeals`, `lookaheadAlpha` | absent, meaning off | [Z11-81]; run `thirteenth` sets 8 and 0.9 |
 | `milestoneSimulations` | 800 | [Z11-59]; lowered to `playSimulations` if that is smaller |
 | `cpuct`, `fpu` | 1.25, 0.25 | |
 | `alpha`, `epsilon` | 0.3, 0.25 | |
@@ -1418,7 +1481,8 @@ this package, and MUST be corrected in the same change.
   from another ([Z11-66]) begins from its parent's weights, optimiser and window, and that
   [Z11-54]'s value by round reads rounds as the engine encodes them and fits its formula out of
   sample, and that [Z11-67]'s targets are read in order, enter only where a sample has one, and its
-  heads train, persist between generations and stay out of the checkpoint.
+  heads train, persist between generations and stay out of the checkpoint, and that [Z11-82]'s
+  target is the blend exactly where a sample has a lookahead value and its result elsewhere.
 - **[Z11-47]** A source check MUST cover [Z11-1], [Z11-2] — its list of crates and its build flag
   in the package root's `.cargo/config.toml` included, failing if the file is absent or its flags
   differ; the web crate's own file is [0012 T12-2]'s — and
