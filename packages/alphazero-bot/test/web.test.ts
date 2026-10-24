@@ -11,7 +11,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { apply, fromCanonical, fromJSON, legalActions, newGame, Rng, toCanonical, toJSON, type AzulJSON } from 'engine';
@@ -302,16 +302,36 @@ interface LogEntry {
   run: string;
   generation: number;
   pool?: { rating?: number };
+  anchored?: { rating?: number };
 }
 
-/** [T12-10]: the logged milestone with the highest pool rating, ties to the earlier. */
-function strongest(log: LogEntry[]): { run: string; generation: number } | null {
-  let best: LogEntry | null = null;
-  for (const e of log) {
-    if (e.kind !== 'milestone' || typeof e.pool?.rating !== 'number') continue;
-    if (best === null || e.pool.rating > (best.pool?.rating as number)) best = e;
+interface Anchors {
+  members: { run: string; generation: number; rating: number }[];
+}
+
+/**
+ * [T12-10]: on the anchors' scale once it exists — the anchors at their
+ * ratings, then every entry with an anchored rating, the highest, ties to
+ * the earlier — and before that the logged milestone with the highest pool
+ * rating, ties to the earlier.
+ */
+function strongest(log: LogEntry[], anchors: Anchors | null = null): { run: string; generation: number } | null {
+  let best: { run: string; generation: number; rating: number } | null = null;
+  const consider = (run: string, generation: number, rating: number) => {
+    if (best === null || rating > best.rating) best = { run, generation, rating };
+  };
+  if (anchors !== null) {
+    for (const m of anchors.members) consider(m.run, m.generation, m.rating);
+    for (const e of log) {
+      if ((e.kind === 'milestone' || e.kind === 'rating') && typeof e.anchored?.rating === 'number') {
+        consider(e.run, e.generation, e.anchored.rating);
+      }
+    }
+  } else {
+    for (const e of log) if (e.kind === 'milestone' && typeof e.pool?.rating === 'number') consider(e.run, e.generation, e.pool.rating);
   }
-  return best === null ? null : { run: best.run, generation: best.generation };
+  const b = best as { run: string; generation: number } | null;
+  return b === null ? null : { run: b.run, generation: b.generation };
 }
 
 describe('the shipped milestone [T12-9], [T12-10], [T12-11]', () => {
@@ -331,12 +351,23 @@ describe('the shipped milestone [T12-9], [T12-10], [T12-11]', () => {
     // A stronger milestone committed without naming it here fails this case:
     // the swap is the one-line edit that belongs in the same commit.
     const log = JSON.parse(readFileSync(LOG, 'utf8')) as LogEntry[];
-    expect({ run: shipped.run, generation: shipped.generation }).toEqual(strongest(log));
+    const anchorsPath = join(PACKAGE, 'milestones', 'anchors.json');
+    const anchors = existsSync(anchorsPath) ? (JSON.parse(readFileSync(anchorsPath, 'utf8')) as Anchors) : null;
+    expect({ run: shipped.run, generation: shipped.generation }).toEqual(strongest(log, anchors));
     const m = (run: string, generation: number, rating?: number): LogEntry => ({
       kind: 'milestone', run, generation, ...(rating === undefined ? {} : { pool: { rating } }),
     });
     expect(strongest([m('a', 10, 5), m('a', 20, 7), m('b', 10, 7), m('c', 1)])).toEqual({ run: 'a', generation: 20 });
     expect(strongest([m('c', 1)])).toBeNull();
+    // Mutation, seen red ([T12-29]), in a copy with its anchor confirmed:
+    // `strongest` reading pool ratings when the anchors exist fails these.
+    const anchored = (kind: string, run: string, generation: number, rating: number, pool?: number): LogEntry => ({
+      kind, run, generation, anchored: { rating }, ...(pool === undefined ? {} : { pool: { rating: pool } }),
+    });
+    const fixed: Anchors = { members: [{ run: 'x', generation: 1, rating: 856 }, { run: 'y', generation: 1, rating: 750 }] };
+    expect(strongest([m('a', 10, 990)], fixed)).toEqual({ run: 'x', generation: 1 });
+    expect(strongest([m('a', 10, 990), anchored('rating', 'a', 10, 850), anchored('milestone', 'b', 20, 857)], fixed)).toEqual({ run: 'b', generation: 20 });
+    expect(strongest([anchored('rating', 'a', 10, 856)], fixed)).toEqual({ run: 'x', generation: 1 });
   });
 
   it('refuses files that do not match, and a milestone nobody logged [T12-7]', () => {

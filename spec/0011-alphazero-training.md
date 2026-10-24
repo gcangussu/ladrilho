@@ -1031,7 +1031,7 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
 
 - **[Z11-73]** A run's config MAY set `yardstick` to `pool`; absent means `ladder`, the yardstick of
   [Z11-31]. A run started from another inherits its parent's unless `train init` is given
-  `--yardstick ladder|pool` ([Z11-66]). The **pool** is three champions, each a committed milestone
+  `--yardstick ladder|pool|anchors` ([Z11-66]). The **pool** is three champions, each a committed milestone
   checkpoint with an Elo rating, played at a simulation count of the pool's own, 200:
 
   - `pnpm -F alphazero-bot pool init --members <run>:<g>,… --games <n>` MUST seed it once, refusing
@@ -1092,6 +1092,63 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
   *Two standard errors decide outright, so noise rarely swaps a champion; within them, a third
   more games settles it without a second margin, because by then the challenger is close enough
   that either answer costs little.*
+
+*The pool's scale drifted upward, and by a lot. Measured on 10-24 by direct matches, 4 000 games
+  at the pool's count on fresh seeds: `twelfth`/120 was +12 over `eleventh`/130 where the pool said
+  +43, +32 over `ninth`/110 where it said +117, and +105 over `seventh`/170 where it said +239;
+  `thirteenth`/100 and `fourteenth`/70 played level with `twelfth`/120 at pool ratings 33 and 70
+  above it. The cause is the chain: a milestone plays only the latest three champions, so two
+  checkpoints far apart are compared only through many small margins, each with its own error,
+  and admission keeps the margins that came out high. A joint refit of every logged pool game
+  still put `twelfth`/120 +213 over `seventh`/170, so the fault is in what was played, not in
+  how it was fitted. The yardstick `anchors` ([Z11-84], [Z11-85]) replaces the pool for new runs;
+  these requirements stay for the entries already logged.*
+
+- **[Z11-84]** A run's config MAY set `yardstick` to `anchors`, and `train init` MUST accept
+  `--yardstick anchors`. The **anchors** are committed milestone checkpoints with fixed ratings,
+  held in `milestones/anchors.json`, which only two deliberate commands write, and a person
+  commits:
+  - `pnpm -F alphazero-bot anchors init --members <run>:<g>,… --pin <run>:<g>=<rating> --games <n>`
+    MUST refuse when the file exists; play a round robin of `n` games a pairing at the anchors'
+    count, 200, each side `serve --search milestone` on the pinned member's logged config at that
+    count, seats alternated, each pairing on seeds of its own ([Z11-85]); fit the ratings by
+    maximum likelihood with the pinned member held at its rating; and write the count,
+    `gamesPerMember` (800, a milestone's games against each anchor), the pin, the members with
+    their ratings and standard errors, and every pairing with its seed base.
+  - `anchors add <run>:<g> --games <n>` MUST refuse a checkpoint that is already an anchor; play
+    it `n` games against every anchor on seeds of its own; rate it by its performance against
+    their ratings; and append it with its games. No rating already in the file changes.
+  - `anchors rate <checkpoint>` MUST play a logged milestone as an anchored milestone would
+    ([Z11-85]) and append a `rating` entry to the log: the run, the generation, the date, the
+    record and the series. It changes no run's decisions ([Z11-33] reads milestones only).
+  - The shipped milestone ([0012 T12-10]) is chosen on this scale once the file exists.
+
+  *Anchors never leave and are never rated by the games that admit them, so no selection reaches
+  the scale, and every milestone is compared with the same fixed points rather than with its
+  run's latest checkpoints. When the anchors fall too far behind to resolve a milestone, a person
+  adds a stronger one, rated afresh on games of its own.*
+
+- **[Z11-85]** On a run whose yardstick is `anchors`, a milestone MUST play the checkpoint against
+  every anchor, `gamesPerMember` games each at the anchors' count, seats alternated, on the seeds
+  `base + 104729·i`, and rate it by its performance against the anchors' ratings in the file.
+  Nothing is admitted or replaced and no extra games are played.
+  - The seed base MUST be the first of `h, h + 1, …` whose seeds share none with any seed of the
+    anchors' file, of a logged anchored record, or of the pool's list, where `h` is
+    `3·10⁸ + (the first four bytes of sha256("<run>/<generation>") as a little-endian u32 mod 2³⁰)`, which keeps every seed below 2³¹.
+    `anchors init` and `anchors add` allocate theirs the same way, from `"init:<a>:<b>"` and
+    `"add:<member>:<anchor>"`.
+  - The log entry MUST record, as `anchored`, the count, the games, the seed base, the anchors
+    played with their ratings, the rating and its standard error, and `beyond`: whether the
+    rating is more than 150 above the strongest anchor, which the reason then says. `results`
+    holds each anchor's series, and `progress` the rating, which the stop rule of [Z11-33]
+    compares at its nine decimals.
+  - The replay of [Z11-45] MUST recompute every anchored record's rating, to nine decimals, from
+    its series against the ratings the file holds for the anchors it names; refuse a record whose
+    anchors' ratings differ from the file's; refuse two records, or a record and the file, that
+    share a seed; and recompute `beyond`.
+
+  *The stop rule's simulated table above assumes ratings with honest noise and no drift; on the
+  anchors it holds as printed, at 800 games against each of three anchors.*
 
 - **[Z11-75]** A run's config MAY set `cheapSimulations` and `fullSearchFraction`, together or
   not at all: playout-cap randomisation. Absent, every self-play move is searched as before, with
@@ -1593,6 +1650,11 @@ this package, and MUST be corrected in the same change.
 | Boundaries into round 4 looked past; a value stored on the sample before its boundary's; the deals searched with half the simulations; the deals' evaluations handed out in reverse | [Z11-80]'s alignment case, against its reference |
 | The check that the two keys go together dropped from `train init` | [Z11-81]'s `--set` case |
 | α dropped from the blend; the drawn targets left as the results | [Z11-82]'s target case; its training case |
+| A seed base taken from the hash without checking what is used | [Z11-85]'s allocation case |
+| An anchored record's anchor ratings not compared with the file's | [Z11-85]'s refusal of moved ratings |
+| An anchored record's seeds not checked against earlier ones | [Z11-85]'s refusal of used seeds |
+| `beyond` measured from the weakest anchor | [Z11-85]'s flag case |
+| `rating` entries kept among a run's entries | [Z11-84]'s case that a rating leaves its run's course alone |
 
 - **[Z11-49]** Every requirement in this document MUST be either cited by at least one test — Rust,
   TypeScript or Python — by identifier, or listed with a reason in *Traceability exemptions*,

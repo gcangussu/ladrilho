@@ -280,15 +280,19 @@ interface Seating {
 - **[T12-9]** `packages/alphazero-bot/web/shipped.json` MUST be committed and MUST name a
   **logged** milestone ([0011 Z11-4]) whose checkpoint and parity file are committed and match
   its two sha256s, and MUST carry the endgame cap ([T12-33]).
-- **[T12-10]** The shipped milestone MUST be the logged `milestone` entry with the highest
-  `pool.rating`, ties to the earlier entry. Entries without a pool rating, which ran on the
-  ladder yardstick, are not candidates. A test MUST assert it.
+- **[T12-10]** The shipped milestone MUST be the strongest on the anchors' scale once
+  `milestones/anchors.json` exists ([0011 Z11-84]): of the anchors at their ratings in the file,
+  and of every logged entry with an `anchored.rating` (milestones and `rating` entries), the
+  highest, ties to the anchor, then to the earlier entry. Until the file exists, it MUST be the
+  logged `milestone` entry with the highest `pool.rating`, ties to the earlier entry, entries
+  without one (the ladder's) not being candidates. A test MUST assert both.
 
   *Intent 0010: the strongest player we have, by training's own record, and swapping in a
   stronger one "is a routine step, not a project". This test is what makes it routine. Committing
   a milestone that out-rates the shipped one fails the suite until `shipped.json` names it, so the
   swap is one edit in the same commit. Pool ratings share one anchor, `third/90` at 0
-  ([0011 Z11-73]), so they compare across runs.*
+  ([0011 Z11-73]), so they compare across runs, but their scale drifted upward by more than any
+  run gained ([0011 Z11-74]), which is why the anchors' scale now decides.*
 
 - **[T12-11]** The web crate, `shipped.json` and `web/dist/` are not source paths of
   [0011 Z11-63]. Building or swapping the shipped player never marks a training build dirty and
@@ -539,6 +543,7 @@ These requirements were proposals for *0006*, in the manner of [0008 A8-33]. Eac
   | One field of `canonicalWords` in `web/` written out of order | [T12-14] |
   | The web crate calling `choose` instead of `choose_memoised` | [T12-3]'s source check |
   | `shipped.json` naming `third/90` | [T12-10] |
+  | The strongest read from pool ratings while the anchors exist | [T12-10]'s anchored cases |
   | The first worker's module importing `alphazero-bot/web` | [T12-21]'s graph check |
   | The web crate's player building its `SearchConfig` with `endgame_nodes: 0` | [T12-26]'s late-position case, and [T12-27] |
   | `load` passing a fixed cap to the player instead of its argument | [T12-26]'s late-position case |

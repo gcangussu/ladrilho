@@ -75,7 +75,8 @@ WebAssembly by a thin export crate under `packages/alphazero-bot/web` — no pla
 raw `extern "C"` exports rather than `wasm-bindgen`, for the reasons 0012 records. It runs in a
 second worker, so a game without a `master` seat never loads its payload. Two things cost time if
 forgotten. The milestone it ships is named by `web/shipped.json`, and a test holds that to the
-highest pool rating in the log: **committing a milestone that out-rates it fails the suite until
+highest rating in the log — on the anchors' scale once `milestones/anchors.json` exists, the
+pool's before that: **committing a milestone that out-rates it fails the suite until
 `shipped.json` names it** — one edit, in the same commit. And the payload (the module and the
 weights as base64, git-ignored) is built by `pnpm -F alphazero-bot web`, which `ui`'s scripts run
 first; `rust-toolchain.toml` names the `wasm32-unknown-unknown` target for it.
@@ -208,6 +209,11 @@ pnpm -F alphazero-bot latency-corpus           # [Z11-38]: re-record latency/cor
 pnpm -F alphazero-bot augment-fixtures         # [Z11-65]: train/layout.json and the display fixture
 pnpm -F alphazero-bot pool init --members third:90,fourth:50,fourth:70 --games <n>
                                                # [Z11-73]: seed the champions' pool; once, then commit
+pnpm -F alphazero-bot anchors init --members seventh:170,ninth:110,twelfth:120 --pin twelfth:120=856 --games 4000
+                                               # [Z11-84]: the fixed anchors, once, then commit; the pool's
+                                               # scale drifted ([Z11-74]), so new runs use --yardstick anchors
+pnpm -F alphazero-bot anchors add <run>:<g> --games 4000   # a stronger anchor, rated afresh
+pnpm -F alphazero-bot anchors rate <checkpoint>             # a logged milestone on the anchors' scale
 pnpm -F alphazero-bot web                      # [T12-7]: the master's payload, from web/shipped.json
 pnpm -F alphazero-bot web-latency              # [T12-25]: master's moves at the default; idle machine
 pnpm -F alphazero-bot tile play --us 800 --them nnue-ms:1000@8   # master vs danluu.com/game/tile's AI:

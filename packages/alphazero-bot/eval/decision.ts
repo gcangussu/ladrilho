@@ -91,7 +91,22 @@ export interface ManualGateEntry {
   reason: string;
 }
 
-export type LogEntry = MilestoneEntry | OverrideEntry | ManualGateEntry;
+/**
+ * A logged milestone rated against the anchors after the fact, by `anchors
+ * rate` ([Z11-84]). It takes no part in its run's decisions.
+ */
+export interface RatingEntry {
+  kind: 'rating';
+  run: string;
+  date: string;
+  generation: number;
+  anchored: unknown;
+  results: Record<string, unknown>;
+  seconds: number;
+  reason: string;
+}
+
+export type LogEntry = MilestoneEntry | OverrideEntry | ManualGateEntry | RatingEntry;
 
 /**
  * Progress to nine decimals, the grain every comparison of it is made at.
@@ -215,9 +230,15 @@ export function decide(
   return 'continue';
 }
 
-/** A run's entries, in log order. */
-export function entriesOf(log: readonly LogEntry[], run: string): LogEntry[] {
-  return log.filter((e) => e.run === run);
+/**
+ * A run's entries, in log order: its milestones, overrides and manual gates.
+ * A `rating` entry is about a checkpoint, not a run's course, so it is not one.
+ */
+export function entriesOf(
+  log: readonly LogEntry[],
+  run: string,
+): (MilestoneEntry | OverrideEntry | ManualGateEntry)[] {
+  return log.filter((e): e is MilestoneEntry | OverrideEntry | ManualGateEntry => e.run === run && e.kind !== 'rating');
 }
 
 /** Whether a run has ended `done`, by a milestone or a manual gate ([Z11-61]). */

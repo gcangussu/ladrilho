@@ -11,6 +11,9 @@ import { writeAtomic, writeJson } from './files.js';
 import { recordCorpus } from './latency.js';
 import { trainer } from './crate.js';
 import {
+  anchorsAdd,
+  anchorsInit,
+  anchorsRate,
   gateCommand,
   initRun,
   latencyLane,
@@ -69,8 +72,8 @@ async function main(): Promise<void> {
         const gate = option(rest, 'gate');
         if (gate !== undefined && gate !== 'end' && gate !== 'off') throw new Error('--gate takes end or off');
         const yardstick = option(rest, 'yardstick');
-        if (yardstick !== undefined && yardstick !== 'ladder' && yardstick !== 'pool') {
-          throw new Error('--yardstick takes ladder or pool');
+        if (yardstick !== undefined && yardstick !== 'ladder' && yardstick !== 'pool' && yardstick !== 'anchors') {
+          throw new Error('--yardstick takes ladder, pool or anchors');
         }
         return initRun(option(rest, 'run') ?? '', from === undefined ? undefined : parseFrom(from), augment, set, gate, yardstick);
       }
@@ -112,6 +115,30 @@ async function main(): Promise<void> {
       if (!Number.isInteger(simulations) || simulations < 1) throw new Error('--simulations is a whole number');
       return poolInit(members, games, simulations, workers(rest));
     }
+    case 'anchors': {
+      // [Z11-84]: made once, added to by hand, and a logged milestone rated against them.
+      const sub = rest[0];
+      if (sub === 'init') {
+        const members = (option(rest, 'members') ?? '').split(',').filter((m) => m !== '').map(parseFrom);
+        const pinText = option(rest, 'pin') ?? '';
+        const pm = /^([^:=]+):(\d+)=(-?\d+(?:\.\d+)?)$/.exec(pinText);
+        if (pm === null) throw new Error('--pin takes <run>:<generation>=<rating>');
+        const games = Number(option(rest, 'games'));
+        const simulations = Number(option(rest, 'simulations') ?? 200);
+        const perMember = Number(option(rest, 'games-per-member') ?? 800);
+        for (const [k, v] of [['--games', games], ['--simulations', simulations], ['--games-per-member', perMember]] as const) {
+          if (!Number.isInteger(v) || v < 2) throw new Error(`${k} is a whole number of at least 2`);
+        }
+        return anchorsInit(members, { run: pm[1], generation: Number(pm[2]), rating: Number(pm[3]) }, games, simulations, perMember, workers(rest));
+      }
+      if (sub === 'add') {
+        const games = Number(option(rest, 'games'));
+        if (!Number.isInteger(games) || games < 2) throw new Error('--games is a whole number of at least 2');
+        return anchorsAdd(parseFrom(rest[1] ?? ''), games, workers(rest));
+      }
+      if (sub === 'rate') return anchorsRate(resolve(rest[1] ?? ''), workers(rest));
+      throw new Error('usage: anchors init --members <run>:<g>,… --pin <run>:<g>=<rating> --games <n> | anchors add <run>:<g> --games <n> | anchors rate <checkpoint>');
+    }
     case 'stop-simulation':
       process.stdout.write(`${table(Number(option(rest, 'runs') ?? 20000))}\n\n`);
       // The committed pool's own count, so the spec's table is what this prints ([Z11-56]).
@@ -134,9 +161,9 @@ async function main(): Promise<void> {
       return seriesWorker();
     default:
       throw new Error(
-        'usage: train init --run <name> [--from <run>:<generation>] [--augment none|displays] [--set <setting>=<n>]… [--gate end|off] [--yardstick ladder|pool] | train --run <name> [--override "<reason>"] | latency --run <name> | ' +
+        'usage: train init --run <name> [--from <run>:<generation>] [--augment none|displays] [--set <setting>=<n>]… [--gate end|off] [--yardstick ladder|pool|anchors] | train --run <name> [--override "<reason>"] | latency --run <name> | ' +
           'throughput --run <name> | milestone <checkpoint> | panel <checkpoint> [--against <checkpoint>] | gate <checkpoint> | stop-simulation | latency-corpus | ' +
-          'augment-fixtures | pool init --members <run>:<g>,… --games <n>',
+          'augment-fixtures | pool init --members <run>:<g>,… --games <n> | anchors init|add|rate …',
       );
   }
 }

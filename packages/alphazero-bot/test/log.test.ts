@@ -21,26 +21,69 @@ import {
 } from '../eval/decision.js';
 import { settle, verdict } from '../eval/elo.js';
 import { memberName, type PoolRecord } from '../eval/pool.js';
+import {
+  anchorsExist,
+  checkRecord,
+  overlaps,
+  readAnchors,
+  usedSeeds,
+  type AnchoredRecord,
+  type AnchorsFile,
+  type SeedRun,
+} from '../eval/anchors.js';
 import { BUDGET, HALF_BUDGET } from '../eval/latency.js';
 import { readLog } from '../eval/log.js';
 import { GATES, LATENCY, LOG, PACKAGE } from '../eval/paths.js';
 import { gate, milestone, override, results } from './support/entries.js';
 
+type Series = Record<string, { games: number; wins: number; draws: number }>;
+
 /** Every check [Z11-45] asks of a log; throws on the first failure. */
-function replay(log: readonly LogEntry[], gateExists: (path: string) => { passed: boolean } | null): void {
+function replay(
+  log: readonly LogEntry[],
+  gateExists: (path: string) => { passed: boolean } | null,
+  anchors: AnchorsFile | null = null,
+): void {
   const done = new Set<string>();
+  // [Z11-85]: every seed run spoken for so far, the anchors' own pairings first.
+  const seen: SeedRun[] = usedSeeds(anchors, []).slice(0, 1);
+  for (const p of anchors?.pairings ?? []) {
+    const run = { base: p.seedBase, n: p.games };
+    if (seen.some((u) => overlaps(run, u))) throw new Error(`anchors: the seeds from ${p.seedBase} were used before`);
+    seen.push(run);
+  }
+  const anchored = (where: string, record: AnchoredRecord, results: Series): void => {
+    if (anchors === null) throw new Error(`${where}: an anchored record, but no anchors`);
+    try {
+      checkRecord(anchors, record, results, seen);
+    } catch (err) {
+      throw new Error(`${where}: ${(err as Error).message}`);
+    }
+    seen.push({ base: record.seedBase, n: record.gamesPerMember });
+  };
   log.forEach((e, i) => {
     const where = `entry ${i} (${e.kind}, run ${e.run})`;
-    if (!['milestone', 'override', 'manual-gate'].includes(e.kind)) throw new Error(`${where}: unknown kind`);
+    if (!['milestone', 'override', 'manual-gate', 'rating'].includes(e.kind)) throw new Error(`${where}: unknown kind`);
     if (typeof e.run !== 'string' || typeof e.date !== 'string') throw new Error(`${where}: no run or date`);
+    if (e.kind === 'rating') {
+      // [Z11-84]: about a checkpoint, not a run's course; held to its own numbers only.
+      anchored(where, e.anchored as AnchoredRecord, e.results as Series);
+      return;
+    }
     if (done.has(e.run)) throw new Error(`${where}: follows a done`);
     const before = ruleEntries(log.slice(0, i), e.run);
     if (e.kind === 'milestone') {
       const pool = (e as { pool?: PoolRecord }).pool;
+      const anchor = (e as { anchored?: AnchoredRecord }).anchored;
+      const rated = pool ?? anchor;
       const r: MilestoneResults =
-        pool === undefined
+        rated === undefined
           ? { rungs: e.results as LadderResults['rungs'], ladderHash: e.ladderHash }
-          : { rating: pool.rating, ladderHash: e.ladderHash };
+          : { rating: rated.rating, ladderHash: e.ladderHash };
+      if (anchor !== undefined) {
+        if (e.progress !== measureOf(r)) throw new Error(`${where}: progress is not the rating`);
+        anchored(where, anchor, e.results as unknown as Series);
+      }
       if (pool !== undefined) {
         // [Z11-74]: the record's verdict, settling and replacement follow from its own numbers.
         if (e.progress !== measureOf(r)) throw new Error(`${where}: progress is not the rating`);
@@ -88,10 +131,14 @@ function jsonFiles(dir: string): string[] {
 describe('the committed log [Z11-34]', () => {
   it('replays through due and decide, entry by entry [Z11-45]', () => {
     expect(readFileSync(LOG, 'utf8').trim().startsWith('[')).toBe(true);
-    replay(readLog(), (p) => {
-      const f = join(PACKAGE, p);
-      return existsSync(f) ? (JSON.parse(readFileSync(f, 'utf8')) as { passed: boolean }) : null;
-    });
+    replay(
+      readLog(),
+      (p) => {
+        const f = join(PACKAGE, p);
+        return existsSync(f) ? (JSON.parse(readFileSync(f, 'utf8')) as { passed: boolean }) : null;
+      },
+      anchorsExist() ? readAnchors() : null,
+    );
   });
 
   it('catches what the replay exists to catch', () => {

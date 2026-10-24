@@ -35,8 +35,8 @@ import { readJson, sha256File, writeAtomic, writeJson } from './files.js';
 import { findPlaySimulations, machine, meetsHalfBudget, measure, passesBudget, PROBE_SIMULATIONS, type Point } from './latency.js';
 import { withLock } from './lock.js';
 import { appendLog, readLog } from './log.js';
-import { runGate, runMilestone, type Player } from './milestone.js';
-import { CORPUS, LATENCY, RUNS, checkRunName, milestoneCheckpoint, parseMilestonePath, runPaths } from './paths.js';
+import { checkCounts, runGate, runMilestone, type Player } from './milestone.js';
+import { CORPUS, LATENCY, PACKAGE, RUNS, checkRunName, milestoneCheckpoint, parseMilestonePath, runPaths } from './paths.js';
 import { fitPool } from './elo.js';
 import {
   POOL,
@@ -48,6 +48,21 @@ import {
   type PoolSeed,
 } from './pool.js';
 import { provenance } from './provenance.js';
+import { simulationCounts } from './series.js';
+import {
+  ANCHORS,
+  BEYOND,
+  allocateBase,
+  fitAnchors,
+  playAgainst,
+  playAnchored,
+  rateAgainst,
+  readAnchors,
+  usedSeeds,
+  type Anchor,
+  type AnchorPairing,
+  type AnchorsFile,
+} from './anchors.js';
 
 /** A sample record's size ([Z11-27]). */
 const RECORD_BYTES = 1113;
@@ -142,7 +157,7 @@ export function childConfig(
   augment: 'none' | 'displays' | undefined,
   set: Partial<Record<Changeable, number>> = {},
   gate?: GateSetting,
-  yardstick?: 'ladder' | 'pool',
+  yardstick?: 'ladder' | 'pool' | 'anchors',
 ): RunConfig {
   const { from: _grandparent, augment: parentAugment, gate: parentGate, yardstick: parentYardstick, ...inherited } = pc;
   const changes: RunOrigin['changes'] = {};
@@ -178,7 +193,7 @@ export function initRun(
   augment?: 'none' | 'displays',
   set: Partial<Record<Changeable, number>> = {},
   gate?: GateSetting,
-  yardstick?: 'ladder' | 'pool',
+  yardstick?: 'ladder' | 'pool' | 'anchors',
 ): void {
   checkRunName(name);
   const p = runPaths(name);
@@ -375,6 +390,7 @@ export function reasonFor(
   previousImproved: boolean,
   gateSet: GateSetting,
   pool?: string,
+  scale: 'the pool' | 'the anchors' = 'the pool',
 ): string {
   const p = measureOf(results);
   const ladder = 'rungs' in results;
@@ -382,7 +398,7 @@ export function reasonFor(
   const show = ladder ? pct : (x: number): string => x.toFixed(0);
   const parts = ladder
     ? [`progress ${pct(p)} (sharp ${pct(results.rungs.sharp.winrate)})`]
-    : [`rating ${show(p)} against the pool${pool === undefined ? '' : ` (${pool})`}`];
+    : [`rating ${show(p)} against ${scale}${pool === undefined ? '' : ` (${pool})`}`];
   if (fresh !== null) parts.push(`a fresh start: ${fresh}`);
   else if (previous !== null) {
     parts.push(
@@ -392,7 +408,7 @@ export function reasonFor(
             (previousImproved ? ', which had improved' : ', which had not improved either'),
     );
   }
-  if (!ladder) parts.push('the pool has no gate');
+  if (!ladder) parts.push(`${scale === 'the pool' ? 'the pool has' : 'the anchors have'} no gate`);
   else if (gateSet === 'off') parts.push('the gate is off for this run');
   else if (results.rungs.sharp.winrate < GATE_TRIGGER) parts.push(`sharp below ${pct(GATE_TRIGGER)}, so no gate`);
   else if (!gateDue) parts.push(`gate not due: progress has not passed ${pct(lastFailure ?? 0)}, where the last gate failed`);
@@ -534,6 +550,186 @@ async function poolMilestoneStep(
   return entry;
 }
 
+/** Step 5 of [Z11-28] for a run whose yardstick is the anchors ([Z11-85]). */
+async function anchoredMilestoneStep(
+  name: string,
+  generation: number,
+  config: RunConfig,
+  state: RunState,
+  bin: string,
+  workers: number,
+): Promise<MilestoneEntry> {
+  const p = runPaths(name);
+  const started = Date.now();
+  const dest = milestoneCheckpoint(name, generation);
+  mkdirSync(dirname(dest), { recursive: true });
+  writeAtomic(dest.replace(/\.bin$/, '.parity'), readFileSync(p.checkpoint(generation).replace(/\.bin$/, '.parity')));
+  writeAtomic(dest, readFileSync(p.checkpoint(generation)));
+
+  const file = readAnchors();
+  const log = readLog();
+  const side = { binary: bin, config: anchorConfig(join(p.dir, 'anchors-config.json'), config, file.simulations) };
+  const played = await playAnchored(side, dest, `${name}/${generation}`, file, log, workers);
+  const prov = provenance();
+  const results: MilestoneResults = { rating: played.record.rating, ladderHash: prov.ladderHash };
+  const entries = ruleEntries(log, name);
+  const { previous, previousImproved } = context(entries);
+  const fresh = freshStart(entries, results);
+  const decision = decide(entries, results, null);
+  const r = played.record;
+  const note = `±${r.se.toFixed(0)} over ${r.gamesPerMember} games an anchor` +
+    (r.beyond ? `; more than ${BEYOND} above the strongest anchor, so add a stronger one` : '');
+  const entry: MilestoneEntry = {
+    kind: 'milestone',
+    run: name,
+    date: today(),
+    generation,
+    sinceRunStartSeconds: Math.round((Date.now() - Date.parse(state.startedAt)) / 1000),
+    milestoneSeconds: Math.round((Date.now() - started) / 1000),
+    games: generation * config.gamesPerGeneration,
+    samples: sampleCount(name, generation),
+    config,
+    simulations: played.simulations,
+    results: played.results,
+    ladderHash: prov.ladderHash,
+    progress: measureOf(results),
+    previousProgress: previous?.progress ?? null,
+    freshStart: { fresh: fresh !== null, why: fresh },
+    gate: { due: false, ran: false, outcome: null },
+    anchored: r,
+    losses: lossesSince(name, previous?.generation ?? 0, generation),
+    provenance: prov,
+    decision,
+    reason: reasonFor(results, previous, fresh, false, null, null, decision, previousImproved, gateSetting(config), note, 'the anchors'),
+  };
+  appendLog(entry);
+  process.stdout.write(`milestone ${name}/${generation}: ${entry.reason}\n`);
+  return entry;
+}
+
+/** A config at the anchors' count, which both sides of an anchored game read. */
+function anchorConfig(path: string, config: RunConfig, simulations: number): string {
+  writeJson(path, { ...config, milestoneSimulations: simulations });
+  return path;
+}
+
+/** A logged milestone's checkpoint and config, as the anchors' commands read them. */
+function loggedMember(m: { run: string; generation: number }): { checkpoint: string; config: RunConfig } {
+  const checkpoint = `milestones/${m.run}/${m.generation}/checkpoint.bin`;
+  if (!existsSync(milestoneCheckpoint(m.run, m.generation))) throw new Error(`${checkpoint} is not committed`);
+  const entry = readLog().find((e) => e.kind === 'milestone' && e.run === m.run && e.generation === m.generation) as
+    | MilestoneEntry
+    | undefined;
+  if (entry === undefined) throw new Error(`no logged milestone ${memberName(m)}`);
+  return { checkpoint, config: entry.config as RunConfig };
+}
+
+/**
+ * [Z11-84]: the anchors' round robin, `games` a pairing at `simulations`, each
+ * pairing on seeds of its own, the pinned member held at its rating. Writes
+ * `milestones/anchors.json`, to be committed. Refuses when the file exists.
+ */
+export async function anchorsInit(
+  members: { run: string; generation: number }[],
+  pin: { run: string; generation: number; rating: number },
+  games: number,
+  simulations: number,
+  gamesPerMember: number,
+  workers: number,
+): Promise<void> {
+  await withLock('anchors init', async () => {
+    if (existsSync(ANCHORS)) throw new Error('milestones/anchors.json exists: the anchors are made once; `anchors add` adds one');
+    if (members.length < 2) throw new Error('the anchors need at least two members');
+    if (!members.some((m) => memberName(m) === memberName(pin))) throw new Error(`the pin ${memberName(pin)} is not a member`);
+    const loaded = members.map((m) => ({ ...m, ...loggedMember(m) }));
+    const scratch = join(RUNS, 'anchors');
+    mkdirSync(scratch, { recursive: true });
+    const pinned = loggedMember(pin);
+    const side = { binary: buildRelease(), config: anchorConfig(join(scratch, 'config.json'), pinned.config, simulations) };
+    const started = Date.now();
+    const empty: AnchorsFile = { simulations, gamesPerMember, pin, members: [], pairings: [], date: '', seconds: 0 };
+    const pairings: AnchorPairing[] = [];
+    for (let a = 0; a < loaded.length; a++) {
+      for (let b = a + 1; b < loaded.length; b++) {
+        const key = `init:${memberName(loaded[a])}:${memberName(loaded[b])}`;
+        const base = allocateBase(key, games, usedSeeds({ ...empty, pairings }, readLog()));
+        const opponent: Anchor = { ...loaded[b], rating: 0, se: 0, added: 'init' };
+        const [s] = await playAgainst(side, join(PACKAGE, loaded[a].checkpoint), [opponent], [base], games, workers, `anchors ${memberName(loaded[a])}`);
+        checkCounts(simulationCounts(s.games), simulations, 'anchors init');
+        pairings.push({ a: memberName(loaded[a]), b: memberName(loaded[b]), games, score: s.games.reduce((t, g) => t + g.points, 0), seedBase: base });
+      }
+    }
+    const ratings = fitAnchors(members, pairings, pin);
+    const file: AnchorsFile = {
+      simulations,
+      gamesPerMember,
+      pin,
+      members: loaded.map((m, i) => ({ run: m.run, generation: m.generation, checkpoint: m.checkpoint, rating: ratings[i].rating, se: ratings[i].se, added: 'init' })),
+      pairings,
+      date: today(),
+      seconds: Math.round((Date.now() - started) / 1000),
+    };
+    writeJson(ANCHORS, file);
+    process.stdout.write(`anchors made in ${file.seconds} s: ${file.members.map((m) => `${memberName(m)} ${m.rating.toFixed(0)}±${m.se.toFixed(0)}`).join(', ')}\n`);
+  });
+}
+
+/** [Z11-84]: one more anchor, rated against the others' fixed ratings on games of its own. */
+export async function anchorsAdd(member: { run: string; generation: number }, games: number, workers: number): Promise<void> {
+  await withLock('anchors add', async () => {
+    const file = readAnchors();
+    if (file.members.some((m) => memberName(m) === memberName(member))) throw new Error(`${memberName(member)} is already an anchor`);
+    const loaded = loggedMember(member);
+    const scratch = join(RUNS, 'anchors');
+    mkdirSync(scratch, { recursive: true });
+    const side = { binary: buildRelease(), config: anchorConfig(join(scratch, 'config.json'), loggedMember(file.pin).config, file.simulations) };
+    const started = Date.now();
+    const pairings: AnchorPairing[] = [];
+    const bases: number[] = [];
+    for (const m of file.members) {
+      const used = usedSeeds({ ...file, pairings: [...file.pairings, ...pairings] }, readLog());
+      bases.push(allocateBase(`add:${memberName(member)}:${memberName(m)}`, games, used));
+      pairings.push({ a: memberName(member), b: memberName(m), games, score: 0, seedBase: bases[bases.length - 1] });
+    }
+    const series = await playAgainst(side, join(PACKAGE, loaded.checkpoint), file.members, bases, games, workers, `anchors add ${memberName(member)}`);
+    checkCounts(simulationCounts(series.flatMap((s) => s.games)), file.simulations, 'anchors add');
+    series.forEach((s, i) => (pairings[i].score = s.games.reduce((t, g) => t + g.points, 0)));
+    const results = Object.fromEntries(series.map((s) => [memberName(s.anchor), s.result]));
+    const rated = rateAgainst(file, results, bases[0]);
+    file.members.push({ run: member.run, generation: member.generation, checkpoint: loaded.checkpoint, rating: rated.rating, se: rated.se, added: today() });
+    file.pairings.push(...pairings);
+    writeJson(ANCHORS, file);
+    process.stdout.write(`anchor ${memberName(member)} added at ${rated.rating.toFixed(0)}±${rated.se.toFixed(0)} in ${Math.round((Date.now() - started) / 1000)} s\n`);
+  });
+}
+
+/** [Z11-84]: a logged milestone rated against the anchors, appended to the log as a `rating` entry. */
+export async function anchorsRate(checkpoint: string, workers: number): Promise<void> {
+  await withLock('anchors rate', async () => {
+    const { run, generation } = parseMilestonePath(checkpoint);
+    const file = readAnchors();
+    const { config } = loggedMember({ run, generation });
+    const scratch = join(RUNS, 'anchors');
+    mkdirSync(scratch, { recursive: true });
+    const side = { binary: buildRelease(), config: anchorConfig(join(scratch, 'rate-config.json'), config, file.simulations) };
+    const log = readLog();
+    const played = await playAnchored(side, milestoneCheckpoint(run, generation), `rate:${run}/${generation}`, file, log, workers);
+    const r = played.record;
+    appendLog({
+      kind: 'rating',
+      run,
+      date: today(),
+      generation,
+      anchored: r,
+      results: played.results,
+      seconds: played.seconds,
+      reason: `rated ${r.rating.toFixed(0)} ±${r.se.toFixed(0)} against the anchors over ${r.gamesPerMember} games an anchor` +
+        (r.beyond ? `; more than ${BEYOND} above the strongest anchor` : ''),
+    });
+    process.stdout.write(`${run}/${generation}: ${r.rating.toFixed(1)} ±${r.se.toFixed(1)} against the anchors\n`);
+  });
+}
+
 /**
  * [Z11-73]: seeds the pool with a round robin among `members`, `games` a
  * pairing at `simulations`, the first member the anchor at 0 Elo. Writes
@@ -649,7 +845,8 @@ export async function trainLoop(
       const logged = entriesOf(readLog(), name).some((e) => e.kind === 'milestone' && e.generation === next);
       let decision: Decision = 'continue';
       if (next % config.milestoneEvery === 0 && !logged) {
-        const step = config.yardstick === 'pool' ? poolMilestoneStep : milestoneStep;
+        const step =
+          config.yardstick === 'pool' ? poolMilestoneStep : config.yardstick === 'anchors' ? anchoredMilestoneStep : milestoneStep;
         decision = (await step(name, next, config, state, bin, opts.workers)).decision;
       }
       state.generation = next;

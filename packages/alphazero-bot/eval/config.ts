@@ -51,9 +51,10 @@ export interface RunConfig {
   gate?: 'end' | 'off';
   /**
    * [Z11-73]: what a milestone measures against: `ladder` (absent), the
-   * tiers of [Z11-31]; or `pool`, the champions' pool.
+   * tiers of [Z11-31]; `pool`, the champions' pool; or `anchors`, the fixed
+   * anchors of [Z11-84].
    */
-  yardstick?: 'ladder' | 'pool';
+  yardstick?: 'ladder' | 'pool' | 'anchors';
   /**
    * [Z11-75]: playout-cap randomisation. A share `fullSearchFraction` of
    * self-play moves get `selfPlaySimulations` and the noise and become move
