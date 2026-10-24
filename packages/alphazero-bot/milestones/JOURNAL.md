@@ -913,6 +913,45 @@ on or off. Judged by the panel at every milestone first, then the pool; any stop
 at the same evaluations a second (16 000 against 16 800), so the extra is all in the lookahead's
 own searches, which share little with the games' memo. It is well under the 30-minute limit.
 
+## `thirteenth`: lookahead targets taught nothing, and the pool inflates (10-23 to 10-24)
+
+**Stopped at generation 107**, by me, with the user's leave to choose what runs next.
+
+**The final boundary did not move.** On the panel, paired against `twelfth`/120, the boundary
+into round 5 stayed within ±0.0025 at every milestone from 10 to 100 (the bar was −0.006).
+From generation 20, about 1.7% of each window had the lookahead target. Moves in rounds 4 and 5
+read about 0.005 worse throughout, their intervals mostly including zero. So cleaner targets on
+about 3 000 boundaries a generation, for 90 generations, did not teach this network the final
+round.
+
+**Nor did it play better, whatever the pool said.** The pool rated its milestones 855, 839, 855,
+871, 848, 870, 873, 884, 885 and 889, against `twelfth`/120's 856. Direct matches against
+`twelfth`/120 at the pool's 200 simulations, 4 000 games each, seats alternated:
+
+| Milestone | Pool | Head to head (95%) | moving first | moving second |
+| --- | --- | --- | --- | --- |
+| `thirteenth`/40 | 871 | −8 (−19 to +3) | +47 | −64 |
+| `thirteenth`/90 | 885 | −6 (−17 to +5) | +53 | −65 |
+| `thirteenth`/100 | 889 | −2 (−13 to +9) | +66 | −70 |
+
+A move-level comparison agreed: at 200 simulations `thirteenth`/80 chose `twelfth`/120's move in
+91% of 6 000 positions, and where it differed its moves scored no better (−0.003, −0.034 to
++0.029, by 16 replays each).
+
+**The pool's scale ratchets upward.** A milestone is rated against the champions with an error of
+about ±7, joins when it out-rates the weakest, and keeps the rating it was given. A milestone
+rated high by luck enters and stays; one rated low by luck is the one dropped. By milestone 100
+every champion was a `thirteenth` milestone, all rated 873–885, all about level with
+`twelfth`/120. Over ten milestones that is +30. How much of earlier runs' climbs this explains is
+not measured; their direct matches would say. Until the pool is fixed, a run is judged here by
+direct matches against its parent's checkpoint. `master` now ships `thirteenth`/100, as the rule
+on `shipped.json` requires, and it plays level with `twelfth`/120.
+
+**`fourteenth`**, from `twelfth`/120, with one change: `selfPlaySimulations` 2 000 (from 1 000).
+With value and play both at a fixed point at this rate, the remaining generic lever is a stronger
+improvement operator: the search that makes the targets. The throughput lane gives 2.6 minutes of
+self-play a generation. Judged by direct matches against `twelfth`/120 and by the panel.
+
 ## Next
 
 - **The boundary into the final round** is where the value limits play: fixing it is worth up to
