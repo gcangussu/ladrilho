@@ -1,0 +1,60 @@
+{
+  "simulations": 200,
+  "gamesPerMember": 800,
+  "pin": {
+    "run": "twelfth",
+    "generation": 120,
+    "rating": 856
+  },
+  "members": [
+    {
+      "run": "seventh",
+      "generation": 170,
+      "checkpoint": "milestones/seventh/170/checkpoint.bin",
+      "rating": 758.1047154718431,
+      "se": 4.000928505589333,
+      "added": "init"
+    },
+    {
+      "run": "ninth",
+      "generation": 110,
+      "checkpoint": "milestones/ninth/110/checkpoint.bin",
+      "rating": 827.984418942295,
+      "se": 3.929764711589716,
+      "added": "init"
+    },
+    {
+      "run": "twelfth",
+      "generation": 120,
+      "checkpoint": "milestones/twelfth/120/checkpoint.bin",
+      "rating": 856,
+      "se": 0,
+      "added": "init"
+    }
+  ],
+  "pairings": [
+    {
+      "a": "seventh/170",
+      "b": "ninth/110",
+      "games": 4000,
+      "score": 1593,
+      "seedBase": 742561331
+    },
+    {
+      "a": "seventh/170",
+      "b": "twelfth/120",
+      "games": 4000,
+      "score": 1461,
+      "seedBase": 969770504
+    },
+    {
+      "a": "ninth/110",
+      "b": "twelfth/120",
+      "games": 4000,
+      "score": 1829,
+      "seedBase": 1367886527
+    }
+  ],
+  "date": "2026-10-24T16:01:36.712Z",
+  "seconds": 1887
+}

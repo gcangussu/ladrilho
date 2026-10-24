@@ -974,6 +974,56 @@ yardstick of the stop rule and of `shipped.json`, so both inherit the bias. A fi
 [Z11-73]/[Z11-74], for example re-rating champions as games accumulate, or rating against fixed
 anchors.
 
+## The anchors replace the pool (10-24)
+
+**Why.** The pool's scale drifted upward by more than any run gained (above): each milestone met
+only its run's three latest champions, so distant checkpoints were linked only through chains of
+small, noisy margins, and admission kept the high ones. A joint refit of every logged pool game
+did not repair it (`twelfth`/120 still +213 over `seventh`/170, against +105 in a direct match),
+and neither do the pool's fixed seeds (`thirteenth`/100 against `twelfth`/120: +6 on the pool's
+seeds, −2 on fresh ones). The fault is in what was played.
+
+**What ([Z11-84], [Z11-85]).** Three committed milestones with ratings fixed once, by a round robin
+of 4 000 games a pairing at 200 simulations: `seventh`/170 **758 ±4**, `ninth`/110 **828 ±4**,
+`twelfth`/120 pinned at **856** (31 minutes). A milestone plays 800 games against each, on seeds no
+other record used, and is rated against those fixed ratings; nothing is admitted or replaced. A
+`rating` entry rates a logged milestone after the fact without touching its run. `master` is now
+the highest rating on this scale ([0012 T12-10]).
+
+**Checked before use.**
+- *In scratch:* the same three anchors, then four milestones rated against them, each within ±15
+  of its direct match against `twelfth`/120 (gaps +2 to +9).
+- *200 simulations is a fair proxy for the shipped 10 000 (with the proof at 300 000):*
+  `twelfth`/120 − `seventh`/170 +105 at 200, **+89 (+68 to +112)** at 10 000; − `eleventh`/130 +12,
+  **+3 (−12 to +18)**; `fourteenth`/90 − `twelfth`/120 +1, **+8 (−7 to +23)**. No reversal.
+- *How many games:* by bootstrap of games already played, a rating's error is ±10 at 400 games an
+  anchor, ±7 at 800, ±5.8 at 1 200, ±5 at 1 600; the stop rule stops a run climbing 5 Elo a
+  milestone within ten milestones 40%, 25%, 17% and 12% of the time, and one climbing 10 Elo 12%,
+  3%, 1%, 0%. 800 is kept: below it the rule starts stopping improving runs, above it the returns
+  shrink. A flat run is stopped 76% of the time within ten at any count; that is the rule, not the
+  noise. The anchors' own error is ±9 at 1 000 games a pairing, ±6 at 2 000, ±4 at 4 000. Playing
+  each seed from both seats removes only 13% of a game's variance once the seat's edge is out.
+
+**The masters since `twelfth`/120, re-rated** (800 games against each anchor, ±7):
+
+| Milestone | Pool | Anchors |
+| --- | --- | --- |
+| `twelfth`/120 | 856 | 856 (pinned) |
+| `thirteenth`/40 | 871 | 858 |
+| `thirteenth`/70 | 873 | 851 |
+| `thirteenth`/80 | 884 | 850 |
+| `thirteenth`/90 | 885 | 856 |
+| `thirteenth`/100 | 889 | 843 |
+| `fourteenth`/30 | 906 | 863 |
+| `fourteenth`/60 | 914 | **868** |
+| `fourteenth`/70 | 925 | 856 |
+| `fourteenth`/90 | 937 | 865 |
+
+Every one is within two standard errors of `twelfth`/120. `fourteenth`/60 is the highest and ships
+as `master`, as the rule says, but its lead (+12) is about what picking the best of ten equal
+milestones gives by luck (1.5 standard errors, about +11). Neither run is shown to have improved
+on `twelfth`/120; `fourteenth` leans slightly higher (+7 to +12 at 30, 60, 90), within noise.
+
 ## Next
 
 - **The boundary into the final round** is where the value limits play: fixing it is worth up to
