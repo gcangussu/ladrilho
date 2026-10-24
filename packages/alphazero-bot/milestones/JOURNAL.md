@@ -1024,6 +1024,28 @@ as `master`, as the rule says, but its lead (+12) is about what picking the best
 milestones gives by luck (1.5 standard errors, about +11). Neither run is shown to have improved
 on `twelfth`/120; `fourteenth` leans slightly higher (+7 to +12 at 30, 60, 90), within noise.
 
+## `fifteenth`: a five times stronger self-play search (10-24)
+
+**`fourteenth` is set aside at generation 90.** Doubling the full self-play search (1 000 →
+2 000) left the network within noise of `twelfth`/120 on every measure: direct matches at 200,
+2 000 and 10 000 simulations (+1 to +8), the anchors (856 to 868 ±7), and the panel. Its
+yardstick is the pool, fixed at `train init`, so it cannot continue on the anchors.
+
+**The change, decided by the user:** from `twelfth`/120, `selfPlaySimulations` 10 000 and
+`cheapSimulations` 1 000 (from 1 000 and 200), on `--yardstick anchors`. Two settings, taken as
+one change: the self-play search made five times stronger with its cheap-to-full ratio kept near
+a tenth. Three quarters of every game's moves are the cheap search's, so a deep full search
+alone would sharpen policies inside games still played shallowly, and the games' results are
+every value target.
+
+- **Cost:** 3 250 simulations a move on average against 650; the throughput lane gives **8.9
+  minutes** of self-play a generation (3.4× `fourteenth`'s 2.6), well under 30, with the process
+  at about 96 MB.
+- **What would change in the data:** sharper policy targets (a 10 000-visit root is close to one
+  move), and less variety in the first 10 sampled plies; deals still differ by seed.
+- **The question it closes:** if a search five times stronger teaches this network nothing,
+  search strength is not its lever.
+
 ## Next
 
 - **The boundary into the final round** is where the value limits play: fixing it is worth up to
