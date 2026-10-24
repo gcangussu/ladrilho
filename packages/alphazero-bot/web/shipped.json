@@ -1,7 +1,7 @@
 {
   "run": "thirteenth",
-  "generation": 90,
-  "checkpointSha256": "9fe7321815268716b3bdbfa3c7a23900182071ed15346650f743cd5426a6b199",
-  "paritySha256": "9943b488fd9475861b89ac568517ff82affefdd116726e9c3207bde2a255002b",
+  "generation": 100,
+  "checkpointSha256": "a47ddaf381821610622dd336544eb3640362f823708495b3375a92ccd0324986",
+  "paritySha256": "2e1e4b8fa6e81af164f2dd8badfea265662274713743aeac55c8b10e8dc00960",
   "endgameNodes": 300000
 }
