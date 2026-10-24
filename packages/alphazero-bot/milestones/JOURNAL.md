@@ -952,6 +952,28 @@ With value and play both at a fixed point at this rate, the remaining generic le
 improvement operator: the search that makes the targets. The throughput lane gives 2.6 minutes of
 self-play a generation. Judged by direct matches against `twelfth`/120 and by the panel.
 
+## `fourteenth`, and how far the pool's inflation goes back (10-24)
+
+**`fourteenth` (2 000 self-play simulations) has not played better through generation 70.** Direct
+matches against `twelfth`/120, 4 000 games at 200 simulations: −2 at 10, +3 at 30, −10 at 50, +4
+(−7 to +15) at 70; and +3 (−19 to +24) in 1 000 games at 2 000 simulations at 50. The pool rated
+the same milestones 876 to 925. On the panel the boundary into round 5 has leaned −0.002 to −0.004
+since 20, within noise.
+
+**The pool has overstated every margin measured.** `twelfth`/120 against earlier best
+checkpoints, 4 000 games at 200 simulations:
+
+| Opponent | Pool margin | Head to head (95%) |
+| --- | --- | --- |
+| `eleventh`/130 | +44 | +12 (+1 to +22) |
+| `ninth`/110 | +117 | +32 (+21 to +43) |
+| `seventh`/170 | +240 | +105 (+94 to +116) |
+
+The runs did improve, but by about a third to a half of what the pool says. The pool is the
+yardstick of the stop rule and of `shipped.json`, so both inherit the bias. A fix belongs in
+[Z11-73]/[Z11-74], for example re-rating champions as games accumulate, or rating against fixed
+anchors.
+
 ## Next
 
 - **The boundary into the final round** is where the value limits play: fixing it is worth up to
