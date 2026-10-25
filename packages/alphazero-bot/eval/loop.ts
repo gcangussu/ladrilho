@@ -114,6 +114,8 @@ export const CHANGEABLE = [
   'auxWallsWeight',
   'lookaheadDeals',
   'lookaheadAlpha',
+  'improvedCScale',
+  'improvedCVisit',
 ] as const;
 export type Changeable = (typeof CHANGEABLE)[number];
 
@@ -147,6 +149,18 @@ export function checkLookahead(config: Pick<RunConfig, 'lookaheadDeals' | 'looka
 }
 
 /**
+ * [Z11-87]: `improvedCVisit` only beside `improvedCScale`, the scale in (0, 10]
+ * and the visit constant in [0, 10000], as the crate will insist when
+ * self-play first reads them. Refused here, before a run exists.
+ */
+export function checkImproved(config: Pick<RunConfig, 'improvedCScale' | 'improvedCVisit'>): void {
+  const { improvedCScale: scale, improvedCVisit: visit } = config;
+  if (scale === undefined && visit !== undefined) throw new Error('improvedCVisit goes with improvedCScale ([Z11-87])');
+  if (scale !== undefined && !(scale > 0 && scale <= 10)) throw new Error(`improvedCScale must be in (0, 10], not ${scale}`);
+  if (visit !== undefined && !(visit >= 0 && visit <= 10000)) throw new Error(`improvedCVisit must be in [0, 10000], not ${visit}`);
+}
+
+/**
  * [Z11-66]'s config: the parent's, with a fresh seed, its own `augment`, the
  * changes asked for, and `from` recording the parent and what differs from it.
  */
@@ -163,11 +177,13 @@ export function childConfig(
   const changes: RunOrigin['changes'] = {};
   for (const [k, v] of Object.entries(set) as [Changeable, number][]) {
     // An absent aux weight is 0, off ([Z11-67]); so is an absent playout cap
-    // ([Z11-75]), and an absent lookahead ([Z11-81]).
+    // ([Z11-75]), an absent lookahead ([Z11-81]), and an absent improved
+    // target ([Z11-87]).
     const was = inherited[k] ?? 0;
     if (was !== v) changes[k] = { parent: was, run: v };
   }
   checkLookahead({ ...inherited, ...set });
+  checkImproved({ ...inherited, ...set });
   return {
     ...inherited,
     ...set,

@@ -158,8 +158,10 @@ impl Game {
                 return true;
             }
             let Some(search) = self.lane.search.take() else { return false };
+            // [Z11-87]: a full search's target, read before the tree goes.
+            let target = settings.improved.filter(|_| self.full).map(|t| search.improved(&t));
             let (result, _) = search.finish();
-            if !self.play(&result.visits, settings) {
+            if !self.play(&result.visits, target.as_ref(), settings) {
                 return false;
             }
         }
@@ -214,13 +216,20 @@ impl Game {
     }
 
     /// The move sample, the move, and a boundary sample if the move resolved
-    /// a round, with its lookahead started if [Z11-80] looks past it. `false`
-    /// if the move could not be played.
-    fn play(&mut self, root_visits: &[u32; ACTION_SPACE], settings: &Settings) -> bool {
+    /// a round, with its lookahead started if [Z11-80] looks past it. The
+    /// sample's target is `target` when [Z11-87] gives one, the root visits
+    /// otherwise; the move is chosen from the visits either way. `false` if the
+    /// move could not be played.
+    fn play(&mut self, root_visits: &[u32; ACTION_SPACE], target: Option<&[u16; ACTION_SPACE]>, settings: &Settings) -> bool {
         let legal = self.state.legal_actions();
         let mut visits = [0u16; ACTION_SPACE];
-        for (v, &n) in visits.iter_mut().zip(root_visits) {
-            *v = n.min(u32::from(u16::MAX)) as u16;
+        match target {
+            Some(t) => visits = *t,
+            None => {
+                for (v, &n) in visits.iter_mut().zip(root_visits) {
+                    *v = n.min(u32::from(u16::MAX)) as u16;
+                }
+            }
         }
         let seat = self.state.current_player();
         let sample = if self.full {

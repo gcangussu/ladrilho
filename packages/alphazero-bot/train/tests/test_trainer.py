@@ -159,6 +159,33 @@ def test_a_cheap_sample_enters_the_value_term_only():
     assert int((kind == 2).sum()) == len(cheap) > 0
 
 
+def test_an_improved_target_trains_as_its_policy():
+    """[Z11-87]: a move sample whose weights are an improved policy scaled to
+    65 535 and rounded ([Z11-27]) gives the policy loss of the policy itself,
+    within the rounding: the trainer needs no change for it. Mutation, seen
+    red: the target normalised by the legal count instead of its sum."""
+    s = batch(n=40, seed=11)
+    moves = np.flatnonzero(s["kind"] == 0)
+    rng = np.random.default_rng(3)
+    exact = np.zeros((len(s["kind"]), 180))
+    _, legal, _, _, _ = batch_tensors(s)
+    for i in moves:
+        idx = np.flatnonzero(legal[i].numpy())
+        w = np.exp(rng.normal(0, 3, len(idx)))
+        exact[i, idx] = w / w.sum()
+        s["visits"][i] = 0
+        s["visits"][i, idx] = np.round(exact[i, idx] * 65535).astype(np.uint16)
+    obs, legal, visits, result, kind = batch_tensors(s)
+    logits = torch.randn(len(kind), 180)
+    value = torch.tanh(torch.randn(len(kind)))
+    p, _ = losses(logits, value, legal, visits, result, kind, 1.0)
+    m = kind == 0
+    logp = torch.log_softmax(logits[m].masked_fill(~legal[m], float("-inf")), dim=1)
+    pi = torch.from_numpy(exact[m.numpy()]).float()
+    want = -torch.where(legal[m], pi * logp, torch.zeros_like(logp)).sum(dim=1).mean()
+    assert len(moves) > 10 and abs(float(p) - float(want)) < 1e-3 * max(1.0, abs(float(want)))
+
+
 def test_weight_decay_is_applied_once():
     """[Z11-29], [Z11-46]: the optimiser applies weight decay, and the loss
     carries no weight term: one SGD step moves each weight by exactly

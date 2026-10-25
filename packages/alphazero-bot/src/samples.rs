@@ -11,7 +11,8 @@ pub const RECORD_BYTES: usize = 1 + 1 + ENCODED_SIZE * 4 + LEGAL_BYTES + ACTION_
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
-    /// One per ply: the observation, the legal set, the root visits.
+    /// One per ply: the observation, the legal set, the policy target's
+    /// weights: the root visits, or [Z11-87]'s improved policy.
     Move = 0,
     /// One per non-terminal boundary ply: the pre-deal view, value only.
     Boundary = 1,
@@ -28,7 +29,7 @@ pub struct Sample {
     pub observation: [f32; ENCODED_SIZE],
     /// All zero for a boundary sample.
     pub legal: [u8; LEGAL_BYTES],
-    /// All zero for a boundary sample.
+    /// The policy target's weights ([Z11-27]); all zero for a boundary sample.
     pub visits: [u16; ACTION_SPACE],
 }
 

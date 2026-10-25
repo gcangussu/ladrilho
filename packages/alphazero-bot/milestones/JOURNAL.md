@@ -1064,6 +1064,56 @@ teacher moves it. What has not been tried is a larger network trained from scrat
 weeks here, and changing play rather than training (the two-pass search past the final boundary,
 +20 Elo, parked).
 
+## `sixteenth`: the improved policy as the target (10-25)
+
+**Why.** `fifteenth` made the root visits a sharper target by searching five times longer, and
+the network learned nothing more. The visits are still the same kind of target, though: an
+action the search tried and rejected keeps the visits it cost to reject. Gumbel search
+(Danihelka et al., ICLR 2022) trains on a different kind, the improved policy
+`softmax(ln p + σ(completedQ))` ([Z11-86]), which weights each action by its value. The full
+Gumbel method also changes the search, the noise and the move played. `sixteenth` changes only
+the target: the search, the noise and the moves stay `twelfth`'s, byte for byte ([Z11-87]'s
+test). It is the smallest test of whether a different target teaches what more of the same did
+not. The plan, reviewed with Linus over three rounds, puts full Gumbel self-play (run G) after
+it, behind offline soundness checks. If `sixteenth` ends level, a short from-scratch pair, PUCT
+against Gumbel, comes next, since the paper's gains are in learning from scratch.
+
+**What it is.** `twelfth`/120 + `--set improvedCScale=0.1` (mctx's `value_scale`; `c_visit` 50).
+Self-play stays at `twelfth`'s 1 000 full and 200 cheap simulations, a quarter of moves full:
+not `fourteenth`'s 2 000, because the reference is `twelfth`/120 and the one change is the
+target. The
+implementation is held to mctx's own numbers by a recorded fixture, `test/fixtures/improved.json`.
+
+**Before launch, on 470 latency-corpus positions at 1 000 simulations with root noise:**
+
+| `improvedCScale` | target mass on actions with fewer than 4 visits (median, p90) | target entropy (median) | agrees with the most-visited action |
+| --- | --- | --- | --- |
+| 0.1 | 0.000, 0.009 | 0.078 | 92% |
+| 0.05 | 0.001, 0.018 | 0.299 | 89% |
+| 0.02 | 0.005, 0.035 | 0.682 | 83% |
+
+The visits' entropy is 0.725 (median). The rule written before the check was to lower the scale
+if more than 25% of the mass sat on thinly visited actions. It does not, so the run takes mctx's
+0.1. The target is therefore nearly one-hot: it puts 0.987 (median) on the most-visited action
+when that is its argmax, and in 8% of positions it picks another action, the best by value. That
+is sharper than anything trained on so far, and the risk to watch: a sharper prior narrows what
+PUCT explores at milestones' 200 simulations and in self-play.
+
+**Watched beside the anchors.** A near one-hot target can collapse the policy, so every
+milestone also records two entropies: the mean target entropy of its generation's move samples
+(`twelfth`'s generation 119: 0.858; `fifteenth`'s 79: 0.633), and the checkpoint's policy
+entropy on 4 000 fixed positions from `twelfth`'s generation 119 (`twelfth`/120: 1.400;
+`fifteenth`/80: 1.442). A collapse shows there long before the stop rule sees it.
+
+**Reviewed.** Linus reviewed the code before launch. His first pass found that no test could
+catch the target reading Q from the wrong seat. That is the seat trap again, so a test now holds
+the target's visits and Q to what the search backed up, on roots whose boundary children keep
+the seat and on roots whose children change it.
+
+**How it is read.** Anchors, 800 games each. The window holds `twelfth`'s generations 101 to 119
+of visit targets, so the first 19 generations train on a mix. Decided now: any stop the rule
+calls before generation 40 is overridden through the log, citing this entry.
+
 ## Next
 
 - **The boundary into the final round** is where the value limits play: fixing it is worth up to

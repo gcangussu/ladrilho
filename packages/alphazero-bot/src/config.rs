@@ -3,6 +3,7 @@
 
 use serde::Deserialize;
 
+use crate::improved::Transform;
 use crate::search::{SearchConfig, SelfPlayNoise};
 
 /// What the crate reads from `config.json`. The file holds more — the
@@ -33,7 +34,13 @@ pub struct RunConfig {
     /// [Z11-81]: the lookahead past boundaries into round 5 or later, or
     /// `None` for none.
     pub lookahead: Option<Lookahead>,
+    /// [Z11-87]: a full search's policy target is the improved policy
+    /// ([Z11-86]) under this transform, or `None` for its root visits.
+    pub improved: Option<Transform>,
 }
+
+/// [Z11-87]'s default `improvedCVisit`, mctx's.
+pub const DEFAULT_IMPROVED_C_VISIT: f64 = 50.0;
 
 /// [Z11-81]: how many deals a boundary's lookahead searches ([Z11-80]), and
 /// the share of its value in the training target ([Z11-82]), which only the
@@ -84,6 +91,10 @@ struct Raw {
     lookahead_deals: Option<u64>,
     #[serde(default)]
     lookahead_alpha: Option<f64>,
+    #[serde(default)]
+    improved_c_scale: Option<f64>,
+    #[serde(default)]
+    improved_c_visit: Option<f64>,
 }
 
 fn whole(key: &str, n: u64, min: u64, max: u64) -> Result<u32, String> {
@@ -149,6 +160,22 @@ impl RunConfig {
                 return Err("config: \"lookaheadDeals\" and \"lookaheadAlpha\" go together ([Z11-81])".into());
             }
         };
+        let improved = match (r.improved_c_scale, r.improved_c_visit) {
+            (None, None) => None,
+            (Some(c_scale), c_visit) => {
+                if !(c_scale > 0.0 && c_scale <= 10.0) {
+                    return Err("config: \"improvedCScale\" must be in (0, 10]".into());
+                }
+                let c_visit = c_visit.unwrap_or(DEFAULT_IMPROVED_C_VISIT);
+                if !(0.0..=10_000.0).contains(&c_visit) {
+                    return Err("config: \"improvedCVisit\" must be in [0, 10000]".into());
+                }
+                Some(Transform { c_visit, c_scale })
+            }
+            (None, Some(_)) => {
+                return Err("config: \"improvedCVisit\" goes with \"improvedCScale\" ([Z11-87])".into());
+            }
+        };
         Ok(RunConfig {
             width: whole("width", r.width, 1, u64::from(crate::network::MAX_WIDTH))?,
             blocks: whole("blocks", r.blocks, 0, 64)?,
@@ -174,6 +201,7 @@ impl RunConfig {
                 Some(n) => whole("playEndgameNodes", n, 0, MAX_ENDGAME_NODES)?,
             },
             lookahead,
+            improved,
         })
     }
 }
@@ -204,6 +232,8 @@ pub struct Settings {
     pub playout_cap: Option<PlayoutCap>,
     /// Self-play only: the deals each lookahead searches ([Z11-80]).
     pub lookahead_deals: Option<u32>,
+    /// Self-play only: the improved policy as a full search's target ([Z11-87]).
+    pub improved: Option<Transform>,
 }
 
 /// The only place in the crate that reads search settings ([Z11-60]).
@@ -240,5 +270,6 @@ pub fn settings(config: &RunConfig, kind: SearchKind) -> Result<Settings, String
         threads: config.threads,
         playout_cap: if kind == SearchKind::SelfPlay { config.playout_cap } else { None },
         lookahead_deals: if kind == SearchKind::SelfPlay { config.lookahead.map(|l| l.deals) } else { None },
+        improved: if kind == SearchKind::SelfPlay { config.improved } else { None },
     })
 }

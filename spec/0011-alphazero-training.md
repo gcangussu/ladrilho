@@ -683,7 +683,7 @@ The binary's commands, each loading one checkpoint and one run's settings:
   | result | i8 | `+1`, `0`, `-1` |
   | observation | 182 × f32 | the observation or the pre-deal view |
   | legal | 23 bytes | a 180-bit mask, action `a` at bit `a % 8` of byte `a / 8`; all zero for a boundary or cheap sample |
-  | visits | 180 × u16 | root visits; all zero for a boundary or cheap sample |
+  | visits | 180 × u16 | the policy target's weights, which the trainer normalises: the root visits, or under [Z11-87] the improved policy times 65 535, rounded, summing to 65 535 within one per legal action; zero off the legal set; all zero for a boundary or cheap sample |
 
   Beside it, `selfplay` MUST write the sample file's **aux file** of [Z11-67], and, while a run
   sets [Z11-81]'s keys, its **lookahead file** of [Z11-80].
@@ -878,6 +878,47 @@ The binary's commands, each loading one checkpoint and one run's settings:
   not teach it; this asks whether the target present through a whole run does. `L` is the
   checkpoint's own search, so at α = 0.9 the target is mostly bootstrapped: the value can drift
   where nothing checks it but a panel against the measured win probability.*
+
+- **[Z11-86]** The library MUST compute the **improved policy** of Danihelka et al. at a node,
+  `softmax(ln p + σ(completedQ))` over its legal set, as mctx's `qtransform_completed_by_mix_value`
+  and `gumbel_muzero_policy` compute `action_weights`:
+  - `p` is the network's clean prior, before any noise, floored at the smallest positive `f64`.
+  - A visited action's Q is its backed-up total over its visits, from the node's seat to move
+    ([Z11-17]).
+  - An unvisited action's Q is the mixed value
+    `v_mix = (v + S · Σ_visited p·Q / Σ_visited p) / (1 + S)`, where `v` is the node's own network
+    value and `S` its children's visits.
+  - The completed values are rescaled to [0, 1] by their minimum and maximum with `v_mix` always
+    among them, since mctx completes the illegal actions too and Azul's space always has one, the
+    range floored at `1e-8`.
+  - `σ(q) = (c_visit + max N) · c_scale · q`.
+
+  The library MUST also provide mctx's interior pick, `argmax π(a) − N(a) / (1 + ΣN)`, ties to the
+  lowest action. `test/fixtures/improved.json` holds both to mctx's own numbers. It is recorded
+  by `tools/improved_fixture.py` from mctx `428bfb7e`, a deliberate act like [Z11-38]'s corpus, and
+  nothing of mctx is in the crate.
+
+  *A root's visits are not an improved policy at any finite budget: an action the search tried and
+  rejected keeps the visits it cost. The improved policy weights each legal action by its value
+  instead, and improves on the prior wherever Q is right.*
+
+- **[Z11-87]** A run's config MAY set `improvedCScale`, in (0, 10], and with it `improvedCVisit`,
+  in [0, 10 000], 50 when absent. While they are set, a full search's move sample ([Z11-75]) MUST
+  carry the improved policy of [Z11-86] at its root under those constants, as [Z11-27]'s weights,
+  in place of its root visits. Nothing else changes:
+  - the search;
+  - the noise;
+  - the move played, still chosen from the root visits as [Z11-20] says;
+  - every other byte of every sample.
+
+  The crate MUST refuse `improvedCVisit` without `improvedCScale`, or either out of range. Only
+  `selfplay` reads them, so `play`, milestones and `latency` never see them. `train init --from …
+  --set` MUST accept them ([Z11-66]) and apply the same refusals: run `sixteenth` is
+  `--set improvedCScale=…`. The trainer does not change: its loss normalises the weights.
+
+  *Run `fifteenth` made the visits a sharper target by searching five times longer, and the
+  network learned nothing more from it. This asks whether a different kind of target teaches what
+  more of the same did not.*
 
 - **[Z11-30]** Everything a run writes MUST live under `packages/alphazero-bot/runs/<name>/`, which
   is git-ignored, except the files of [Z11-34], [Z11-35] and [Z11-40], which are written where
@@ -1431,6 +1472,7 @@ not required: [Z11-25] makes the file the record, and a later run MAY change any
 | `selfPlaySimulations` | 200 | |
 | `cheapSimulations`, `fullSearchFraction` | absent, meaning off | [Z11-75] |
 | `lookaheadDeals`, `lookaheadAlpha` | absent, meaning off | [Z11-81]; run `thirteenth` sets 8 and 0.9 |
+| `improvedCScale`, `improvedCVisit` | absent, meaning the visits are the target | [Z11-87]; mctx's are 0.1 and 50 |
 | `milestoneSimulations` | 800 | [Z11-59]; lowered to `playSimulations` if that is smaller |
 | `cpuct`, `fpu` | 1.25, 0.25 | |
 | `alpha`, `epsilon` | 0.3, 0.25 | |
@@ -1655,6 +1697,14 @@ this package, and MUST be corrected in the same change.
 | An anchored record's seeds not checked against earlier ones | [Z11-85]'s refusal of used seeds |
 | `beyond` measured from the weakest anchor | [Z11-85]'s flag case |
 | `rating` entries kept among a run's entries | [Z11-84]'s case that a rating leaves its run's course alone |
+| The rescale's range over the legal values without `v_mix`; its floor raised to 1; `c_scale` read as 1; the mixed value's network term negated | [Z11-86]'s case against mctx's numbers |
+| `1 + ΣN` as `ΣN` in the interior pick | [Z11-86]'s interior case against mctx's sequence |
+| The target built from the noised priors | [Z11-86]'s clean-prior case |
+| The improved target never written into the sample; the visits written rescaled in its place | [Z11-87]'s case that only the target changes |
+| The target's Q read from the child's own value; its visits from the child's `visits` | [Z11-86]'s case that the target reads the search as it backed up |
+| The improved keys reaching `play`, milestones or `latency` | [Z11-87]'s settings case |
+| The refusal of the improved keys dropped from `train init` | [Z11-87]'s `--set` case |
+| The target normalised by the legal count instead of its sum | [Z11-87]'s trainer case |
 
 - **[Z11-49]** Every requirement in this document MUST be either cited by at least one test — Rust,
   TypeScript or Python — by identifier, or listed with a reason in *Traceability exemptions*,
@@ -1708,3 +1758,6 @@ this package, and MUST be corrected in the same change.
 - Spec [0010 — Engines cross-checked](0010-engines-cross-checked.md) — the canonical block and framing `play` reads
 - Silver et al., *A general reinforcement learning algorithm that masters chess, shogi, and Go
   through self-play*, Science 362 (2018) — the method
+- Danihelka, Guez, Schrittwieser and Silver, *Policy improvement by planning with Gumbel*, ICLR
+  2022, and its authors' library mctx (github.com/google-deepmind/mctx, `428bfb7e`) — the improved
+  policy of [Z11-86]

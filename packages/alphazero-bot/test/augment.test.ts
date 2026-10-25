@@ -122,4 +122,22 @@ describe('a run started from another [Z11-66]', () => {
       expect(() => childConfig(parent, origin, 42, undefined, bad)).toThrow(/lookahead/);
     }
   });
+
+  /**
+   * [Z11-87]: run `sixteenth` is `--set improvedCScale=0.1`, recorded as one
+   * change from an absent 0; the visit constant alone, or either out of range,
+   * is refused before a run exists. Mutation, seen red: the check dropped
+   * from `childConfig`.
+   */
+  it('takes the improved target keys, the scale first', () => {
+    expect(parseSet('improvedCScale=0.1')).toEqual(['improvedCScale', 0.1]);
+    const c = childConfig(parent, origin, 42, undefined, { improvedCScale: 0.1 });
+    expect(c.improvedCScale).toBe(0.1);
+    expect('improvedCVisit' in c).toBe(false);
+    expect(c.from?.changes).toEqual({ improvedCScale: { parent: 0, run: 0.1 } });
+    expect(childConfig(parent, origin, 42, undefined, { improvedCScale: 0.1, improvedCVisit: 20 }).improvedCVisit).toBe(20);
+    for (const bad of [{ improvedCVisit: 50 }, { improvedCScale: 11 }, { improvedCScale: 0.1, improvedCVisit: 20000 }]) {
+      expect(() => childConfig(parent, origin, 42, undefined, bad)).toThrow(/improved/);
+    }
+  });
 });

@@ -72,6 +72,15 @@ export interface RunConfig {
    */
   lookaheadDeals?: number;
   lookaheadAlpha?: number;
+  /**
+   * [Z11-87]: a full search's move sample takes the improved policy of
+   * [Z11-86] as its target instead of the root visits, under the
+   * completed-Q transform `improvedCScale` and `improvedCVisit` (absent is
+   * 50). Absent is off: the target is the visits. The search and the move
+   * played do not change.
+   */
+  improvedCScale?: number;
+  improvedCVisit?: number;
   /** [Z11-66]: the run and generation this run's checkpoint 0 was taken from. */
   from?: RunOrigin;
 }

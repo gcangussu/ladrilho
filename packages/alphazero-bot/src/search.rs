@@ -12,6 +12,7 @@
 
 use azul_engine::{ACTION_SPACE, Action, ActionList, AzulState, ENCODED_SIZE, Outcome, Player, Shuffler};
 
+use crate::improved::{Transform, improved_policy, weights};
 use crate::network::{Evaluation, Evaluator, Request};
 use crate::rng::Rng;
 use crate::view::{accounts_for, is_boundary, pre_deal_view};
@@ -38,6 +39,16 @@ pub struct SearchResult {
     pub action: Action,
     pub visits: [u32; ACTION_SPACE],
     /// The mean value backed up to the root, from the root's seat to move.
+    pub value: f32,
+}
+
+/// The root's legal actions and what [Z11-86] reads of each (`Search::root_statistics`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct RootStatistics {
+    pub actions: Vec<Action>,
+    pub priors: Vec<f32>,
+    pub visits: Vec<u32>,
+    pub q: Vec<f64>,
     pub value: f32,
 }
 
@@ -217,6 +228,9 @@ pub struct Search<S: Shuffler> {
     pending: Option<Pending<S>>,
     /// `ε` and the root's Dirichlet draw, mixed in once the root is expanded.
     noise: Option<(f64, Vec<f64>)>,
+    /// The root's priors as the network gave them, before any noise: what the
+    /// improved policy is built from ([Z11-86]), which must not learn the noise.
+    root_priors: Vec<f32>,
 }
 
 impl<S: Shuffler> Search<S> {
@@ -249,6 +263,7 @@ impl<S: Shuffler> Search<S> {
             remaining: config.simulations,
             pending,
             noise,
+            root_priors: Vec::new(),
         })
     }
 
@@ -279,6 +294,8 @@ impl<S: Shuffler> Search<S> {
         match p.wait {
             Wait::Root => {
                 self.push_expanded(p.state.current_player(), p.legal.as_ref(), eval);
+                let (_, priors, _) = self.edges.of(self.nodes[0].edges_start, usize::from(self.nodes[0].edges_len));
+                self.root_priors = priors.to_vec();
                 if let Some((eps, dir)) = self.noise.take() {
                     for (i, d) in self.nodes[0].edges().zip(dir) {
                         let prior = self.edges.prior_mut(i);
@@ -445,6 +462,45 @@ impl<S: Shuffler> Search<S> {
         if self.pending.is_some() {
             self.remaining = self.remaining.min(1);
         }
+    }
+
+    /// What the improved policy at the root is built from ([Z11-86]): per legal
+    /// action, in the root's order, the action, its clean prior (the network's,
+    /// before any noise), its visits, and its backed-up value from the root's
+    /// seat (0 where unvisited); and the root's own network value.
+    pub fn root_statistics(&self) -> RootStatistics {
+        let root = &self.nodes[0];
+        let (actions, _, children) = self.edges.of(root.edges_start, usize::from(root.edges_len));
+        let mut visits = Vec::with_capacity(actions.len());
+        let mut q = Vec::with_capacity(actions.len());
+        for &child in children {
+            match child {
+                NONE => {
+                    visits.push(0);
+                    q.push(0.0);
+                }
+                c => {
+                    let c = &self.nodes[c as usize];
+                    visits.push(c.taken);
+                    q.push(c.total / f64::from(c.taken));
+                }
+            }
+        }
+        RootStatistics { actions: actions.to_vec(), priors: self.root_priors.clone(), visits, q, value: root.value }
+    }
+
+    /// [Z11-86]: the improved policy at the root, as a sample's weights over
+    /// the action space ([Z11-27]), zero off the legal set. Read once `wants`
+    /// is `None`.
+    pub fn improved(&self, t: &Transform) -> [u16; ACTION_SPACE] {
+        debug_assert!(self.pending.is_none() && self.remaining == 0, "a search read before it finished");
+        let r = self.root_statistics();
+        let policy = improved_policy(&r.priors, &r.visits, &r.q, r.value, t);
+        let mut out = [0u16; ACTION_SPACE];
+        for (&a, w) in r.actions.iter().zip(weights(&policy)) {
+            out[usize::from(a)] = w;
+        }
+        out
     }
 
     /// The root's visits and backed-up value, and the tree's shape. Read once
