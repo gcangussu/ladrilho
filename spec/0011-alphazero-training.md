@@ -421,7 +421,8 @@ network value `V` from when it was expanded.
   ```
 
   with `Q(a)` of an unvisited action taken as `V − fpu`, where `V` is the node's own network value.
-  The greatest `u` wins strictly, so ties go to the lowest action index.
+  The greatest `u` wins strictly, so ties go to the lowest action index. A Gumbel search
+  ([Z11-88]) selects by its own rule instead, and reads neither `cpuct` nor `fpu`.
 - **[Z11-17]** Backup MUST follow `current_player`, never ply parity: a value is negated between a
   node and its parent exactly when their seats to move differ. A boundary ply can leave the same
   seat to move, which is [0004 B4-18]'s trap.
@@ -439,7 +440,9 @@ network value `V` from when it was expanded.
   sampling MUST draw from a generator of the crate's own, and never from the state's shuffler,
   which [0001 E1-47] reserves for shuffles. The two MUST be seeded apart: the shuffler from the
   triple of [Z11-26], the crate's generator from the same triple mixed with a fixed constant, so
-  the noise can never be the bag order read another way. The game MUST NOT resign.
+  the noise can never be the bag order read another way. The game MUST NOT resign. Under
+  [Z11-89] there is neither noise nor sampling: the Gumbel draw takes their place in that
+  generator, and the move is the search's.
 - **[Z11-21]** Two states that differ only in the order of their bag and in their shuffler's seed
   MUST get identical root visits and value from a search in play mode.
 
@@ -569,12 +572,19 @@ The binary's commands, each loading one checkpoint and one run's settings:
 
 - **[Z11-78]** The library MUST let a caller stop a search after any whole simulation, at least
   one, without reading a clock itself (`Search::stop`, `Search::supply_until` for a caller driving
-  the search by hand, `search_until`, and `memo::search_memoised_until`, which `serve` runs). A search stopped after `k` simulations MUST
+  the search by hand, `search_until`, and `memo::search_memoised_until`, which `serve` runs). A PUCT search stopped after `k` simulations MUST
   return the action, visits and value that a search configured for `k` returns, bit for bit, and
   the endgame proof follows it as it follows any search. *Nothing in selection, expansion or
   backup reads how many simulations remain, so the claim holds by construction; the suite holds it
   at several `k` on latency-corpus positions, and holds `serve --clock-ms 0` to one simulation and
   `play`'s move at `playSimulations: 1`.*
+
+  A Gumbel search ([Z11-88]) MUST ignore a stop and run its whole budget: `stop` answers `false`
+  and changes nothing, and `supply_until` never asks its `stop`. Its halving is planned for the
+  budget it was given, so a stopped one would not be the search configured for `k`. (`stop`
+  answers `true` for a PUCT search.) `search_until` and `search_memoised_until` build PUCT searches
+  only, and every command but `selfplay` is PUCT ([Z11-89]), so no clock-driven caller reaches one.
+
 - **[Z11-79]** `play --split-ms` and `serve --split-ms` MUST answer each position in five words:
   [Z11-23]'s first three, then the search's milliseconds and the endgame proof's, each read by the
   command around its own part. Both MUST still answer exactly as `choose` and `choose_memoised`
@@ -920,6 +930,49 @@ The binary's commands, each loading one checkpoint and one run's settings:
   network learned nothing more from it. This asks whether a different kind of target teaches what
   more of the same did not.*
 
+- **[Z11-88]** The library MUST provide a **Gumbel search** (`Search::gumbel`), the search of
+  Danihelka et al. as mctx's `gumbel_muzero_policy` runs it, on the tree, the pauses and the backup
+  of [Z11-14] to [Z11-18]:
+  - **The draw.** At creation it draws, from the generator it is handed, one `g(a) = −ln(−ln U)`
+    per legal root action, `U` uniform on the open interval (0, 1), times `scale`. The draw is
+    taken whatever the scale. There is no noise.
+  - **The root.** Once the root is expanded, `m` is the smaller of `considered` and the legal
+    count, and the table is mctx's `get_sequence_of_considered_visits(m, n)` for the search's `n`
+    simulations. The simulation numbered `k`, the root's visits so far, goes to the action
+    maximising `g + logit + σ(completedQ)` among those whose visits equal the table's `k`th entry,
+    as mctx's `score_considered` scores it. `logit` is the floored log prior of [Z11-86], shifted
+    by its maximum, and the sum is floored at −10⁹. Ties go to the lowest action index.
+  - **Below the root.** Every expanded node takes [Z11-86]'s interior pick on its own improved
+    policy.
+  - **The move.** The best-scoring of the most-visited root actions.
+  - **The target.** [Z11-86]'s improved policy at the root.
+
+  `test/fixtures/gumbel.json`, recorded by `tools/improved_fixture.py … gumbel` from mctx
+  `428bfb7e`, holds two references: the table for every `m` to 64, and whole searches of a root
+  whose actions have fixed values, ending in mctx's visits, action and improved policy.
+
+  *Sequential halving gives the budget to the actions the search will choose between. At small
+  budgets the draw makes the move a sample of the improved policy without replacement; at large
+  ones σ grows with the visits (about 100 at 2 000 simulations) and the move is all but fixed by
+  Q, so how much a Gumbel game explores is measured, not assumed. The paper's gains are largest at
+  small budgets.*
+
+- **[Z11-89]** A run's config MAY set `gumbelConsidered`, a whole number in 2..=64, and with it
+  `gumbelScale`, in [0, 10], 1 when absent. While they are set, every self-play search, full and
+  cheap ([Z11-75]), MUST be a Gumbel search ([Z11-88]):
+  - its draw comes from the game's generator of [Z11-20];
+  - its transform is [Z11-87]'s keys, or mctx's 50 and 0.1 when they are absent;
+  - the move played is the search's own;
+  - every full search's move sample carries the improved policy as its target.
+
+  `alpha`, `epsilon`, `tempPlies` and `tau` stay in the config, unread. The crate MUST refuse:
+  - `gumbelScale` without `gumbelConsidered`;
+  - either key out of its range;
+  - either key together with [Z11-81]'s lookahead, whose deals are PUCT searches.
+
+  Only `selfplay` reads them, so `play`, milestones and `latency` stay PUCT. `train init --from …
+  --set` MUST accept them, with the same refusals.
+
 - **[Z11-30]** Everything a run writes MUST live under `packages/alphazero-bot/runs/<name>/`, which
   is git-ignored, except the files of [Z11-34], [Z11-35] and [Z11-40], which are written where
   those requirements say, to be committed. Every file the loop or the crate writes MUST be written to a
@@ -1199,7 +1252,8 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
   be searched with `selfPlaySimulations` and the noise and written as a move sample; otherwise
   with `cheapSimulations` and no noise, and written as a **cheap** sample, kind `2` of [Z11-27]:
   the observation, the result and its aux record ([Z11-67]), with neither legal mask nor visits.
-  Either way the move MUST be chosen from the root visits as [Z11-20] says. The trainer MUST give
+  Either way the move MUST be chosen from the root visits as [Z11-20] says, or under [Z11-89] be
+  the Gumbel search's own, its cheap searches Gumbel searches too. The trainer MUST give
   a cheap sample the value loss at weight 1 and no policy loss. The crate MUST refuse a config
   that sets one of the two without the other, a `cheapSimulations` outside
   1..=`selfPlaySimulations`, and a `fullSearchFraction` outside (0, 1].
@@ -1473,6 +1527,7 @@ not required: [Z11-25] makes the file the record, and a later run MAY change any
 | `cheapSimulations`, `fullSearchFraction` | absent, meaning off | [Z11-75] |
 | `lookaheadDeals`, `lookaheadAlpha` | absent, meaning off | [Z11-81]; run `thirteenth` sets 8 and 0.9 |
 | `improvedCScale`, `improvedCVisit` | absent, meaning the visits are the target | [Z11-87]; mctx's are 0.1 and 50 |
+| `gumbelConsidered`, `gumbelScale` | absent, meaning PUCT | [Z11-89]; mctx's considered count is 16 |
 | `milestoneSimulations` | 800 | [Z11-59]; lowered to `playSimulations` if that is smaller |
 | `cpuct`, `fpu` | 1.25, 0.25 | |
 | `alpha`, `epsilon` | 0.3, 0.25 | |
@@ -1703,6 +1758,16 @@ this package, and MUST be corrected in the same change.
 | The improved target never written into the sample; the visits written rescaled in its place | [Z11-87]'s case that only the target changes |
 | The target's Q read from the child's own value; its visits from the child's `visits` | [Z11-86]'s case that the target reads the search as it backed up |
 | The improved keys reaching `play`, milestones or `latency` | [Z11-87]'s settings case |
+| The halving table's `log2` rounded down | [Z11-88]'s table case against mctx |
+| An action considered when its visits are at most the table's | [Z11-88]'s root case against mctx's searches |
+| The table built for `considered` actions however few are legal; the move left as the most visited | [Z11-88]'s case that a search follows the table |
+| The interior left to PUCT; the draw taken without its scale | [Z11-88]'s interior and scale case |
+| `stop` honoured by a Gumbel search; a firing `stop` asked by one | [Z11-78]'s case that a Gumbel search ignores a stop |
+| The interior reading the root's priors; its node value negated; its children's Q read from their own values | [Z11-88]'s interior case on a finished tree |
+| The root's pick made without the draw | [Z11-88]'s case that a search follows the table |
+| A Gumbel game's move taken from the visits; its target left as the visits | [Z11-89]'s self-play case |
+| The Gumbel keys reaching `play`, milestones or `latency`; a Gumbel run with a lookahead | [Z11-89]'s settings case |
+| The refusal of the Gumbel keys dropped from `train init` | [Z11-89]'s `--set` case |
 | The refusal of the improved keys dropped from `train init` | [Z11-87]'s `--set` case |
 | The target normalised by the legal count instead of its sum | [Z11-87]'s trainer case |
 
@@ -1760,4 +1825,4 @@ this package, and MUST be corrected in the same change.
   through self-play*, Science 362 (2018) — the method
 - Danihelka, Guez, Schrittwieser and Silver, *Policy improvement by planning with Gumbel*, ICLR
   2022, and its authors' library mctx (github.com/google-deepmind/mctx, `428bfb7e`) — the improved
-  policy of [Z11-86]
+  policy of [Z11-86] and the Gumbel search of [Z11-88]

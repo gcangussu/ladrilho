@@ -1114,6 +1114,48 @@ the seat and on roots whose children change it.
 of visit targets, so the first 19 generations train on a mix. Decided now: any stop the rule
 calls before generation 40 is overridden through the log, citing this entry.
 
+## Gumbel self-play built, not yet run (10-25)
+
+**What.** The full method of Danihelka et al. behind `--set gumbelConsidered=16` ([Z11-88],
+[Z11-89]):
+- sequential halving at the root over the actions the Gumbel draw ranks first;
+- mctx's deterministic pick below the root;
+- the search's own move;
+- the improved policy as every full search's target.
+
+Every self-play search, cheap ones included, is a Gumbel search; nothing else is.
+`test/fixtures/gumbel.json` holds it to mctx's own numbers: the halving table for every `m` to
+64, and whole searches of a fixed-value root, matched on visits, move and policy in all 36 cases.
+
+**Reviewed.** Linus reviewed it over two rounds.
+
+- **The binary under the run.** The first round found that my builds in the main checkout had
+  replaced the binary the `sixteenth` loop spawns each generation. The loop was stopped, and
+  generations 11 to 19 were re-run with `6164cef`'s binary: all byte-identical. The G binary also
+  reproduces generation 20. G now lives in a worktree, and no release build happens in the main
+  checkout during a run.
+- **Two untested seams.** The round also found two seams no test held: the root ignoring the
+  draw, and the interior's wiring to the tree. Both are tested now, each seen red under its
+  mutation.
+
+**Cost: the throughput gate, missed and amended on record.** The plan set E3's gate as a
+generation taking at most 1.15× PUCT's time. On an idle machine at 1 000/200 simulations, a
+Gumbel generation takes 1.58× (234 s against 148 s), after selection was made allocation-free
+(it was 2.0×). The cost per network call is 1.09×. The rest is calls: Gumbel makes 1.42× as many
+(1.571M against 1.109M over 256 games, both about 3.9 a batch), yet without the memo it makes
+fewer than PUCT. The difference is reuse. PUCT spends most of a search under the move it plays,
+and the next move's search finds that subtree in the memo; Gumbel spreads its budget over 16
+actions. The gate was meant to catch slow code. It now reads "per call, at most 1.15×", and the
+whole generation's 1.58× is information. Runs compare at equal simulations, not equal time:
+`fifteenth` showed more search per move buys PUCT nothing, so the extra time does not flatter G.
+Any later budget cut is costed in measured wall time.
+
+**Still to do before a Gumbel run:**
+- the Phase 1 soundness matches (Gumbel against PUCT at equal simulations, with a positive
+  control at 16 and 64);
+- the fixed-deal exploration check (E4);
+- for the from-scratch pair, `train init` must accept `--set` without `--from`.
+
 ## Next
 
 - **The boundary into the final round** is where the value limits play: fixing it is worth up to

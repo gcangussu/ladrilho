@@ -12,7 +12,10 @@
 
 use azul_engine::{ACTION_SPACE, Action, ActionList, AzulState, ENCODED_SIZE, Outcome, Player, Shuffler};
 
-use crate::improved::{Transform, improved_policy, weights};
+use crate::improved::{
+    Transform, completed_q, completed_q_into, considered_pick, considered_visits, improved_policy, improved_policy_into,
+    interior_pick, weights,
+};
 use crate::network::{Evaluation, Evaluator, Request};
 use crate::rng::Rng;
 use crate::view::{accounts_for, is_boundary, pre_deal_view};
@@ -25,6 +28,24 @@ pub struct SearchConfig {
     /// [Z11-76]: the endgame proof's node cap, applied by `choose` after the
     /// search; 0 is off. The search itself never reads it.
     pub endgame_nodes: u32,
+}
+
+/// [Z11-88]: a Gumbel search's settings: how many root actions sequential
+/// halving starts from, the scale of the Gumbel draw (1 in self-play; 0 is
+/// deterministic), and the completed-Q transform of [Z11-86].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GumbelConfig {
+    pub considered: u32,
+    pub scale: f64,
+    pub transform: Transform,
+}
+
+/// What a Gumbel search keeps of its root: the draw, one per legal action in
+/// the root's order, and the halving table, set once the root is expanded.
+struct GumbelRoot {
+    config: GumbelConfig,
+    gumbel: Vec<f64>,
+    table: Vec<u32>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -231,6 +252,17 @@ pub struct Search<S: Shuffler> {
     /// The root's priors as the network gave them, before any noise: what the
     /// improved policy is built from ([Z11-86]), which must not learn the noise.
     root_priors: Vec<f32>,
+    /// [Z11-88]: set for a Gumbel search, which selects by it instead of PUCT.
+    gumbel: Option<GumbelRoot>,
+    /// A Gumbel step's working space, reused so a step allocates nothing.
+    scratch: std::cell::RefCell<Scratch>,
+}
+
+#[derive(Default)]
+struct Scratch {
+    visits: Vec<u32>,
+    q: Vec<f64>,
+    values: Vec<f64>,
 }
 
 impl<S: Shuffler> Search<S> {
@@ -264,7 +296,30 @@ impl<S: Shuffler> Search<S> {
             pending,
             noise,
             root_priors: Vec::new(),
+            gumbel: None,
+            scratch: Default::default(),
         })
+    }
+
+    /// [Z11-88]: a Gumbel search of `root`, paused on the root's expansion.
+    /// `None` for a terminal root. The draw is the first thing it takes from
+    /// `rng`, one `U` per legal action on the open interval (0, 1), and is
+    /// taken whatever the scale, so the generator's order does not depend on
+    /// it. No noise: the draw is the exploration.
+    pub fn gumbel(root: &AzulState<S>, config: &SearchConfig, gumbel: &GumbelConfig, rng: &mut Rng) -> Option<Self> {
+        let mut search = Self::new(root, config, None)?;
+        let n = root.legal_actions().len();
+        let draw = (0..n)
+            .map(|_| {
+                let mut u = rng.uniform();
+                while u <= 0.0 {
+                    u = rng.uniform();
+                }
+                gumbel.scale * -(-u.ln()).ln()
+            })
+            .collect();
+        search.gumbel = Some(GumbelRoot { config: *gumbel, gumbel: draw, table: Vec::new() });
+        Some(search)
     }
 
     fn expansion(wait: Wait, state: AzulState<S>) -> Pending<S> {
@@ -290,12 +345,20 @@ impl<S: Shuffler> Search<S> {
     /// already valued never reach the network, so without this a search
     /// could run to its ceiling without its caller being asked.
     pub fn supply_until(&mut self, eval: &Evaluation, stop: &mut dyn FnMut() -> bool) {
+        // [Z11-78]: a Gumbel search's halving is planned for its whole budget,
+        // so it is never stopped: it asks no one.
+        let gumbel = self.gumbel.is_some();
+        let stop = &mut || !gumbel && stop();
         let Some(p) = self.pending.take() else { return };
         match p.wait {
             Wait::Root => {
                 self.push_expanded(p.state.current_player(), p.legal.as_ref(), eval);
                 let (_, priors, _) = self.edges.of(self.nodes[0].edges_start, usize::from(self.nodes[0].edges_len));
                 self.root_priors = priors.to_vec();
+                if let Some(g) = self.gumbel.as_mut() {
+                    let m = (g.config.considered as usize).min(self.root_priors.len());
+                    g.table = considered_visits(m, self.config.simulations as usize);
+                }
                 if let Some((eps, dir)) = self.noise.take() {
                     for (i, d) in self.nodes[0].edges().zip(dir) {
                         let prior = self.edges.prior_mut(i);
@@ -354,6 +417,9 @@ impl<S: Shuffler> Search<S> {
     /// an unvisited action's `Q` taken as `V − fpu`. Strictly greatest, so ties
     /// go to the lowest action.
     fn select(&self, node: u32) -> usize {
+        if let Some(g) = &self.gumbel {
+            return self.select_gumbel(g, node);
+        }
         let n = &self.nodes[node as usize];
         let sqrt_total = f64::from(n.visits).sqrt();
         let cpuct = f64::from(self.config.cpuct);
@@ -375,6 +441,67 @@ impl<S: Shuffler> Search<S> {
                 chosen = i;
             }
         }
+        n.edges_start + chosen
+    }
+
+    /// Each edge of `node`'s visits and backed-up value from its seat, 0 where
+    /// unvisited.
+    fn child_statistics(&self, node: u32) -> (Vec<u32>, Vec<f64>) {
+        let (mut visits, mut q) = (Vec::new(), Vec::new());
+        self.child_statistics_into(node, &mut visits, &mut q);
+        (visits, q)
+    }
+
+    /// `child_statistics` into vectors it clears first.
+    fn child_statistics_into(&self, node: u32, visits: &mut Vec<u32>, q: &mut Vec<f64>) {
+        let n = &self.nodes[node as usize];
+        let (_, _, children) = self.edges.of(n.edges_start, usize::from(n.edges_len));
+        visits.clear();
+        q.clear();
+        for &c in children {
+            match c {
+                NONE => {
+                    visits.push(0);
+                    q.push(0.0);
+                }
+                c => {
+                    let c = &self.nodes[c as usize];
+                    visits.push(c.taken);
+                    q.push(c.total / f64::from(c.taken));
+                }
+            }
+        }
+    }
+
+    /// [Z11-88]: at the root, the simulation numbered by the root's visits
+    /// goes to the best-scoring action of those with the visits the halving
+    /// table names; below it, mctx's deterministic interior pick on the node's
+    /// own improved policy.
+    fn select_gumbel(&self, g: &GumbelRoot, node: u32) -> usize {
+        let n = &self.nodes[node as usize];
+        let mut scratch = self.scratch.borrow_mut();
+        let Scratch { visits, q, values } = &mut *scratch;
+        self.child_statistics_into(node, visits, q);
+        let (visits, q) = (&visits[..], &q[..]);
+        let (_, priors, _) = self.edges.of(n.edges_start, usize::from(n.edges_len));
+        let t = &g.config.transform;
+        let chosen = if node == 0 {
+            completed_q_into(&self.root_priors, visits, q, n.value, t, values);
+            let completed = &values[..];
+            let k = n.visits as usize;
+            // Each simulation adds one root visit, so k is always inside the
+            // table. Each halving phase leaves enough actions at the count it
+            // names, so the fallback is never taken; were it, a debug build
+            // says so, and a release one, which may not panic ([Z11-22]),
+            // takes the best by value.
+            let pick = considered_pick(g.table[k], &g.gumbel, &self.root_priors, completed, visits);
+            debug_assert!(pick.is_some(), "no root action has the visits the halving table names");
+            pick.or_else(|| (0..visits.len()).max_by(|&a, &b| completed[a].total_cmp(&completed[b]).then(b.cmp(&a))))
+                .unwrap_or(0)
+        } else {
+            improved_policy_into(priors, visits, q, n.value, t, values);
+            interior_pick(values, visits)
+        };
         n.edges_start + chosen
     }
 
@@ -458,10 +585,16 @@ impl<S: Shuffler> Search<S> {
     /// finishes as one configured for the simulations it has run would: none
     /// of its choices depend on how many remain, so the result is that
     /// search's, bit for bit. Reads no clock; the caller decides when.
-    pub fn stop(&mut self) {
+    /// A Gumbel search ignores it: its halving is planned for its whole
+    /// budget, so it runs on, and this answers `false`; `true` for a PUCT search.
+    pub fn stop(&mut self) -> bool {
+        if self.gumbel.is_some() {
+            return false;
+        }
         if self.pending.is_some() {
             self.remaining = self.remaining.min(1);
         }
+        true
     }
 
     /// What the improved policy at the root is built from ([Z11-86]): per legal
@@ -487,6 +620,12 @@ impl<S: Shuffler> Search<S> {
             }
         }
         RootStatistics { actions: actions.to_vec(), priors: self.root_priors.clone(), visits, q, value: root.value }
+    }
+
+    /// [Z11-88]: a Gumbel search's draw, one per legal action in the root's
+    /// order; `None` for PUCT.
+    pub fn gumbel_draw(&self) -> Option<&[f64]> {
+        self.gumbel.as_ref().map(|g| &g.gumbel[..])
     }
 
     /// [Z11-86]: the improved policy at the root, as a sample's weights over
@@ -528,6 +667,15 @@ impl<S: Shuffler> Search<S> {
             }
         }
         let value = if count == 0 { root.value } else { (total / f64::from(count)) as f32 };
+        // [Z11-88]: a Gumbel search plays the best-scoring of its most-visited
+        // actions.
+        if let Some(g) = &self.gumbel {
+            let (v, q) = self.child_statistics(0);
+            let completed = completed_q(&self.root_priors, &v, &q, root.value, &g.config.transform);
+            if let Some(i) = considered_pick(most, &g.gumbel, &self.root_priors, &completed, &v) {
+                action = actions[i];
+            }
+        }
         (SearchResult { action, visits, value }, self.stats)
     }
 }
@@ -578,4 +726,60 @@ pub fn search_until<S: Shuffler, E: Evaluator>(
 pub fn choose<S: Shuffler, E: Evaluator>(net: &E, root: &AzulState<S>, config: &SearchConfig) -> Option<SearchResult> {
     let (r, _) = search(net, root, config, None)?;
     Some(crate::endgame::refine(root, r, config.endgame_nodes).0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::DEFAULT_TRANSFORM;
+    use crate::network::Network;
+    use azul_engine::Seeded;
+
+    /// [Z11-88]: every expanded node below the root of a finished Gumbel
+    /// search picks mctx's interior action on its own improved policy, its
+    /// statistics read here straight from the tree: its edges' priors, each
+    /// child's `taken` and `total / taken`, and its own network value.
+    ///
+    /// Mutations, seen red ([Z11-48]): the interior reading the root's priors;
+    /// `n.value` negated; `child_statistics` reading the child's own value.
+    #[test]
+    fn the_interior_picks_on_its_own_statistics() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test/fixtures");
+        let net = Network::load(&std::fs::read(dir.join("checkpoint.bin")).unwrap(), &std::fs::read(dir.join("checkpoint.parity")).unwrap()).unwrap();
+        let g = GumbelConfig { considered: 16, scale: 1.0, transform: DEFAULT_TRANSFORM };
+        let config = SearchConfig { simulations: 300, cpuct: 1.25, fpu: 0.25, endgame_nodes: 0 };
+        let mut checked = 0;
+        for seed in 0..6 {
+            let state = AzulState::<Seeded>::seeded(seed);
+            let mut rng = Rng::new(seed);
+            let mut search = Search::gumbel(&state, &config, &g, &mut rng).unwrap();
+            let mut e = Evaluation::default();
+            while let Some((o, l)) = search.wants() {
+                net.evaluate(o, l, &mut e);
+                search.supply(&e);
+            }
+            for node in 1..search.nodes.len() as u32 {
+                let n = &search.nodes[node as usize];
+                if n.kind != Kind::Expanded || n.visits == 0 {
+                    continue;
+                }
+                let (_, priors, children) = search.edges.of(n.edges_start, usize::from(n.edges_len));
+                let (mut visits, mut q) = (Vec::new(), Vec::new());
+                for &c in children {
+                    if c == NONE {
+                        visits.push(0);
+                        q.push(0.0);
+                    } else {
+                        let c = &search.nodes[c as usize];
+                        visits.push(c.taken);
+                        q.push(c.total / f64::from(c.taken));
+                    }
+                }
+                let want = interior_pick(&improved_policy(priors, &visits, &q, n.value, &DEFAULT_TRANSFORM), &visits);
+                assert_eq!(search.select(node), n.edges_start + want, "seed {seed} node {node}");
+                checked += 1;
+            }
+        }
+        assert!(checked > 100, "{checked} interior nodes");
+    }
 }

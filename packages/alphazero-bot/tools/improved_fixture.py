@@ -7,6 +7,7 @@ a throwaway environment, never the trainer's:
         jax==0.4.38 jaxlib==0.4.38 chex 'numpy<2'
     git clone https://github.com/google-deepmind/mctx /tmp/mctx   # 428bfb7e
     /tmp/mctxenv/bin/python tools/improved_fixture.py /tmp/mctx > test/fixtures/improved.json
+    /tmp/mctxenv/bin/python tools/improved_fixture.py /tmp/mctx gumbel > test/fixtures/gumbel.json
 
 Nothing of mctx is copied into the crate: the crate is held to these numbers.
 
@@ -21,6 +22,15 @@ Two kinds of case:
   improved policy `gumbel_muzero_policy` writes as `action_weights`.
 - `interior`: a frozen policy and the sequence of actions mctx's
   `_prepare_argmax_input` + argmax picks from zero visits, one visit added each step.
+
+With `gumbel`, the fixture of [Z11-88]:
+
+- `table`: `get_sequence_of_considered_visits(m, n)` for every `m` in 1..=64 and a
+  spread of `n` to 1 000, and at 2 000 for three `m`.
+- `bandit`: `gumbel_muzero_policy` run on a root whose every action leads to a
+  reward `q(a)` with discount 0, so each root action's Q is `q(a)` however deep the
+  search goes below it. The root's priors, value, the Gumbel draw mctx made, and
+  what it ended with: the visits, the action and `action_weights`.
 """
 
 import json
@@ -35,7 +45,7 @@ import jax  # noqa: E402
 jax.config.update("jax_enable_x64", True)
 
 import jax.numpy as jnp  # noqa: E402
-from mctx._src import action_selection, qtransforms, tree as tree_lib  # noqa: E402
+from mctx._src import action_selection, base, policies, qtransforms, seq_halving, tree as tree_lib  # noqa: E402
 
 A = 180
 
@@ -120,6 +130,62 @@ def interior(rng, n, steps):
     return {"policy": pi.tolist(), "chosen": chosen}
 
 
+def bandit(rng, legal_n, n, m, scale):
+    legal = np.zeros(A, dtype=bool)
+    legal[np.sort(rng.choice(A, legal_n, replace=False))] = True
+    w = np.exp(rng.normal(0, 1.5, legal_n))
+    prior = np.zeros(A)
+    prior[legal] = (w / w.sum()).astype(np.float32)
+    q = np.zeros(A)
+    q[legal] = rng.uniform(-1, 1, legal_n)
+    value = float(np.float32(rng.uniform(-1, 1)))
+    logits = np.where(legal, np.log(np.maximum(prior, np.finfo(np.float64).tiny)), np.finfo(np.float64).min)
+    qs = jnp.array(q)
+
+    def recurrent(params, key, action, embedding):
+        del params, key
+        at_root = embedding < 0
+        reward = jnp.where(at_root, qs[action], 0.0)
+        out = base.RecurrentFnOutput(
+            reward=reward, discount=jnp.zeros_like(reward),
+            prior_logits=jnp.zeros((action.shape[0], A)), value=jnp.zeros_like(reward))
+        return out, jnp.where(at_root, action, embedding)
+
+    key = jax.random.PRNGKey(int(rng.integers(1 << 30)))
+    root = base.RootFnOutput(prior_logits=jnp.array(logits)[None], value=jnp.array([value]),
+                             embedding=jnp.array([-1]))
+    out = policies.gumbel_muzero_policy(
+        params=(), rng_key=key, root=root, recurrent_fn=recurrent, num_simulations=n,
+        invalid_actions=jnp.array(~legal)[None], max_num_considered_actions=m, gumbel_scale=scale)
+    # The draw gumbel_muzero_policy made: the same split, the same shape.
+    _, gkey = jax.random.split(key)
+    g = scale * np.asarray(jax.random.gumbel(gkey, shape=(1, A), dtype=jnp.float64))[0]
+    visits = np.asarray(out.search_tree.summary().visit_counts)[0]
+    idx = np.flatnonzero(legal)
+    return {
+        "simulations": n, "considered": m, "scale": scale,
+        "actions": idx.tolist(), "prior": prior[idx].tolist(), "q": q[idx].tolist(), "value": value,
+        "gumbel": g[idx].tolist(), "visits": visits[idx].astype(int).tolist(),
+        "action": int(out.action[0]), "policy": np.asarray(out.action_weights)[0][idx].tolist(),
+    }
+
+
+def gumbel():
+    rng = np.random.default_rng(88)
+    table = [{"considered": m, "simulations": n, "visits": list(seq_halving.get_sequence_of_considered_visits(m, n))}
+             for m in range(1, 65) for n in (1, 2, 7, 16, 64, 200, 1000)]
+    table += [{"considered": m, "simulations": 2000, "visits": list(seq_halving.get_sequence_of_considered_visits(m, 2000))}
+              for m in (2, 16, 32)]
+    cases = []
+    for legal_n, n, m, scale in [(1, 8, 16, 1.0), (2, 2, 16, 1.0), (5, 3, 16, 1.0), (20, 16, 16, 1.0), (20, 64, 16, 1.0),
+                                 (40, 200, 16, 1.0), (40, 200, 32, 1.0), (12, 200, 16, 1.0), (60, 1000, 16, 1.0),
+                                 (30, 100, 4, 1.0), (30, 100, 16, 0.0), (8, 50, 16, 0.0)]:
+        for _ in range(3):
+            cases.append(bandit(rng, legal_n, n, m, scale))
+    json.dump({"source": "mctx 428bfb7e1c931715cd3d74f9c65e9991afd86df8", "table": table, "bandit": cases}, sys.stdout)
+    sys.stdout.write("\n")
+
+
 def main():
     rng = np.random.default_rng(86)
     cases = []
@@ -133,4 +199,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    gumbel() if sys.argv[2:] == ["gumbel"] else main()

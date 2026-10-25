@@ -4,7 +4,7 @@
 use serde::Deserialize;
 
 use crate::improved::Transform;
-use crate::search::{SearchConfig, SelfPlayNoise};
+use crate::search::{GumbelConfig, SearchConfig, SelfPlayNoise};
 
 /// What the crate reads from `config.json`. The file holds more — the
 /// trainer's settings, the loop's — which the crate ignores.
@@ -37,7 +37,13 @@ pub struct RunConfig {
     /// [Z11-87]: a full search's policy target is the improved policy
     /// ([Z11-86]) under this transform, or `None` for its root visits.
     pub improved: Option<Transform>,
+    /// [Z11-89]: self-play searches by Gumbel ([Z11-88]) instead of PUCT, or
+    /// `None` for PUCT.
+    pub gumbel: Option<GumbelConfig>,
 }
+
+/// [Z11-89]'s transform when `improvedCScale` is absent: mctx's.
+pub const DEFAULT_TRANSFORM: Transform = Transform { c_visit: 50.0, c_scale: 0.1 };
 
 /// [Z11-87]'s default `improvedCVisit`, mctx's.
 pub const DEFAULT_IMPROVED_C_VISIT: f64 = 50.0;
@@ -95,6 +101,10 @@ struct Raw {
     improved_c_scale: Option<f64>,
     #[serde(default)]
     improved_c_visit: Option<f64>,
+    #[serde(default)]
+    gumbel_considered: Option<u64>,
+    #[serde(default)]
+    gumbel_scale: Option<f64>,
 }
 
 fn whole(key: &str, n: u64, min: u64, max: u64) -> Result<u32, String> {
@@ -176,6 +186,24 @@ impl RunConfig {
                 return Err("config: \"improvedCVisit\" goes with \"improvedCScale\" ([Z11-87])".into());
             }
         };
+        let gumbel = match (r.gumbel_considered, r.gumbel_scale) {
+            (None, None) => None,
+            (Some(m), scale) => {
+                let scale = scale.unwrap_or(1.0);
+                if !(0.0..=10.0).contains(&scale) {
+                    return Err("config: \"gumbelScale\" must be in [0, 10]".into());
+                }
+                if lookahead.is_some() {
+                    return Err("config: a Gumbel search has no lookahead ([Z11-89])".into());
+                }
+                Some(GumbelConfig {
+                    considered: whole("gumbelConsidered", m, 2, 64)?,
+                    scale,
+                    transform: improved.unwrap_or(DEFAULT_TRANSFORM),
+                })
+            }
+            (None, Some(_)) => return Err("config: \"gumbelScale\" goes with \"gumbelConsidered\" ([Z11-89])".into()),
+        };
         Ok(RunConfig {
             width: whole("width", r.width, 1, u64::from(crate::network::MAX_WIDTH))?,
             blocks: whole("blocks", r.blocks, 0, 64)?,
@@ -202,6 +230,7 @@ impl RunConfig {
             },
             lookahead,
             improved,
+            gumbel,
         })
     }
 }
@@ -234,6 +263,8 @@ pub struct Settings {
     pub lookahead_deals: Option<u32>,
     /// Self-play only: the improved policy as a full search's target ([Z11-87]).
     pub improved: Option<Transform>,
+    /// Self-play only: search by Gumbel ([Z11-89]).
+    pub gumbel: Option<GumbelConfig>,
 }
 
 /// The only place in the crate that reads search settings ([Z11-60]).
@@ -271,5 +302,6 @@ pub fn settings(config: &RunConfig, kind: SearchKind) -> Result<Settings, String
         playout_cap: if kind == SearchKind::SelfPlay { config.playout_cap } else { None },
         lookahead_deals: if kind == SearchKind::SelfPlay { config.lookahead.map(|l| l.deals) } else { None },
         improved: if kind == SearchKind::SelfPlay { config.improved } else { None },
+        gumbel: if kind == SearchKind::SelfPlay { config.gumbel } else { None },
     })
 }

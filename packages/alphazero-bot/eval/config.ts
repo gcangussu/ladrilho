@@ -81,6 +81,15 @@ export interface RunConfig {
    */
   improvedCScale?: number;
   improvedCVisit?: number;
+  /**
+   * [Z11-89]: self-play searches by Gumbel ([Z11-88]): sequential halving
+   * from `gumbelConsidered` root actions, a Gumbel draw of scale `gumbelScale`
+   * (absent is 1), its own move, and the improved policy as every full
+   * search's target, under the improved keys' transform or mctx's. Absent is
+   * PUCT. `alpha`, `epsilon`, `tempPlies` and `tau` stay in the config, unread.
+   */
+  gumbelConsidered?: number;
+  gumbelScale?: number;
   /** [Z11-66]: the run and generation this run's checkpoint 0 was taken from. */
   from?: RunOrigin;
 }

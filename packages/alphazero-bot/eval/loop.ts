@@ -116,6 +116,8 @@ export const CHANGEABLE = [
   'lookaheadAlpha',
   'improvedCScale',
   'improvedCVisit',
+  'gumbelConsidered',
+  'gumbelScale',
 ] as const;
 export type Changeable = (typeof CHANGEABLE)[number];
 
@@ -161,6 +163,22 @@ export function checkImproved(config: Pick<RunConfig, 'improvedCScale' | 'improv
 }
 
 /**
+ * [Z11-89]: `gumbelScale` only beside `gumbelConsidered`, a whole number in
+ * 2..=64, the scale in [0, 10], and never with a lookahead, as the crate
+ * will insist when self-play first reads them. Refused here, before a run exists.
+ */
+export function checkGumbel(
+  config: Pick<RunConfig, 'gumbelConsidered' | 'gumbelScale' | 'lookaheadDeals'>,
+): void {
+  const { gumbelConsidered: m, gumbelScale: scale, lookaheadDeals } = config;
+  if (m === undefined && scale !== undefined) throw new Error('gumbelScale goes with gumbelConsidered ([Z11-89])');
+  if (m === undefined) return;
+  if (!(Number.isInteger(m) && m >= 2 && m <= 64)) throw new Error(`gumbelConsidered must be a whole number in 2..=64, not ${m}`);
+  if (scale !== undefined && !(scale >= 0 && scale <= 10)) throw new Error(`gumbelScale must be in [0, 10], not ${scale}`);
+  if (lookaheadDeals !== undefined) throw new Error('a Gumbel search has no lookahead ([Z11-89])');
+}
+
+/**
  * [Z11-66]'s config: the parent's, with a fresh seed, its own `augment`, the
  * changes asked for, and `from` recording the parent and what differs from it.
  */
@@ -177,13 +195,14 @@ export function childConfig(
   const changes: RunOrigin['changes'] = {};
   for (const [k, v] of Object.entries(set) as [Changeable, number][]) {
     // An absent aux weight is 0, off ([Z11-67]); so is an absent playout cap
-    // ([Z11-75]), an absent lookahead ([Z11-81]), and an absent improved
-    // target ([Z11-87]).
+    // ([Z11-75]), an absent lookahead ([Z11-81]), an absent improved target
+    // ([Z11-87]), and an absent Gumbel search ([Z11-89]).
     const was = inherited[k] ?? 0;
     if (was !== v) changes[k] = { parent: was, run: v };
   }
   checkLookahead({ ...inherited, ...set });
   checkImproved({ ...inherited, ...set });
+  checkGumbel({ ...inherited, ...set });
   return {
     ...inherited,
     ...set,

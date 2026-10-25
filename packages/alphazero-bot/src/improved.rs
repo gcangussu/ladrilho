@@ -37,6 +37,14 @@ fn floor(p: f64) -> f64 {
 /// illegal action, so `v_mix` is always inside that range, which is what the
 /// rescale here does over the legal set alone.
 pub fn completed_q(prior: &[f32], visits: &[u32], q: &[f64], value: f32, t: &Transform) -> Vec<f64> {
+    let mut out = Vec::with_capacity(prior.len());
+    completed_q_into(prior, visits, q, value, t, &mut out);
+    out
+}
+
+/// `completed_q` into `out`, which it clears first: the same numbers, without
+/// an allocation once `out` has grown, for a search that asks once a step.
+pub fn completed_q_into(prior: &[f32], visits: &[u32], q: &[f64], value: f32, t: &Transform, out: &mut Vec<f64>) {
     debug_assert!(prior.len() == visits.len() && prior.len() == q.len());
     debug_assert!(prior.len() < azul_engine::ACTION_SPACE, "a legal set the size of the space");
     let total: f64 = visits.iter().map(|&n| f64::from(n)).sum();
@@ -53,23 +61,40 @@ pub fn completed_q(prior: &[f32], visits: &[u32], q: &[f64], value: f32, t: &Tra
         }
     }
     let mixed = (f64::from(value) + total * weighted) / (total + 1.0);
-    let completed: Vec<f64> = visits.iter().zip(q).map(|(&n, &q)| if n > 0 { q } else { mixed }).collect();
-    let (lo, hi) = completed.iter().fold((mixed, mixed), |(lo, hi), &c| (lo.min(c), hi.max(c)));
+    out.clear();
+    out.extend(visits.iter().zip(q).map(|(&n, &q)| if n > 0 { q } else { mixed }));
+    let (lo, hi) = out.iter().fold((mixed, mixed), |(lo, hi), &c| (lo.min(c), hi.max(c)));
     let range = (hi - lo).max(1e-8);
     let most = visits.iter().copied().max().unwrap_or(0);
     let scale = (t.c_visit + f64::from(most)) * t.c_scale;
-    completed.iter().map(|&c| (c - lo) / range * scale).collect()
+    for c in out.iter_mut() {
+        *c = (*c - lo) / range * scale;
+    }
 }
 
 /// The improved policy over the legal set, in its order: `softmax(ln p +
 /// σ(completedQ))`. No Gumbel draw is in it.
 pub fn improved_policy(prior: &[f32], visits: &[u32], q: &[f64], value: f32, t: &Transform) -> Vec<f64> {
-    let completed = completed_q(prior, visits, q, value, t);
-    let z: Vec<f64> = prior.iter().zip(&completed).map(|(&p, &c)| floor(f64::from(p)).ln() + c).collect();
-    let top = z.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-    let e: Vec<f64> = z.iter().map(|&z| (z - top).exp()).collect();
-    let sum: f64 = e.iter().sum();
-    e.iter().map(|&e| e / sum).collect()
+    let mut out = Vec::with_capacity(prior.len());
+    improved_policy_into(prior, visits, q, value, t, &mut out);
+    out
+}
+
+/// `improved_policy` into `out`, which it clears first, step for step the
+/// same arithmetic.
+pub fn improved_policy_into(prior: &[f32], visits: &[u32], q: &[f64], value: f32, t: &Transform, out: &mut Vec<f64>) {
+    completed_q_into(prior, visits, q, value, t, out);
+    for (z, &p) in out.iter_mut().zip(prior) {
+        *z += floor(f64::from(p)).ln();
+    }
+    let top = out.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    for z in out.iter_mut() {
+        *z = (*z - top).exp();
+    }
+    let sum: f64 = out.iter().sum();
+    for e in out.iter_mut() {
+        *e /= sum;
+    }
 }
 
 /// mctx's interior selection: the action maximising `π(a) − N(a) / (1 + ΣN)`,
@@ -94,4 +119,54 @@ pub fn interior_pick(policy: &[f64], visits: &[u32]) -> usize {
 /// take one per legal action.
 pub fn weights(policy: &[f64]) -> impl Iterator<Item = u16> + '_ {
     policy.iter().map(|&p| (p * f64::from(u16::MAX)).round().clamp(0.0, f64::from(u16::MAX)) as u16)
+}
+
+/// [Z11-88]: mctx's `get_sequence_of_considered_visits(m, n)`: for each of a
+/// root's `n` simulations, the visit count an action must have to be
+/// considered by that simulation. Sequential halving as a table: `m` actions
+/// share the first phase, half of them the next, down to two.
+pub fn considered_visits(m: usize, n: usize) -> Vec<u32> {
+    if m <= 1 {
+        return (0..n as u32).collect();
+    }
+    let log2max = (m as f64).log2().ceil() as usize;
+    let mut sequence = Vec::with_capacity(n);
+    let mut visits = vec![0u32; m];
+    let mut considered = m;
+    while sequence.len() < n {
+        let extra = (n as f64 / (log2max * considered) as f64) as usize;
+        for _ in 0..extra.max(1) {
+            sequence.extend_from_slice(&visits[..considered]);
+            for v in &mut visits[..considered] {
+                *v += 1;
+            }
+        }
+        considered = (considered / 2).max(2);
+    }
+    sequence.truncate(n);
+    sequence
+}
+
+/// mctx's `score_considered`: among the actions whose visits equal
+/// `considered`, the one maximising `g + logit + σ(completedQ)`, the logits
+/// shifted by their maximum and the sum floored at −10⁹ as mctx floors it,
+/// ties to the lowest index; `None` if no action has that many visits.
+/// `completed` is `completed_q`'s output, already scaled by σ.
+pub fn considered_pick(considered: u32, gumbel: &[f64], prior: &[f32], completed: &[f64], visits: &[u32]) -> Option<usize> {
+    // The logarithm rises with its argument, so the greatest logit is the
+    // logarithm of the greatest prior, bit for bit.
+    let top = floor(prior.iter().map(|&p| f64::from(p)).fold(0.0, f64::max)).ln();
+    let mut best = f64::NEG_INFINITY;
+    let mut chosen = None;
+    for i in 0..prior.len() {
+        if visits[i] != considered {
+            continue;
+        }
+        let s = (gumbel[i] + floor(f64::from(prior[i])).ln() - top + completed[i]).max(-1e9);
+        if s > best {
+            best = s;
+            chosen = Some(i);
+        }
+    }
+    chosen
 }
