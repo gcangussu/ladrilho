@@ -399262,5 +399262,11 @@
     },
     "decision": "stop",
     "reason": "rating 841 against the anchors (±7 over 800 games an anchor); did not improve on 845 at generation 20, which had not improved either; the anchors have no gate: stop."
+  },
+  {
+    "kind": "override",
+    "run": "fifteenth",
+    "date": "2026-10-25T04:29:32.957Z",
+    "reason": "Stopped at 30 by two non-improving milestones (866, 845, 841 on the anchors), each within about two standard errors of twelfth/120's 856. The window has held only fifteenth's own 10 000-simulation games since generation 20, so they have trained for ten generations; twelfth's own climb began at 50, and the plan overrides any stop before generation 80."
   }
 ]
