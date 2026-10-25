@@ -1046,6 +1046,24 @@ every value target.
 - **The question it closes:** if a search five times stronger teaches this network nothing,
   search strength is not its lever.
 
+## `fifteenth` stopped: a five times stronger search taught nothing either (10-25)
+
+**Stopped by the rule at generation 80** (10-25 10:30), after an override at 30. On the anchors,
+800 games against each, ±7: 866, 845, 841, 847, 853, 863, 846, 845 at milestones 10 to 80, a
+mean of 851 against `twelfth`/120's 856, with the spread noise alone gives. On the panel every
+row stayed level with `twelfth`/120; the boundary into round 5 within ±0.0015 throughout, and
+moves in round 5 about 0.008 worse, within noise. The window held only its own 10 000-simulation
+games from generation 20, so this is 60 generations of training on them.
+
+**Where the three runs leave the question.** Cleaner targets for the final boundary
+(`thirteenth`, 107 generations), a twice stronger self-play search (`fourteenth`, 90) and a five
+times stronger one (`fifteenth`, 80) each left the network where `twelfth`/120 had it, in play and
+in value. A bigger network grown from it would not use its new blocks (10-23). At this learning
+rate the 4 × 256 network looks to be at its fixed point: neither better targets nor a stronger
+teacher moves it. What has not been tried is a larger network trained from scratch, which is
+weeks here, and changing play rather than training (the two-pass search past the final boundary,
++20 Elo, parked).
+
 ## Next
 
 - **The boundary into the final round** is where the value limits play: fixing it is worth up to
