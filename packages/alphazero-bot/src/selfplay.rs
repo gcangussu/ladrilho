@@ -139,15 +139,19 @@ impl Game {
                     _ => None,
                 };
                 self.full = cheap.is_none();
-                let created = match cheap {
-                    None => {
+                let config = match cheap {
+                    None => settings.search.clone(),
+                    Some(simulations) => SearchConfig { simulations, ..settings.search.clone() },
+                };
+                let created = match (&settings.gumbel, cheap) {
+                    // [Z11-89]: every search draws its Gumbel from the game's
+                    // generator, where the noise and the move's sample came from.
+                    (Some(g), _) => Search::gumbel(&self.state, &config, g, &mut self.rng),
+                    (None, None) => {
                         let noise = settings.noise.as_ref().map(|n| (n, &mut self.rng));
-                        Search::new(&self.state, &settings.search, noise)
+                        Search::new(&self.state, &config, noise)
                     }
-                    Some(simulations) => {
-                        let config = SearchConfig { simulations, ..settings.search.clone() };
-                        Search::new(&self.state, &config, None)
-                    }
+                    (None, Some(_)) => Search::new(&self.state, &config, None),
                 };
                 match created {
                     Some(s) => self.lane.search = Some(s),
@@ -159,9 +163,12 @@ impl Game {
             }
             let Some(search) = self.lane.search.take() else { return false };
             // [Z11-87]: a full search's target, read before the tree goes.
-            let target = settings.improved.filter(|_| self.full).map(|t| search.improved(&t));
+            let transform = settings.gumbel.map(|g| g.transform).or(settings.improved);
+            let target = transform.filter(|_| self.full).map(|t| search.improved(&t));
             let (result, _) = search.finish();
-            if !self.play(&result.visits, target.as_ref(), settings) {
+            // [Z11-89]: a Gumbel search's move is its own.
+            let chosen = settings.gumbel.map(|_| result.action);
+            if !self.play(&result.visits, target.as_ref(), chosen, settings) {
                 return false;
             }
         }
@@ -217,10 +224,16 @@ impl Game {
 
     /// The move sample, the move, and a boundary sample if the move resolved
     /// a round, with its lookahead started if [Z11-80] looks past it. The
-    /// sample's target is `target` when [Z11-87] gives one, the root visits
-    /// otherwise; the move is chosen from the visits either way. `false` if the
-    /// move could not be played.
-    fn play(&mut self, root_visits: &[u32; ACTION_SPACE], target: Option<&[u16; ACTION_SPACE]>, settings: &Settings) -> bool {
+    /// sample's target is `target` when [Z11-87] or [Z11-89] gives one, the
+    /// root visits otherwise; the move is `chosen` under [Z11-89], else chosen
+    /// from the visits. `false` if the move could not be played.
+    fn play(
+        &mut self,
+        root_visits: &[u32; ACTION_SPACE],
+        target: Option<&[u16; ACTION_SPACE]>,
+        chosen: Option<u8>,
+        settings: &Settings,
+    ) -> bool {
         let legal = self.state.legal_actions();
         let mut visits = [0u16; ACTION_SPACE];
         match target {
@@ -240,7 +253,10 @@ impl Game {
             Sample { kind: Kind::Cheap, result: 0, observation: self.state.encode(), legal: [0; LEGAL_BYTES], visits: [0; ACTION_SPACE] }
         };
         self.push(sample, seat);
-        let action = pick(root_visits, self.ply, settings, &mut self.rng);
+        let action = match chosen {
+            Some(a) => a,
+            None => pick(root_visits, self.ply, settings, &mut self.rng),
+        };
         let before = self.state.clone();
         if self.state.apply(action).is_err() {
             return false;

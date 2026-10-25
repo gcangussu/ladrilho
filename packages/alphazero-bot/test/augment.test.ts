@@ -140,4 +140,20 @@ describe('a run started from another [Z11-66]', () => {
       expect(() => childConfig(parent, origin, 42, undefined, bad)).toThrow(/improved/);
     }
   });
+
+  /**
+   * [Z11-89]: a Gumbel run is `--set gumbelConsidered=16`, one change from an
+   * absent 0; the scale alone, a count outside 2..=64, or a Gumbel run with a
+   * lookahead is refused before a run exists. Mutation, seen red: the check
+   * dropped from `childConfig`.
+   */
+  it('takes the Gumbel keys, the count first, and no lookahead', () => {
+    const c = childConfig(parent, origin, 42, undefined, { gumbelConsidered: 16 });
+    expect(c.gumbelConsidered).toBe(16);
+    expect(c.from?.changes).toEqual({ gumbelConsidered: { parent: 0, run: 16 } });
+    for (const bad of [{ gumbelScale: 1 }, { gumbelConsidered: 1 }, { gumbelConsidered: 8.5 }, { gumbelConsidered: 65 },
+      { gumbelConsidered: 16, gumbelScale: 11 }, { gumbelConsidered: 16, lookaheadDeals: 8, lookaheadAlpha: 0.9 }]) {
+      expect(() => childConfig(parent, origin, 42, undefined, bad)).toThrow(/umbel/);
+    }
+  });
 });
