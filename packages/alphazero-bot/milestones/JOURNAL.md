@@ -1182,6 +1182,22 @@ reason with.
 network from `twelfth`/120 either. That is the fourth run in a row to end level. As planned, the
 next test of Gumbel is the from-scratch pair, where the paper's gains are.
 
+## `sixteenth` stopped at 310 (10-26)
+
+Stopped by hand at generation 310, on the user's call: 300 generations level, and a stop rule
+that cannot stop it. Thirty milestones against the anchors: mean 855, from
+831 to 876, against `twelfth`/120's 856. Milestone 300 is the last one logged;
+310 was interrupted in its anchor games and is not logged.
+
+**`master` checked directly.** `sixteenth`/20 rated 876 on the anchors and ships as `master` by
+[T12-10]. Against `twelfth`/120 at the shipped settings (10 000 simulations, the endgame proof
+at 300 000 nodes) it scored 48.3% over 500 games on fresh seeds, −12 Elo (−42 to +19). The 876
+was the best of thirty draws of about ±7 from a level run. The shipped rule picks noise peaks the
+way the old pool did, only less.
+
+**Verdict.** The improved policy as the target, with search and moves unchanged, does not move
+the network. Gumbel's next test is the from-scratch pair, after Phase 1's soundness checks.
+
 ## Next
 
 - **The boundary into the final round** is where the value limits play: fixing it is worth up to
