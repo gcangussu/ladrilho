@@ -284,6 +284,33 @@ describe('the patience rule [Z11-90]', () => {
     expect(add(20)).toBe('stop');
   });
 
+  /**
+   * Patience on the ladder, reachable since `train init --patience`: progress
+   * is the measure, at [Z11-33]'s nine decimals, and a due, failing gate row
+   * leaves the count alone. Mutations, seen red: `patienceOf` measuring the
+   * ladder by `sharp` alone, not by progress; `walk` taking a failed gate's
+   * milestone as a new best.
+   */
+  it('counts on the ladder by progress, with the gate failing on the way', () => {
+    const log: LogEntry[] = [];
+    const add = (sharp: number, steady = 0.95, failing = false) => {
+      const r = results(sharp, steady);
+      const entries = ruleEntries(log, 'l');
+      const outcome = failing ? gate(false) : null;
+      const decision = decide(entries, r, outcome, 3);
+      log.push(milestone('l', r, decision, { due: failing, outcome }));
+      return decision;
+    };
+    expect(add(0.5)).toBe('continue');
+    expect(add(0.55, 0.95, true)).toBe('continue');
+    // Higher `sharp`, lower progress: not a new best.
+    expect(patienceOf(ruleEntries(log, 'l'), results(0.6, 0.85))).toMatchObject({ newBest: false, without: 1 });
+    expect(add(0.6, 0.85)).toBe('continue');
+    expect(add(0.5, 0.95, true)).toBe('continue');
+    expect(patienceOf(ruleEntries(log, 'l'), results(0.55)).without).toBe(3);
+    expect(add(0.55)).toBe('stop');
+  });
+
   it('is off without a patience, and read from a config only as a number', () => {
     const r = (rating: number) => ({ rating, ladderHash: 'h' });
     const log: LogEntry[] = [];

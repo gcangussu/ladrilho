@@ -10,7 +10,7 @@ import { encode, legalActions, newGame } from 'engine';
 import { describe, expect, it } from 'vitest';
 import { DISPLAYS_FIXTURE, LAYOUT, displayFixture, displayLayout, permuteDisplays } from '../eval/augment.js';
 import { startingConfig } from '../eval/config.js';
-import { STOP_PATIENCE, childConfig, parseFrom, parseSet } from '../eval/loop.js';
+import { STOP_PATIENCE, childConfig, freshConfig, parseFrom, parseSet } from '../eval/loop.js';
 
 describe('display permutation [Z11-65]', () => {
   it("keeps train/layout.json and the trainer's fixture what the engine says", () => {
@@ -154,6 +154,32 @@ describe('a run started from another [Z11-66]', () => {
     expect(fresh.from?.changes).toEqual({});
     expect(childConfig({ ...parent, stopPatience: 3 }, origin, 42, undefined, {}, undefined, 'anchors').stopPatience).toBe(3);
     expect('stopPatience' in childConfig(parent, origin, 42, undefined, {}, undefined, 'pool')).toBe(false);
+  });
+
+  /**
+   * [Z11-90]: `--patience` writes its number on any yardstick, over the
+   * parent's and over the anchors' default, still no change in
+   * `from.changes`; anything but a whole number from 1 is refused by the
+   * config builders, which `initRun` calls before it writes anything. Mutations, seen red: `patienceFor` ignoring the asked patience;
+   * `freshConfig` passing it no patience.
+   */
+  it('writes the asked patience on any yardstick, over the parent and the default', () => {
+    const ladder = childConfig(parent, origin, 42, undefined, {}, undefined, 'ladder', 5);
+    expect(ladder.stopPatience).toBe(5);
+    expect(ladder.yardstick).toBe('ladder');
+    expect(ladder.from?.changes).toEqual({});
+    expect(childConfig({ ...parent, stopPatience: 3 }, origin, 42, undefined, {}, undefined, 'anchors', 7).stopPatience).toBe(7);
+    expect(childConfig(parent, origin, 42, undefined, {}, undefined, 'anchors', 2).stopPatience).toBe(2);
+    for (const bad of [0, -1, 2.5, Number.NaN]) {
+      expect(() => childConfig(parent, origin, 42, undefined, {}, undefined, 'ladder', bad)).toThrow(/whole number/);
+      expect(() => freshConfig(undefined, undefined, 'ladder', bad)).toThrow(/whole number/);
+    }
+    // A run started from nothing: patience 5 on the anchors, none on the
+    // ladder unless asked for, the asked one on either.
+    expect(freshConfig(undefined, undefined, 'anchors').stopPatience).toBe(STOP_PATIENCE);
+    expect('stopPatience' in freshConfig(undefined, undefined, 'ladder')).toBe(false);
+    expect(freshConfig(undefined, undefined, 'ladder', 4).stopPatience).toBe(4);
+    expect(freshConfig(undefined, undefined, 'anchors', 9).stopPatience).toBe(9);
   });
 
   /**

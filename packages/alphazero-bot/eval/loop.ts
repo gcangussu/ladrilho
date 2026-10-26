@@ -186,8 +186,16 @@ export function checkGumbel(
 /** [Z11-90]: the patience a new anchors run decides by. */
 export const STOP_PATIENCE = 5;
 
-/** A run's `stopPatience`: its parent's if it had one, else [STOP_PATIENCE] on the anchors, else none. */
-function patienceFor(yardstick: string | undefined, inherited: number | undefined): { stopPatience?: number } {
+/**
+ * A run's `stopPatience`: the one `--patience` asks for, on any yardstick; else
+ * its parent's if it had one; else [STOP_PATIENCE] on the anchors; else none.
+ */
+function patienceFor(
+  yardstick: string | undefined,
+  inherited: number | undefined,
+  asked: number | undefined,
+): { stopPatience?: number } {
+  if (asked !== undefined) return { stopPatience: stopPatience({ stopPatience: asked }) as number };
   if (inherited !== undefined) return { stopPatience: inherited };
   return yardstick === 'anchors' ? { stopPatience: STOP_PATIENCE } : {};
 }
@@ -204,6 +212,7 @@ export function childConfig(
   set: Partial<Record<Changeable, number>> = {},
   gate?: GateSetting,
   yardstick?: 'ladder' | 'pool' | 'anchors',
+  patience?: number,
 ): RunConfig {
   const {
     from: _grandparent,
@@ -233,9 +242,26 @@ export function childConfig(
     ...((gate ?? parentGate) === undefined ? {} : { gate: gate ?? parentGate }),
     // [Z11-73]: likewise the yardstick.
     ...((yardstick ?? parentYardstick) === undefined ? {} : { yardstick: yardstick ?? parentYardstick }),
-    // [Z11-90]: a run on the anchors decides by patience, inherited or new.
-    ...patienceFor(yardstick ?? parentYardstick, parentPatience),
+    // [Z11-90]: a run on the anchors decides by patience, inherited or new;
+    // any run by the patience `--patience` asks for.
+    ...patienceFor(yardstick ?? parentYardstick, parentPatience, patience),
     from: { ...origin, changes },
+  };
+}
+
+/** [Z11-58]'s config for a run started from nothing: [startingConfig] and the settings asked for. */
+export function freshConfig(
+  augment?: 'none' | 'displays',
+  gate?: GateSetting,
+  yardstick?: 'ladder' | 'pool' | 'anchors',
+  patience?: number,
+): RunConfig {
+  return {
+    ...startingConfig(),
+    ...(augment === undefined ? {} : { augment }),
+    ...(gate === undefined ? {} : { gate }),
+    ...(yardstick === undefined ? {} : { yardstick }),
+    ...patienceFor(yardstick, undefined, patience),
   };
 }
 
@@ -252,19 +278,14 @@ export function initRun(
   set: Partial<Record<Changeable, number>> = {},
   gate?: GateSetting,
   yardstick?: 'ladder' | 'pool' | 'anchors',
+  patience?: number,
 ): void {
   checkRunName(name);
   const p = runPaths(name);
   if (existsSync(p.dir)) throw new Error(`${p.dir} already exists`);
   if (from === undefined && Object.keys(set).length > 0) throw new Error('--set goes with --from');
   if (from === undefined) {
-    const config: RunConfig = {
-      ...startingConfig(),
-      ...(augment === undefined ? {} : { augment }),
-      ...(gate === undefined ? {} : { gate }),
-      ...(yardstick === undefined ? {} : { yardstick }),
-      ...patienceFor(yardstick, undefined),
-    };
+    const config = freshConfig(augment, gate, yardstick, patience);
     mkdirSync(p.dir, { recursive: true });
     writeJson(p.config, config);
     trainer(['init', '--run-dir', p.dir]);
@@ -302,6 +323,7 @@ export function initRun(
     set,
     gate,
     yardstick,
+    patience,
   );
   mkdirSync(p.dir, { recursive: true });
   writeJson(p.config, config);

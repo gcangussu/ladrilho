@@ -79,7 +79,20 @@ async function main(): Promise<void> {
         if (yardstick !== undefined && yardstick !== 'ladder' && yardstick !== 'pool' && yardstick !== 'anchors') {
           throw new Error('--yardstick takes ladder, pool or anchors');
         }
-        return initRun(option(rest, 'run') ?? '', from === undefined ? undefined : parseFrom(from), augment, set, gate, yardstick);
+        // [Z11-90]: the patience to decide by, on any yardstick, as typed: `0x10` is no patience.
+        const patience = option(rest, 'patience');
+        if (patience !== undefined && !/^[1-9]\d*$/.test(patience)) {
+          throw new Error(`--patience takes a whole number from 1, not ${patience}`);
+        }
+        return initRun(
+          option(rest, 'run') ?? '',
+          from === undefined ? undefined : parseFrom(from),
+          augment,
+          set,
+          gate,
+          yardstick,
+          patience === undefined ? undefined : Number(patience),
+        );
       }
       {
         const until = option(rest, 'until');
@@ -179,7 +192,7 @@ async function main(): Promise<void> {
       return seriesWorker();
     default:
       throw new Error(
-        'usage: train init --run <name> [--from <run>:<generation>] [--augment none|displays] [--set <setting>=<n>]… [--gate end|off] [--yardstick ladder|pool|anchors] | train --run <name> [--override "<reason>"] | latency --run <name> | ' +
+        'usage: train init --run <name> [--from <run>:<generation>] [--augment none|displays] [--set <setting>=<n>]… [--gate end|off] [--yardstick ladder|pool|anchors] [--patience <n>] | train --run <name> [--override "<reason>"] | latency --run <name> | ' +
           'throughput --run <name> | milestone <checkpoint> | panel <checkpoint> [--against <checkpoint>] | gate <checkpoint> | stop-simulation | latency-corpus | ' +
           'augment-fixtures | pool init --members <run>:<g>,… --games <n> | anchors init|add|rate … | ship <checkpoint> | ship pin <run>:<g> --reason "…"',
       );

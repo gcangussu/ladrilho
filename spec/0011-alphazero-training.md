@@ -1128,7 +1128,9 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
 - **[Z11-90]** A run's config MAY set `stopPatience`, a whole number from 1, and anything else
   MUST be refused when it is read (0 would stop at a new best). `train init` MUST write
   5 on a run whose yardstick is `anchors` unless its parent's config holds one, which it
-  inherits. It is a measurement setting like `yardstick`, not a change in `from.changes`. While
+  inherits. `train init --patience <n>` MUST write `n` instead, on any yardstick and over a
+  parent's, and MUST refuse anything but a whole number from 1 before the run exists: a run on
+  the ladder decides by patience only this way. It is a measurement setting like `yardstick`, not a change in `from.changes`. While
   it is set:
   - a milestone **improves** when its measure exceeds, at [Z11-33]'s nine decimals, the best of
     every milestone since the run's last fresh start ([Z11-33]'s fresh starts);
@@ -1161,6 +1163,12 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
   milestone `stopPatience + 1`: the first milestone is a fresh start, and so the first best.
   `--patience 4` prints patience 4's: it stops a level run sooner (0.82 within ten) but a 2 Elo
   climb more often (0.38). The person chose 5.*
+
+  *The table is the anchors' alone. On a level stretch the chance of `stop` does not depend on the
+  measure's noise, so its first row holds on the ladder too; the climbing rows do not, since they
+  turn on the climb against the noise, and patience on the ladder is unmeasured. It was opened to
+  the ladder for `seventeenth` (10-26), a run from random weights that the anchors cannot yet
+  rate.*
 
 - **[Z11-73]** A run's config MAY set `yardstick` to `pool`; absent means `ladder`, the yardstick of
   [Z11-31]. A run started from another inherits its parent's unless `train init` is given
