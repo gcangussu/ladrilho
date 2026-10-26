@@ -1156,6 +1156,32 @@ Any later budget cut is costed in measured wall time.
 - the fixed-deal exploration check (E4);
 - for the from-scratch pair, `train init` must accept `--set` without `--from`.
 
+## `sixteenth` at 150: the improved policy taught nothing either (10-25)
+
+**Ratings.** Fifteen milestones against the anchors: 867, 876, 847, 862, 865, 844, 857, 850,
+860, 853, 862, 831, 849, 848, 851. Their mean is 855, `twelfth`/120's 856. After generation 50
+none reaches 866. `sixteenth`/20's 876 ships as `master` by the rule, but it is the highest of
+fifteen draws of about ±7 around a level run, so it likely overstates by ten or more. It needs a
+direct match before it is believed.
+
+**Panel.** The value got slightly worse on move positions. From generation 90 the error is about
+0.004 above `twelfth`/120's, with the interval excluding zero at 100 to 120. In round 4 it is
+0.006 to 0.013 worse from 80 on. Boundaries did not change.
+
+**Exploration.** The policy did not collapse. Its entropy on the fixed positions went from 1.400
+to about 1.35 by generation 30 and stayed there. The targets' entropy held at about 0.236 all
+run.
+
+**The stop rule.** It never fired. It needs two milestones in a row without improvement, and this
+run alternated up and down for 130 generations, so it would have run on indefinitely. A rule
+that compares each milestone with the one before it cannot stop a level run with this much
+noise. That is worth fixing in [Z11-33] before the next long run. The anchors' ±7 is the scale to
+reason with.
+
+**Reading.** A target that weights actions by value, not by visits, does not move the 4 × 256
+network from `twelfth`/120 either. That is the fourth run in a row to end level. As planned, the
+next test of Gumbel is the from-scratch pair, where the paper's gains are.
+
 ## Next
 
 - **The boundary into the final round** is where the value limits play: fixing it is worth up to
