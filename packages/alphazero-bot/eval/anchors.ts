@@ -100,13 +100,18 @@ export function overlaps(a: SeedRun, b: SeedRun): boolean {
   return q > -a.n && q < b.n;
 }
 
-/** Every seed run already spoken for: the pool's list, the anchors' pairings and the log's anchored records. */
+/** Every seed run already spoken for: the pool's list, the anchors' pairings, the log's anchored records and ship matches. */
 export function usedSeeds(file: AnchorsFile | null, log: readonly LogEntry[]): SeedRun[] {
   const out: SeedRun[] = [{ base: POOL_SEEDS[0], n: POOL_SEEDS.length }];
   for (const p of file?.pairings ?? []) out.push({ base: p.seedBase, n: p.games });
   for (const e of log) {
     const r = (e as { anchored?: AnchoredRecord }).anchored;
     if (r !== undefined) out.push({ base: r.seedBase, n: r.gamesPerMember });
+    // [0012 T12-35]: a ship match's seeds, each played from both seats.
+    if (e.kind === 'ship' && e.seedBase !== undefined && e.looks !== undefined) {
+      const last = e.looks[e.looks.length - 1];
+      out.push({ base: e.seedBase, n: last === undefined ? 0 : last.reduce((a, b) => a + b, 0) });
+    }
   }
   return out;
 }

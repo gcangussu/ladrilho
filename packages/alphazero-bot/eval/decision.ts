@@ -106,7 +106,29 @@ export interface RatingEntry {
   reason: string;
 }
 
-export type LogEntry = MilestoneEntry | OverrideEntry | ManualGateEntry | RatingEntry;
+/**
+ * A milestone's ship match against `master` ([0012 T12-35]), or the `pin` that
+ * named a `master` without one. It is about `master`, not its run's course, so
+ * it takes no part in a run's decisions.
+ */
+export interface ShipEntry {
+  kind: 'ship';
+  run: string;
+  date: string;
+  generation: number;
+  decision: 'accept' | 'reject' | 'pin';
+  /** The `master` it played; `null` for a pin. */
+  master: { run: string; generation: number } | null;
+  simulations?: number;
+  seedBase?: number;
+  test?: { elo0: number; elo1: number; alpha: number; beta: number; maxGames: number; batchPairs: number };
+  /** The cumulative pair-score counts after each look, in quarters. */
+  looks?: [number, number, number, number, number][];
+  seconds?: number;
+  reason: string;
+}
+
+export type LogEntry = MilestoneEntry | OverrideEntry | ManualGateEntry | RatingEntry | ShipEntry;
 
 /**
  * Progress to nine decimals, the grain every comparison of it is made at.
@@ -117,6 +139,11 @@ export type LogEntry = MilestoneEntry | OverrideEntry | ManualGateEntry | Rating
  */
 function grain(p: number): number {
   return Math.round(p * 1e9);
+}
+
+/** Whether progress `a` exceeds `b`, compared at [grain]. */
+function above(a: number, b: number): boolean {
+  return grain(a) > grain(b);
 }
 
 /** Whether progress `a` is at least `b`, compared at [grain]. */
@@ -148,6 +175,9 @@ interface Walked {
   overrideSince: boolean;
   /** The most recent failed gate since the last fresh start. */
   lastFailure: MilestoneEntry | null;
+  /** [Z11-90]: the best milestone since the last fresh start, and how many have followed it without beating it. */
+  best: MilestoneEntry | null;
+  sinceBest: number;
 }
 
 /**
@@ -159,6 +189,8 @@ function walk(entries: readonly LogEntry[]): Walked {
   let previousImproved = false;
   let overrideSince = false;
   let lastFailure: MilestoneEntry | null = null;
+  let best: MilestoneEntry | null = null;
+  let sinceBest = 0;
   for (const e of entries) {
     if (e.kind === 'override') {
       overrideSince = true;
@@ -169,10 +201,43 @@ function walk(entries: readonly LogEntry[]): Walked {
     if (fresh) lastFailure = null;
     previousImproved = fresh || (previous !== null && atLeast(e.progress, previous.progress));
     if (e.gate.ran && e.gate.outcome !== null && !e.gate.outcome.passed) lastFailure = e;
+    if (fresh || best === null || above(e.progress, best.progress)) {
+      best = e;
+      sinceBest = 0;
+    } else {
+      sinceBest++;
+    }
     previous = e;
     overrideSince = false;
   }
-  return { previous, previousImproved, overrideSince, lastFailure };
+  return { previous, previousImproved, overrideSince, lastFailure, best, sinceBest };
+}
+
+/**
+ * [Z11-90]: the patience rule's view of a new milestone: whether it is a new
+ * best since the last fresh start, the best it is measured against, and how
+ * many milestones in a row, it included, have not beaten that best.
+ */
+export function patienceOf(
+  entries: readonly LogEntry[],
+  results: MilestoneResults,
+): { newBest: boolean; best: MilestoneEntry | null; without: number } {
+  const w = walk(entries);
+  const fresh = freshReason(w.previous, w.overrideSince, results.ladderHash) !== null;
+  const newBest = fresh || w.best === null || above(measureOf(results), w.best.progress);
+  return { newBest, best: fresh ? null : w.best, without: newBest ? 0 : w.sinceBest + 1 };
+}
+
+/**
+ * [Z11-90]: the patience a run's config sets, or `undefined` for [Z11-33]'s
+ * rule. Anything but a whole number from 1 up is refused: 0 would stop at a
+ * new best.
+ */
+export function stopPatience(config: { stopPatience?: unknown } | undefined): number | undefined {
+  const p = config?.stopPatience;
+  if (p === undefined) return undefined;
+  if (typeof p !== 'number' || !Number.isInteger(p) || p < 1) throw new Error(`stopPatience must be a whole number from 1, not ${String(p)}`);
+  return p;
 }
 
 /**
@@ -214,15 +279,20 @@ export function due(entries: readonly LogEntry[], results: MilestoneResults, gat
 /**
  * The decision ([Z11-33]'s table, checked in order): `done` when the gate was
  * due and passed; `stop` when this milestone does not improve and neither did
- * the one before it; `continue` otherwise. `gate` is absent when it was not
- * due or not reached.
+ * the one before it, or, with `patience` set ([Z11-90]), when `patience`
+ * milestones in a row have not beaten the run's best; `continue` otherwise.
+ * `gate` is absent when it was not due or not reached.
  */
 export function decide(
   entries: readonly LogEntry[],
   results: MilestoneResults,
   gate?: GateOutcome | null,
+  patience?: number,
 ): Decision {
   if (gate?.passed === true && due(entries, results)) return 'done';
+  // [Z11-90]: with patience set, `stop` once that many milestones in a row
+  // have not beaten the run's best since its last fresh start.
+  if (patience !== undefined) return patienceOf(entries, results).without >= patience ? 'stop' : 'continue';
   const w = walk(entries);
   const fresh = freshReason(w.previous, w.overrideSince, results.ladderHash) !== null;
   const improves = fresh || (w.previous !== null && atLeast(measureOf(results), w.previous.progress));
@@ -232,13 +302,16 @@ export function decide(
 
 /**
  * A run's entries, in log order: its milestones, overrides and manual gates.
- * A `rating` entry is about a checkpoint, not a run's course, so it is not one.
+ * A `rating` entry is about a checkpoint, and a `ship` entry about `master`,
+ * not a run's course, so neither is one.
  */
 export function entriesOf(
   log: readonly LogEntry[],
   run: string,
 ): (MilestoneEntry | OverrideEntry | ManualGateEntry)[] {
-  return log.filter((e): e is MilestoneEntry | OverrideEntry | ManualGateEntry => e.run === run && e.kind !== 'rating');
+  return log.filter(
+    (e): e is MilestoneEntry | OverrideEntry | ManualGateEntry => e.run === run && e.kind !== 'rating' && e.kind !== 'ship',
+  );
 }
 
 /** Whether a run has ended `done`, by a milestone or a manual gate ([Z11-61]). */

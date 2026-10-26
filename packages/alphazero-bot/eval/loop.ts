@@ -23,12 +23,15 @@ import {
   freshStart,
   isDone,
   isStopped,
+  patienceOf,
   progress,
   ruleEntries,
+  stopPatience,
   type Decision,
   type GateOutcome,
   type GateSetting,
   type MilestoneEntry,
+  type LogEntry,
   type MilestoneResults,
 } from './decision.js';
 import { readJson, sha256File, writeAtomic, writeJson } from './files.js';
@@ -57,12 +60,14 @@ import {
   playAgainst,
   playAnchored,
   rateAgainst,
+  anchorsExist,
   readAnchors,
   usedSeeds,
   type Anchor,
   type AnchorPairing,
   type AnchorsFile,
 } from './anchors.js';
+import { currentMaster, pendingShips, playShip, shipEntry, shippedFor, writeShipped } from './ship.js';
 
 /** A sample record's size ([Z11-27]). */
 const RECORD_BYTES = 1113;
@@ -178,6 +183,15 @@ export function checkGumbel(
   if (lookaheadDeals !== undefined) throw new Error('a Gumbel search has no lookahead ([Z11-89])');
 }
 
+/** [Z11-90]: the patience a new anchors run decides by. */
+export const STOP_PATIENCE = 5;
+
+/** A run's `stopPatience`: its parent's if it had one, else [STOP_PATIENCE] on the anchors, else none. */
+function patienceFor(yardstick: string | undefined, inherited: number | undefined): { stopPatience?: number } {
+  if (inherited !== undefined) return { stopPatience: inherited };
+  return yardstick === 'anchors' ? { stopPatience: STOP_PATIENCE } : {};
+}
+
 /**
  * [Z11-66]'s config: the parent's, with a fresh seed, its own `augment`, the
  * changes asked for, and `from` recording the parent and what differs from it.
@@ -191,7 +205,14 @@ export function childConfig(
   gate?: GateSetting,
   yardstick?: 'ladder' | 'pool' | 'anchors',
 ): RunConfig {
-  const { from: _grandparent, augment: parentAugment, gate: parentGate, yardstick: parentYardstick, ...inherited } = pc;
+  const {
+    from: _grandparent,
+    augment: parentAugment,
+    gate: parentGate,
+    yardstick: parentYardstick,
+    stopPatience: parentPatience,
+    ...inherited
+  } = pc;
   const changes: RunOrigin['changes'] = {};
   for (const [k, v] of Object.entries(set) as [Changeable, number][]) {
     // An absent aux weight is 0, off ([Z11-67]); so is an absent playout cap
@@ -212,6 +233,8 @@ export function childConfig(
     ...((gate ?? parentGate) === undefined ? {} : { gate: gate ?? parentGate }),
     // [Z11-73]: likewise the yardstick.
     ...((yardstick ?? parentYardstick) === undefined ? {} : { yardstick: yardstick ?? parentYardstick }),
+    // [Z11-90]: a run on the anchors decides by patience, inherited or new.
+    ...patienceFor(yardstick ?? parentYardstick, parentPatience),
     from: { ...origin, changes },
   };
 }
@@ -240,6 +263,7 @@ export function initRun(
       ...(augment === undefined ? {} : { augment }),
       ...(gate === undefined ? {} : { gate }),
       ...(yardstick === undefined ? {} : { yardstick }),
+      ...patienceFor(yardstick, undefined),
     };
     mkdirSync(p.dir, { recursive: true });
     writeJson(p.config, config);
@@ -426,6 +450,7 @@ export function reasonFor(
   gateSet: GateSetting,
   pool?: string,
   scale: 'the pool' | 'the anchors' = 'the pool',
+  patience?: { patience: number } & ReturnType<typeof patienceOf>,
 ): string {
   const p = measureOf(results);
   const ladder = 'rungs' in results;
@@ -435,7 +460,16 @@ export function reasonFor(
     ? [`progress ${pct(p)} (sharp ${pct(results.rungs.sharp.winrate)})`]
     : [`rating ${show(p)} against ${scale}${pool === undefined ? '' : ` (${pool})`}`];
   if (fresh !== null) parts.push(`a fresh start: ${fresh}`);
-  else if (previous !== null) {
+  else if (patience !== undefined && patience.best !== null) {
+    // [Z11-90]: measured against the run's best since its last fresh start.
+    const b = patience.best;
+    parts.push(
+      patience.newBest
+        ? `a new best, above ${show(b.progress)} at generation ${b.generation}`
+        : `${show(b.progress)} at generation ${b.generation} is still the best, ` +
+            `${patience.without} of ${patience.patience} milestones without beating it`,
+    );
+  } else if (previous !== null) {
     parts.push(
       atLeast(p, previous.progress)
         ? `improved on ${show(previous.progress)} at generation ${previous.generation}`
@@ -454,6 +488,15 @@ export function reasonFor(
     );
   }
   return `${parts.join('; ')}: ${decision}.`;
+}
+
+/** [Z11-90]'s view for a milestone's reason, when the run sets a patience. */
+function patienceView(
+  entries: ReturnType<typeof ruleEntries>,
+  results: MilestoneResults,
+  patience: number | undefined,
+): Parameters<typeof reasonFor>[11] {
+  return patience === undefined ? undefined : { patience, ...patienceOf(entries, results) };
 }
 
 /** Step 5 of [Z11-28]: measure, gate if due, decide, log. */
@@ -488,7 +531,8 @@ async function milestoneStep(
     const g = await runGate(player, name, generation, config, config, workers);
     gate = { passed: g.passed, winrate: g.winrate, nullWinrate: g.nullWinrate, latencyPassed: g.latency.passed, path: g.path };
   }
-  const decision = decide(entries, results, gate);
+  const patience = stopPatience(config);
+  const decision = decide(entries, results, gate, patience);
   const entry: MilestoneEntry = {
     kind: 'milestone',
     run: name,
@@ -509,7 +553,7 @@ async function milestoneStep(
     losses: lossesSince(name, previous?.generation ?? 0, generation),
     provenance: prov,
     decision,
-    reason: reasonFor(results, previous, fresh, gateDue, gate, lastFailure, decision, previousImproved, gateSet),
+    reason: reasonFor(results, previous, fresh, gateDue, gate, lastFailure, decision, previousImproved, gateSet, undefined, 'the pool', patienceView(entries, results, patience)),
   };
   appendLog(entry);
   process.stdout.write(`milestone ${name}/${generation}: ${entry.reason}\n`);
@@ -549,7 +593,8 @@ async function poolMilestoneStep(
   const entries = ruleEntries(log, name);
   const { previous, previousImproved } = context(entries);
   const fresh = freshStart(entries, results);
-  const decision = decide(entries, results, null);
+  const patience = stopPatience(config);
+  const decision = decide(entries, results, null, patience);
   const r = played.record;
   const pool =
     `±${r.se.toFixed(0)} over ${r.gamesPerMember + r.extraPerMember} games a champion` +
@@ -578,7 +623,7 @@ async function poolMilestoneStep(
     losses: lossesSince(name, previous?.generation ?? 0, generation),
     provenance: prov,
     decision,
-    reason: reasonFor(results, previous, fresh, false, null, null, decision, previousImproved, gateSetting(config), pool),
+    reason: reasonFor(results, previous, fresh, false, null, null, decision, previousImproved, gateSetting(config), pool, 'the pool', patienceView(entries, results, patience)),
   };
   appendLog(entry);
   process.stdout.write(`milestone ${name}/${generation}: ${entry.reason}\n`);
@@ -610,7 +655,8 @@ async function anchoredMilestoneStep(
   const entries = ruleEntries(log, name);
   const { previous, previousImproved } = context(entries);
   const fresh = freshStart(entries, results);
-  const decision = decide(entries, results, null);
+  const patience = stopPatience(config);
+  const decision = decide(entries, results, null, patience);
   const r = played.record;
   const note = `±${r.se.toFixed(0)} over ${r.gamesPerMember} games an anchor` +
     (r.beyond ? `; more than ${BEYOND} above the strongest anchor, so add a stronger one` : '');
@@ -635,11 +681,101 @@ async function anchoredMilestoneStep(
     losses: lossesSince(name, previous?.generation ?? 0, generation),
     provenance: prov,
     decision,
-    reason: reasonFor(results, previous, fresh, false, null, null, decision, previousImproved, gateSetting(config), note, 'the anchors'),
+    reason: reasonFor(results, previous, fresh, false, null, null, decision, previousImproved, gateSetting(config), note, 'the anchors', patienceView(entries, results, patience)),
   };
   appendLog(entry);
   process.stdout.write(`milestone ${name}/${generation}: ${entry.reason}\n`);
+  await catchUpShips(name, side, file, workers);
   return entry;
+}
+
+/**
+ * [0012 T12-34]: every ship match the run still owes, in log order: after an
+ * anchored milestone that out-rates `master`, and when the loop comes back
+ * to a run whose match was interrupted. A win names the milestone in
+ * `web/shipped.json`, which a person commits with the log.
+ */
+async function catchUpShips(
+  name: string,
+  side: { binary: string; config: string },
+  file: AnchorsFile,
+  workers: number,
+): Promise<void> {
+  // Owed afresh before each match: a win changes `master`, and what is owed with it.
+  for (;;) {
+    const log = readLog();
+    const candidate = pendingShips(log, name, file)[0];
+    const master = currentMaster(log);
+    if (candidate === undefined || master === null) return;
+    await playAndShip(candidate, master, side, file, log, workers);
+  }
+}
+
+/**
+ * [0012 T12-34]: only a run's own loop settles what it owes, so another run's
+ * owed matches are named here, each with the command that plays it.
+ */
+function warnOwedElsewhere(name: string, file: AnchorsFile): void {
+  const log = readLog();
+  const runs = new Set(log.filter((e) => e.kind === 'milestone' && e.run !== name).map((e) => e.run));
+  for (const run of runs) {
+    for (const m of pendingShips(log, run, file)) {
+      process.stderr.write(`ship match owed: ${memberName(m)}; play it with pnpm -F alphazero-bot ship milestones/${m.run}/${m.generation}/checkpoint.bin\n`);
+    }
+  }
+}
+
+async function playAndShip(
+  candidate: { run: string; generation: number },
+  master: { run: string; generation: number },
+  side: { binary: string; config: string },
+  file: AnchorsFile,
+  log: readonly LogEntry[],
+  workers: number,
+): Promise<void> {
+  if (memberName(candidate) === memberName(master)) throw new Error(`${memberName(candidate)} is master already`);
+  const key = `ship:${memberName(candidate)}`;
+  const match = await playShip(side, milestoneCheckpoint(candidate.run, candidate.generation), master, key, file, log, workers);
+  const entry = shipEntry(candidate, master, match, file.simulations, today());
+  // The payload's record first computed, so a missing file fails before the log names it.
+  const next = entry.decision === 'accept' ? shippedFor(candidate) : null;
+  appendLog(entry);
+  if (next !== null) writeShipped(next);
+  process.stdout.write(`ship ${memberName(candidate)}: ${entry.reason}\n`);
+}
+
+/** `ship <checkpoint>` by hand ([0012 T12-34]): a logged milestone against `master`, whatever its rating. */
+export async function shipCommand(checkpoint: string, workers: number): Promise<void> {
+  await withLock('ship', async () => {
+    const candidate = parseMilestonePath(checkpoint);
+    const log = readLog();
+    const master = currentMaster(log);
+    if (master === null) throw new Error('no master in the log: `ship pin <run>:<generation> --reason …` names the first');
+    const file = readAnchors();
+    const { config } = loggedMember(candidate);
+    const scratch = join(RUNS, 'anchors');
+    mkdirSync(scratch, { recursive: true });
+    const side = { binary: buildRelease(), config: anchorConfig(join(scratch, 'ship-config.json'), config, file.simulations) };
+    await playAndShip(candidate, master, side, file, log, workers);
+  });
+}
+
+/**
+ * `ship pin <run>:<generation> --reason …` ([0012 T12-35]): names a logged
+ * milestone `master` without a match, with the reason in the log. For the
+ * first `master` under the ship match, and for a person's own call.
+ */
+export async function shipPin(m: { run: string; generation: number }, reason: string): Promise<void> {
+  // The lock: a pin landing inside a loop's ship match would leave that match
+  // naming a master that is no longer the master of its time.
+  await withLock('ship pin', () => {
+    loggedMember(m);
+    if (reason.length < 20) throw new Error('a pin needs its reason, at least a sentence');
+    const next = shippedFor(m);
+    appendLog({ kind: 'ship', run: m.run, date: today(), generation: m.generation, decision: 'pin', master: null, reason });
+    writeShipped(next);
+    process.stdout.write(`master is ${memberName(m)}, pinned: ${reason}\n`);
+  });
 }
 
 /** A config at the anchors' count, which both sides of an anchored game read. */
@@ -843,6 +979,16 @@ export async function trainLoop(
     if (!(tp.minutesPerGeneration <= config.maxGenerationMinutes)) {
       throw new Error(`self-play would take ${tp.minutesPerGeneration} minutes a generation, past ${config.maxGenerationMinutes}`);
     }
+    // [0012 T12-34]: a ship match an interruption left unplayed is played
+    // first, before a stop or a done can turn the loop away: it settles
+    // `master`, not the run's course.
+    const bin = buildRelease();
+    if (config.yardstick === 'anchors' && anchorsExist()) {
+      const file = readAnchors();
+      const side = { binary: bin, config: anchorConfig(join(p.dir, 'anchors-config.json'), config, file.simulations) };
+      await catchUpShips(name, side, file, opts.workers);
+      warnOwedElsewhere(name, file);
+    }
     const log = readLog();
     if (isDone(log, name)) throw new Error(`run ${name} is done: its log holds a done`);
     if (isStopped(log, name)) {
@@ -859,7 +1005,6 @@ export async function trainLoop(
       ? readJson<RunState>(p.state)
       : { generation: 0, startedAt: today() };
     writeJson(p.state, state);
-    const bin = buildRelease();
     for (;;) {
       const g = state.generation;
       if (opts.until !== undefined && g >= opts.until) return;

@@ -1044,7 +1044,9 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
   player weaker than the one the gate measures. That is why [Z11-33]'s `done` always goes through
   the gate, and why the gate is triggered below the bar it tests ([Z11-33], [Z11-61]).*
 
-- **[Z11-33]** Progress is the sum of the ladder's winrates. Within one run, a milestone
+- **[Z11-33]** A run whose config sets `stopPatience` decides `stop` by [Z11-90] instead of this
+  table's second row. Every run before 2026-10-26 was decided by this table. Progress is the sum
+  of the ladder's winrates. Within one run, a milestone
   **improves** when its progress is at least the progress of the milestone before it. Every
   comparison of progress, here and in [Z11-37], MUST be made on the sums rounded to nine decimals,
   never on floating-point sums as they fall: `1 + 0.59 + 0.255 + 0.045` is `1.8899999999999997`
@@ -1122,6 +1124,43 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
   runs in four end `done` rather than `stop`. The remaining remedy is the person: every `stop`
   names its numbers ([Z11-34]), and [Z11-36] lets them continue. The 0.05 gap between the two
   simulation counts is an assumption the first milestones and gates will measure.*
+
+- **[Z11-90]** A run's config MAY set `stopPatience`, a whole number from 1, and anything else
+  MUST be refused when it is read (0 would stop at a new best). `train init` MUST write
+  5 on a run whose yardstick is `anchors` unless its parent's config holds one, which it
+  inherits. It is a measurement setting like `yardstick`, not a change in `from.changes`. While
+  it is set:
+  - a milestone **improves** when its measure exceeds, at [Z11-33]'s nine decimals, the best of
+    every milestone since the run's last fresh start ([Z11-33]'s fresh starts);
+  - a fresh start is itself the new best;
+  - the decision MUST be `stop` once `stopPatience` milestones in a row have not improved, and
+    `continue` before;
+  - the gate rows of [Z11-33] stand as they are.
+
+  A milestone's reason MUST name the best it was measured against and how many of the patience
+  have passed without beating it. The replay of [Z11-45] MUST decide each entry by the patience
+  its own copy of the config holds, so every earlier entry replays by [Z11-33]'s table.
+
+  *[Z11-33]'s rule looks one milestone back. On the anchors' ±7 that stops a level run soon, but
+  it also stops a slowly climbing one: 0.26 within ten milestones at 5 Elo a milestone. And
+  `sixteenth` alternated up and down for 30 milestones without two falls in a row, which a level
+  run does 0.5% of the time. Measured against the best since the last fresh start, the bar is
+  biased upward, the ratchet [Z11-33]'s note warns about. That bias is what stops a level run,
+  and the committed simulation of [Z11-56] shows it costs a climbing run far less:*
+
+  | rating per milestone (σ ≈ 7.1 Elo, 800 games an anchor), patience 5 | P(`stop`) within 10 / 20 / 40 milestones |
+  | --- | --- |
+  | flat | 0.65 / 0.99 / 1.00 |
+  | climbs 2 Elo | 0.19 / 0.49 / 0.80 |
+  | climbs 3 Elo | 0.07 / 0.20 / 0.40 |
+  | climbs 5 Elo | 0.00 / 0.01 / 0.03 |
+  | climbs 10 Elo | 0.00 / 0.00 / 0.00 |
+  | climbs 20 Elo | 0.00 / 0.00 / 0.00 |
+
+  *As `pnpm -F alphazero-bot stop-simulation` prints it, 20 000 runs a row. No run stops before
+  milestone `stopPatience + 1`: the first milestone is a fresh start, and so the first best.
+  `--patience 4` prints patience 4's: it stops a level run sooner (0.82 within ten) but a 2 Elo
+  climb more often (0.38). The person chose 5.*
 
 - **[Z11-73]** A run's config MAY set `yardstick` to `pool`; absent means `ladder`, the yardstick of
   [Z11-31]. A run started from another inherits its parent's unless `train init` is given
@@ -1527,6 +1566,7 @@ not required: [Z11-25] makes the file the record, and a later run MAY change any
 | `cheapSimulations`, `fullSearchFraction` | absent, meaning off | [Z11-75] |
 | `lookaheadDeals`, `lookaheadAlpha` | absent, meaning off | [Z11-81]; run `thirteenth` sets 8 and 0.9 |
 | `improvedCScale`, `improvedCVisit` | absent, meaning the visits are the target | [Z11-87]; mctx's are 0.1 and 50 |
+| `stopPatience` | 5 on an anchors run, absent otherwise | [Z11-90]; absent is [Z11-33]'s rule |
 | `gumbelConsidered`, `gumbelScale` | absent, meaning PUCT | [Z11-89]; mctx's considered count is 16 |
 | `milestoneSimulations` | 800 | [Z11-59]; lowered to `playSimulations` if that is smaller |
 | `cpuct`, `fpu` | 1.25, 0.25 | |
@@ -1768,6 +1808,8 @@ this package, and MUST be corrected in the same change.
 | A Gumbel game's move taken from the visits; its target left as the visits | [Z11-89]'s self-play case |
 | The Gumbel keys reaching `play`, milestones or `latency`; a Gumbel run with a lookahead | [Z11-89]'s settings case |
 | The refusal of the Gumbel keys dropped from `train init` | [Z11-89]'s `--set` case |
+| The best not reset at a fresh start; equalling the best counted as beating it; the patience off by one; its range check dropped | [Z11-90]'s cases |
+| `train init` ignoring the parent's patience | [Z11-90]'s `train init` case |
 | The refusal of the improved keys dropped from `train init` | [Z11-87]'s `--set` case |
 | The target normalised by the legal count instead of its sum | [Z11-87]'s trainer case |
 

@@ -23,6 +23,7 @@
     "augment-fixtures": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs augment-fixtures",
     "pool": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs pool",
     "anchors": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs anchors",
+    "ship": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs ship",
     "web": "node tools/web.mjs",
     "web-latency": "node tools/web.mjs && node tools/bundle.mjs && node node_modules/.alphazero/web-latency.mjs",
     "tile": "node tile/bundle.mjs && node node_modules/.alphazero/tile.mjs",

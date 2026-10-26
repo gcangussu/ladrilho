@@ -21,6 +21,7 @@ import { alphazero } from '../eval/crate.js';
 import { corpusBlocks, parseBlock } from '../eval/blocks.js';
 import { LOG, PACKAGE, REPO, binary } from '../eval/paths.js';
 import { SOURCE_PATHS, ladderPaths } from '../eval/provenance.js';
+import { currentMaster } from '../eval/ship.js';
 import { shippedMilestone } from '../tools/web.mjs';
 import { canonicalWords as webWords } from '../web/canonical.js';
 import { CPUCT, ENDGAME_NODES, FPU, SHIPPED as PAYLOAD_SHIPPED } from '../web/dist/payload.js';
@@ -303,6 +304,7 @@ interface LogEntry {
   generation: number;
   pool?: { rating?: number };
   anchored?: { rating?: number };
+  decision?: string;
 }
 
 interface Anchors {
@@ -334,7 +336,12 @@ function strongest(log: LogEntry[], anchors: Anchors | null = null): { run: stri
   return b === null ? null : { run: b.run, generation: b.generation };
 }
 
-describe('the shipped milestone [T12-9], [T12-10], [T12-11]', () => {
+/** [T12-10], [T12-35]: the log's `master` once it names one, the strongest before. */
+function masterOf(log: LogEntry[], anchors: Anchors | null): { run: string; generation: number } | null {
+  return currentMaster(log as unknown as Parameters<typeof currentMaster>[0]) ?? strongest(log, anchors);
+}
+
+describe('the shipped milestone [T12-9], [T12-10], [T12-11], [T12-35]', () => {
   const shipped = JSON.parse(read('web/shipped.json'));
 
   it('is a committed, logged milestone whose files match', () => {
@@ -345,15 +352,24 @@ describe('the shipped milestone [T12-9], [T12-10], [T12-11]', () => {
     expect(() => shippedMilestone(shipped)).not.toThrow();
   });
 
-  // Mutation, seen red ([T12-29]), in a copy with its anchor confirmed:
-  // `shipped.json` naming third/90, with its own sha256s, fails this case.
-  it('is the strongest by training\'s own record', () => {
-    // A stronger milestone committed without naming it here fails this case:
-    // the swap is the one-line edit that belongs in the same commit.
+  // Mutations, seen red ([T12-29]), each in a copy with its anchor confirmed:
+  // `shipped.json` naming third/90, with its own sha256s; `master` read as the
+  // strongest even once the log names one ([T12-35]).
+  it('is master as the log names it, or before any ship entry the strongest by training\'s own record', () => {
+    // [T12-35]: an accepted ship match not followed here fails this case: the
+    // swap is the edit that belongs in the commit that logs the match.
     const log = JSON.parse(readFileSync(LOG, 'utf8')) as LogEntry[];
     const anchorsPath = join(PACKAGE, 'milestones', 'anchors.json');
     const anchors = existsSync(anchorsPath) ? (JSON.parse(readFileSync(anchorsPath, 'utf8')) as Anchors) : null;
-    expect({ run: shipped.run, generation: shipped.generation }).toEqual(strongest(log, anchors));
+    expect({ run: shipped.run, generation: shipped.generation }).toEqual(masterOf(log, anchors));
+    const fixedAnchors: Anchors = { members: [{ run: 'x', generation: 1, rating: 856 }] };
+    const pinned = (run: string, generation: number, decision = 'pin'): LogEntry => ({ kind: 'ship', run, generation, decision });
+    const high: LogEntry = { kind: 'milestone', run: 'b', generation: 2, anchored: { rating: 900 } };
+    // Once the log names a master, a higher rating alone does not replace it.
+    expect(masterOf([pinned('a', 1), high], fixedAnchors)).toEqual({ run: 'a', generation: 1 });
+    expect(masterOf([pinned('a', 1), pinned('b', 2, 'reject')], fixedAnchors)).toEqual({ run: 'a', generation: 1 });
+    expect(masterOf([pinned('a', 1), pinned('b', 2, 'accept')], fixedAnchors)).toEqual({ run: 'b', generation: 2 });
+    expect(masterOf([high], fixedAnchors)).toEqual({ run: 'b', generation: 2 });
     const m = (run: string, generation: number, rating?: number): LogEntry => ({
       kind: 'milestone', run, generation, ...(rating === undefined ? {} : { pool: { rating } }),
     });

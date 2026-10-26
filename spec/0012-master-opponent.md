@@ -280,19 +280,113 @@ interface Seating {
 - **[T12-9]** `packages/alphazero-bot/web/shipped.json` MUST be committed and MUST name a
   **logged** milestone ([0011 Z11-4]) whose checkpoint and parity file are committed and match
   its two sha256s, and MUST carry the endgame cap ([T12-33]).
-- **[T12-10]** The shipped milestone MUST be the strongest on the anchors' scale once
-  `milestones/anchors.json` exists ([0011 Z11-84]): of the anchors at their ratings in the file,
-  and of every logged entry with an `anchored.rating` (milestones and `rating` entries), the
-  highest, ties to the anchor, then to the earlier entry. Until the file exists, it MUST be the
-  logged `milestone` entry with the highest `pool.rating`, ties to the earlier entry, entries
-  without one (the ladder's) not being candidates. A test MUST assert both.
+- **[T12-10]** Once the log holds a `ship` entry ([T12-35]), the shipped milestone MUST be
+  `master` as the log names it. Before then it was decided by rating, which a test still asserts
+  of a log without one:
+  - **Once `milestones/anchors.json` exists ([0011 Z11-84]):** the strongest on the anchors'
+    scale. That is the highest of the anchors at their ratings in the file and of every logged
+    entry with an `anchored.rating` (milestones and `rating` entries), ties to the anchor, then
+    to the earlier entry.
+  - **Before the file exists:** the logged `milestone` entry with the highest `pool.rating`,
+    ties to the earlier entry. Entries without one (the ladder's) are not candidates.
+
+  A test MUST assert all three.
 
   *Intent 0010: the strongest player we have, by training's own record, and swapping in a
   stronger one "is a routine step, not a project". This test is what makes it routine. Committing
   a milestone that out-rates the shipped one fails the suite until `shipped.json` names it, so the
   swap is one edit in the same commit. Pool ratings share one anchor, `third/90` at 0
   ([0011 Z11-73]), so they compare across runs, but their scale drifted upward by more than any
-  run gained ([0011 Z11-74]), which is why the anchors' scale now decides.*
+  run gained ([0011 Z11-74]), which is why the anchors' scale decided next. The highest of many
+  ratings of about ±7 is biased upward too. `sixteenth`/20 rated 876 on the anchors and shipped,
+  then scored −12 Elo (−42 to +19) against `twelfth`/120 in 500 games at the shipped settings.
+  So a rating now only makes a candidate, and a direct match decides ([T12-34]).*
+
+- **[T12-34]** A logged anchored milestone ([0011 Z11-85]) that rates above `master` MUST be a
+  **candidate**. `master`'s rating is its anchor's in the file if it is an anchor, otherwise its
+  latest logged `anchored.rating`. A candidate is **owed** a match when all of these hold:
+  - it was rated above the `master` of its time. Before the log's first `ship` entry there is
+    none, and rating alone decided ([T12-10]);
+  - it is still above today's `master`, so `master` itself is never owed one;
+  - no `ship` entry names it since, a pin included.
+
+  The loop MUST play every match its run owes, recomputing what is owed before each one: right
+  after logging a milestone, and when it starts, before refusing a stopped or done run. So a
+  match that was interrupted is played when the loop comes back. Only a run's own loop settles
+  its run's matches; at its start it MUST name every other run's owed match, with the
+  `pnpm -F alphazero-bot ship <checkpoint>` that plays it. A `master` with no rating on the
+  anchors MUST stop the loop with that message, rather than leave every candidate unplayed.
+  `ship <checkpoint>` MUST play the match by hand for any logged milestone but `master`, and no
+  path may play `master` against itself. The match:
+  - The candidate plays `master`, both by the milestone search at the anchors' simulation count,
+    with no proof.
+  - Each seed is played twice, the candidate first and then second ([0005 M5-3]). The pair's
+    score, the mean of its two games, is one observation, counted in quarters.
+  - Seeds come from [0011 Z11-85]'s allocation, keyed `ship:<run>/<generation>`, over
+    `maxGames / 2` seeds.
+  - After every `batchPairs` pairs (200), it computes the log-likelihood ratio of H1 (the
+    candidate is at least `elo1` = +15 Elo better) over H0 (at most `elo0` = 0). It uses the
+    normal approximation on pair scores: `n · (s1 − s0) · (2m − s0 − s1) / (2v)`, where `s0` and
+    `s1` are the expected scores at `elo0` and `elo1`, `m` and `v` the pairs' mean and variance,
+    `v` floored at 10⁻⁹.
+  - The first look at or above `ln((1 − β) / α)` MUST accept, and the first at or below
+    `ln(β / (1 − α))` MUST reject, with α = β = 0.05. Reaching `maxGames`, 8 000, without
+    either MUST reject.
+
+  An accepted match names the candidate in `web/shipped.json`. The loop writes that file and
+  never commits it.
+
+  *As `pnpm -F alphazero-bot stop-simulation` prints it ([0011 Z11-56]), calling `verdict`
+  itself. The model gives each pair's first game the first seat's 8.4 points, the self-play
+  figure of 58.4%, and its second game minus them, with no draws:*
+
+  | True edge over `master` (first seat +8.4 points, 4000 matches a row) | Ships | Mean games | 90th percentile games |
+  | --- | --- | --- | --- |
+  | -15 Elo | 0.00 | 1328 | 2000 |
+  | 0 Elo | 0.03 | 3401 | 6800 |
+  | +7 Elo | 0.33 | 5009 | 8000 |
+  | +15 Elo | 0.93 | 3322 | 6400 |
+  | +25 Elo | 1.00 | 1659 | 2800 |
+  | +40 Elo | 1.00 | 954 | 1200 |
+
+  *At 200 simulations the anchors play about 2 400 games in seven minutes, so a typical match is
+  about ten. 200 simulations was checked as a fair proxy for the shipped 10 000 (10-24).*
+
+  *The matches add up. A level run oscillating around `master`'s rating, as `sixteenth` did
+  around 856, makes a candidate of about half its milestones, and each ships a player of equal
+  strength 3% of the time. Over 30 milestones that is about a one-in-three chance of a new
+  `master` that is no better. H0 is "no better", not "worse", so such a `master` costs nothing in
+  strength. The patience rule ([0011 Z11-90]) also keeps level runs short.*
+
+- **[T12-35]** A ship match MUST append a `ship` entry to `milestones/log.json`. The entry
+  records:
+  - the candidate as `run` and `generation`;
+  - `decision`, which is `accept` or `reject`;
+  - `master`;
+  - `simulations` and `seedBase`;
+  - `test`, its six parameters;
+  - `looks`, the cumulative five quarter counts after each look;
+  - `seconds`;
+  - a `reason`.
+
+  `pnpm -F alphazero-bot ship pin <run>:<generation> --reason "…"` MUST append a `ship` entry
+  with `decision: pin` and `master: null`, naming a logged milestone `master` without a match.
+  It MUST hold the package's lock, as the loop and `ship` do, so a pin cannot land inside a
+  match. Every writer of a `ship` entry that names a new `master` MUST compute `shipped.json`'s
+  record before appending the entry, so a missing file fails before the log names it.
+  That is for the first `master` under [T12-34], and for a person's own call, with the reason
+  written down. `master` MUST be the milestone of the latest `ship` entry whose decision is
+  `accept` or `pin`. The replay of [0011 Z11-45] MUST hold every `ship` entry to its own numbers:
+  - it names a milestone logged before it;
+  - a played one names the `master` of its time, and is not that `master`;
+  - its test is [T12-34]'s, and its simulation count the anchors';
+  - it has looks and a seed base;
+  - each look is one more batch than the last, and cumulative;
+  - no look before the last decided, and none ran past `maxGames`;
+  - its decision is the test's verdict on its looks;
+  - its seeds, as many as its pairs, were used by no earlier record.
+
+  A ship entry takes no part in a run's stop rule. Later records' seeds avoid its seeds.
 
 - **[T12-11]** The web crate, `shipped.json` and `web/dist/` are not source paths of
   [0011 Z11-63]. Building or swapping the shipped player never marks a training build dirty and
@@ -544,6 +638,15 @@ These requirements were proposals for *0006*, in the manner of [0008 A8-33]. Eac
   | The web crate calling `choose` instead of `choose_memoised` | [T12-3]'s source check |
   | `shipped.json` naming `third/90` | [T12-10] |
   | The strongest read from pool ratings while the anchors exist | [T12-10]'s anchored cases |
+  | `master` read as the strongest once the log names one | [T12-10]'s case for a log with a `ship` entry |
+  | H0 and H1 swapped; the variance left out of the ratio | [T12-34]'s ratio case |
+  | The cap read as accept; an early look's verdict undone by a later one | [T12-34]'s verdict case |
+  | The seeds not doubled, so a seed is played from one seat | [T12-34]'s pairing case |
+  | A rejected match counted as naming `master` | [T12-35]'s `master` case |
+  | A ship entry's verdict, `master`, batches, cumulation or seeds not checked by the replay | [T12-35]'s cases in [0011 Z11-45]'s replay |
+  | The replay letting a match play on after a look decided, or past the cap; or not holding its test and count to [T12-34]'s | [T12-35]'s cases in the replay |
+  | A milestone with its own ship entry still owed one; a pin not settling the candidate it names; one below today's `master` owed one; a master with no rating skipped in silence | [T12-34]'s owed-match case |
+  | The replay accepting `master` played against itself | [T12-35]'s cases in the replay |
   | The first worker's module importing `alphazero-bot/web` | [T12-21]'s graph check |
   | The web crate's player building its `SearchConfig` with `endgame_nodes: 0` | [T12-26]'s late-position case, and [T12-27] |
   | `load` passing a fixed cap to the player instead of its argument | [T12-26]'s late-position case |

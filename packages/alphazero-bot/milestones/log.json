@@ -471581,5 +471581,14 @@
     },
     "decision": "continue",
     "reason": "rating 864 against the anchors (±7 over 800 games an anchor); improved on 861 at generation 290; the anchors have no gate: continue."
+  },
+  {
+    "kind": "ship",
+    "run": "twelfth",
+    "date": "2026-10-26T10:54:11.304Z",
+    "generation": 120,
+    "decision": "pin",
+    "master": null,
+    "reason": "The first master under the ship match ([T12-34]). twelfth/120 is the reference every run since was measured against directly, and the anchors' pinned 856. sixteenth/20, shipped by rating at 876, scored 48.3% against it over 500 games at the shipped settings (10 000 simulations, proof at 300 000), -12 Elo (-42 to +19): its rating was the best of thirty noisy draws, not a stronger player."
   }
 ]

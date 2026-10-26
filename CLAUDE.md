@@ -74,10 +74,12 @@ The interface offers it as **`master`** (spec 0012), the crate's own library com
 WebAssembly by a thin export crate under `packages/alphazero-bot/web` — no player code there, and
 raw `extern "C"` exports rather than `wasm-bindgen`, for the reasons 0012 records. It runs in a
 second worker, so a game without a `master` seat never loads its payload. Two things cost time if
-forgotten. The milestone it ships is named by `web/shipped.json`, and a test holds that to the
-highest rating in the log — on the anchors' scale once `milestones/anchors.json` exists, the
-pool's before that: **committing a milestone that out-rates it fails the suite until
-`shipped.json` names it** — one edit, in the same commit. And the payload (the module and the
+forgotten. The milestone it ships is named by `web/shipped.json`, and a test holds that to
+`master` as `milestones/log.json` names it ([0012 T12-35]). A milestone that out-rates `master`
+on the anchors is only a candidate: it replaces `master` by winning a direct sequential match
+([T12-34]), which the loop plays and `pnpm -F alphazero-bot ship <checkpoint>` plays by hand,
+writing `shipped.json` on a win. **Commit that file with the log entry, or the suite fails.**
+And the payload (the module and the
 weights as base64, git-ignored) is built by `pnpm -F alphazero-bot web`, which `ui`'s scripts run
 first; `rust-toolchain.toml` names the `wasm32-unknown-unknown` target for it.
 
@@ -214,6 +216,8 @@ pnpm -F alphazero-bot anchors init --members seventh:170,ninth:110,twelfth:120 -
                                                # scale drifted ([Z11-74]), so new runs use --yardstick anchors
 pnpm -F alphazero-bot anchors add <run>:<g> --games 4000   # a stronger anchor, rated afresh
 pnpm -F alphazero-bot anchors rate <checkpoint>             # a logged milestone on the anchors' scale
+pnpm -F alphazero-bot ship <checkpoint>                     # [T12-34]: the direct match against master
+pnpm -F alphazero-bot ship pin <run>:<g> --reason "…"       # [T12-35]: name master without a match
 pnpm -F alphazero-bot web                      # [T12-7]: the master's payload, from web/shipped.json
 pnpm -F alphazero-bot web-latency              # [T12-25]: master's moves at the default; idle machine
 pnpm -F alphazero-bot tile play --us 800 --them nnue-ms:1000@8   # master vs danluu.com/game/tile's AI:

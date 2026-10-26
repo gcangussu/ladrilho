@@ -21,14 +21,18 @@ import {
   parseFrom,
   parseSet,
   poolInit,
+  shipCommand,
+  shipPin,
+  STOP_PATIENCE,
   throughputLane,
   trainLoop,
   type Changeable,
 } from './loop.js';
+import { anchorsExist, readAnchors } from './anchors.js';
 import { CORPUS } from './paths.js';
 import { seriesWorker } from './series.js';
 import { POOL, readSeed } from './pool.js';
-import { poolTable, table } from './stop-rule-simulation.js';
+import { patienceTable, poolTable, shipTable, table } from './stop-rule-simulation.js';
 
 function option(args: string[], name: string): string | undefined {
   const i = args.indexOf(`--${name}`);
@@ -139,11 +143,25 @@ async function main(): Promise<void> {
       if (sub === 'rate') return anchorsRate(resolve(rest[1] ?? ''), workers(rest));
       throw new Error('usage: anchors init --members <run>:<g>,… --pin <run>:<g>=<rating> --games <n> | anchors add <run>:<g> --games <n> | anchors rate <checkpoint>');
     }
+    case 'ship': {
+      // [0012 T12-34], [T12-35].
+      if (rest[0] === 'pin') {
+        const reason = option(rest, 'reason');
+        if (reason === undefined) throw new Error('usage: ship pin <run>:<generation> --reason "…"');
+        return shipPin(parseFrom(rest[1] ?? ''), reason);
+      }
+      return shipCommand(resolve(rest[0] ?? ''), workers(rest));
+    }
     case 'stop-simulation':
       process.stdout.write(`${table(Number(option(rest, 'runs') ?? 20000))}\n\n`);
       // The committed pool's own count, so the spec's table is what this prints ([Z11-56]).
       const poolGames = option(rest, 'pool-games') ?? (existsSync(POOL) ? String(readSeed().gamesPerMember) : '300');
-      process.stdout.write(`${poolTable(Number(option(rest, 'runs') ?? 20000), Number(poolGames))}\n`);
+      process.stdout.write(`${poolTable(Number(option(rest, 'runs') ?? 20000), Number(poolGames))}\n\n`);
+      // [Z11-90]: the anchors' own count and the patience new runs take.
+      const anchorGames = anchorsExist() ? readAnchors().gamesPerMember : 800;
+      process.stdout.write(`${patienceTable(Number(option(rest, 'runs') ?? 20000), anchorGames, Number(option(rest, 'patience') ?? STOP_PATIENCE))}\n\n`);
+      // [0012 T12-34]: the ship match, 4 000 matches a row.
+      process.stdout.write(`${shipTable(Number(option(rest, 'ship-runs') ?? 4000))}\n`);
       return;
     case 'latency-corpus': {
       const c = recordCorpus();
@@ -163,7 +181,7 @@ async function main(): Promise<void> {
       throw new Error(
         'usage: train init --run <name> [--from <run>:<generation>] [--augment none|displays] [--set <setting>=<n>]… [--gate end|off] [--yardstick ladder|pool|anchors] | train --run <name> [--override "<reason>"] | latency --run <name> | ' +
           'throughput --run <name> | milestone <checkpoint> | panel <checkpoint> [--against <checkpoint>] | gate <checkpoint> | stop-simulation | latency-corpus | ' +
-          'augment-fixtures | pool init --members <run>:<g>,… --games <n> | anchors init|add|rate …',
+          'augment-fixtures | pool init --members <run>:<g>,… --games <n> | anchors init|add|rate … | ship <checkpoint> | ship pin <run>:<g> --reason "…"',
       );
   }
 }

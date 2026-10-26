@@ -11,7 +11,9 @@ import {
   measureOf,
   isDone,
   isStopped,
+  patienceOf,
   ruleEntries,
+  stopPatience,
   type LogEntry,
 } from '../eval/decision.js';
 import { gate, milestone, override, results } from './support/entries.js';
@@ -245,6 +247,58 @@ describe('a pool milestone [Z11-73]', () => {
     expect(add(55)).toBe('continue');
     expect(add(50)).toBe('continue');
     expect(add(45)).toBe('stop');
+  });
+});
+
+describe('the patience rule [Z11-90]', () => {
+  /**
+   * Mutations, seen red ([Z11-48]): the best not reset at a fresh start; a
+   * milestone that only equals the best counted as a new one (`>=` for `>`);
+   * the patience off by one (`>` for `>=`).
+   */
+  it('stops once `patience` milestones in a row have not beaten the best', () => {
+    const r = (rating: number) => ({ rating, ladderHash: 'h' });
+    const log: LogEntry[] = [];
+    const add = (rating: number, patience = 3) => {
+      const entries = ruleEntries(log, 'p');
+      const decision = decide(entries, r(rating), null, patience);
+      log.push({ ...milestone('p', results(0), decision), results: {}, progress: measureOf(r(rating)) });
+      return decision;
+    };
+    // Today's rule would stop at the second fall in a row; patience counts
+    // against the best instead, so a fall and a partial recovery go on.
+    expect(add(50)).toBe('continue');
+    expect(add(60)).toBe('continue');
+    expect(add(55)).toBe('continue');
+    expect(add(50)).toBe('continue');
+    // Equal to the best is not a new best: the third without one stops.
+    expect(add(60)).toBe('stop');
+    expect(patienceOf(ruleEntries(log.slice(0, 4), 'p'), r(60))).toMatchObject({ newBest: false, without: 3 });
+    // An override starts afresh: its first milestone is the new best, however low.
+    log.push(override('p'));
+    expect(add(10)).toBe('continue');
+    expect(patienceOf(ruleEntries(log, 'p'), r(20)).newBest).toBe(true);
+    expect(add(20)).toBe('continue');
+    expect(add(19)).toBe('continue');
+    expect(add(19)).toBe('continue');
+    expect(add(20)).toBe('stop');
+  });
+
+  it('is off without a patience, and read from a config only as a number', () => {
+    const r = (rating: number) => ({ rating, ladderHash: 'h' });
+    const log: LogEntry[] = [];
+    for (const x of [50, 60, 55]) {
+      const decision = decide(ruleEntries(log, 'q'), r(x), null);
+      log.push({ ...milestone('q', results(0), decision), results: {}, progress: x });
+    }
+    // Two falls in a row against the previous milestone: [Z11-33]'s stop.
+    expect(decide(ruleEntries(log, 'q'), r(54), null)).toBe('stop');
+    expect(decide(ruleEntries(log, 'q'), r(54), null, 5)).toBe('continue');
+    expect(stopPatience({ stopPatience: 5 })).toBe(5);
+    expect(stopPatience({})).toBeUndefined();
+    expect(stopPatience(undefined)).toBeUndefined();
+    // Mutation, seen red ([Z11-48]): the range check dropped.
+    for (const bad of [0, -1, 2.5, '5']) expect(() => stopPatience({ stopPatience: bad })).toThrow(/whole number/);
   });
 });
 

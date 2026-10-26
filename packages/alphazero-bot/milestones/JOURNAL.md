@@ -1172,11 +1172,11 @@ direct match before it is believed.
 to about 1.35 by generation 30 and stayed there. The targets' entropy held at about 0.236 all
 run.
 
-**The stop rule.** It never fired. It needs two milestones in a row without improvement, and this
-run alternated up and down for 130 generations, so it would have run on indefinitely. A rule
-that compares each milestone with the one before it cannot stop a level run with this much
-noise. That is worth fixing in [Z11-33] before the next long run. The anchors' ±7 is the scale to
-reason with.
+**The stop rule.** It never fired. It needs two milestones in a row without improvement, and
+this run alternated up and down for 130 generations. (Corrected 10-26: the rule can stop a level
+run, and usually does, 0.78 within ten milestones. Thirty level milestones without two falls in a
+row happen 0.5% of the time, so this run was unusual, not proof the rule cannot stop. Its real
+weakness is stopping slowly climbing runs; see the next entries.)
 
 **Reading.** A target that weights actions by value, not by visits, does not move the 4 × 256
 network from `twelfth`/120 either. That is the fourth run in a row to end level. As planned, the
@@ -1197,6 +1197,44 @@ way the old pool did, only less.
 
 **Verdict.** The improved policy as the target, with search and moves unchanged, does not move
 the network. Gumbel's next test is the from-scratch pair, after Phase 1's soundness checks.
+
+## A new stop rule and a new shipped rule (10-26)
+
+**Stop rule ([Z11-90]).** A run on the anchors now stops once five milestones in a row have not
+beaten its best since its last fresh start. [Z11-33]'s rule looked one milestone back: on the
+anchors' ±7 it stopped a run climbing 5 Elo a milestone within ten milestones about a quarter of
+the time. With patience 5 a level run still stops, 0.65 within ten milestones and 0.99 within
+twenty, and a 5 Elo climber almost never does (0.00 and 0.01). The person chose 5 over 4, which
+stops a level run sooner (0.82 within ten) but a 2 Elo climber more often (0.38 against 0.19).
+Runs before this one keep the old rule: their configs have no `stopPatience`, and the log
+replays as it was decided.
+
+**Shipped rule ([T12-34], [T12-35]).** A milestone that out-rates `master` on the anchors is
+now only a candidate. It replaces `master` only by winning a sequential test against it:
+- pairs of games on one seed, from both seats;
+- 200 simulations, a checked proxy for the shipped 10 000;
+- H0 0 Elo against H1 +15, with α = β = 0.05;
+- a look every 200 pairs, rejecting at 8 000 games.
+
+Simulated by committed code, an equal candidate ships 3% of the time, and one +15 Elo better
+93%, in about 3 400 games, roughly ten minutes. Every match is logged and replayed from its
+counts. A match that is interrupted stays owed, and the loop plays it when it comes back.
+
+**Reviewed.** A fresh Linus-style reviewer confirmed the statistics, rerunning both tables. It
+found four blockers, all fixed and tested:
+- an interrupted ship match was lost for good;
+- `ship pin` took no lock;
+- the replay let a match that played on after deciding, or past the cap, replay green;
+- the operating-characteristic table came from no committed code.
+
+  Its next round found that pinning an owed candidate left it owed, so the loop would have made
+  `master` play itself, up to 8 000 games. A pin now settles the candidate it names. That case
+  is tested, including one where a later `rating` entry puts `master`'s rating below the
+  milestone's own. The third round signed off.
+
+**`master` is `twelfth`/120 again**, pinned by hand as the first `master` under the ship match.
+It is the reference every run since was measured against directly. `sixteenth`/20, shipped by
+rating at 876, scored −12 Elo (−42 to +19) against it in 500 games at the shipped settings.
 
 ## Next
 

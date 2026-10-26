@@ -56,6 +56,12 @@ export interface RunConfig {
    */
   yardstick?: 'ladder' | 'pool' | 'anchors';
   /**
+   * [Z11-90]: `stop` once this many milestones in a row have not beaten the
+   * run's best since its last fresh start. Absent is [Z11-33]'s rule, which
+   * every run before it was decided by; `train init` writes 5 on an anchors run.
+   */
+  stopPatience?: number;
+  /**
    * [Z11-75]: playout-cap randomisation. A share `fullSearchFraction` of
    * self-play moves get `selfPlaySimulations` and the noise and become move
    * samples; the rest get `cheapSimulations`, no noise, and become value-only

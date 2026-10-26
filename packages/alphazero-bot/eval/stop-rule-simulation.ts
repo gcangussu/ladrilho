@@ -8,6 +8,8 @@
  * 0.60, its null and latency left out. A climbing run starts at 0.30 against
  * `sharp` at the milestone count and is followed until it reaches 0.60 there.
  *
+ * Beside it, [Z11-90]'s patience rows and [0012 T12-34]'s ship match.
+ *
  *   pnpm -F alphazero-bot stop-simulation
  */
 
@@ -23,6 +25,7 @@ import {
   type MilestoneEntry,
   type MilestoneResults,
 } from './decision.js';
+import { SHIP_TEST, verdict, type Pentanomial, type ShipTest } from './ship.js';
 
 /** `mulberry32`: seeded, so the table reproduces. */
 function generator(seed: number): () => number {
@@ -152,6 +155,7 @@ export function simulatePool(
   gamesPerMember: number,
   runs: number,
   seed = 20261001,
+  patience?: number,
 ): { stop: number; se: number } {
   const random = generator(seed);
   const se = (2 * ELO_SCALE) / Math.sqrt(3 * gamesPerMember);
@@ -161,7 +165,7 @@ export function simulatePool(
     const entries: LogEntry[] = [];
     for (let m = 0; m < milestones; m++) {
       const results: MilestoneResults = { rating: climbPerMilestone * m + se * normal(), ladderHash: 'model' };
-      const decision = decide(entries, results, null);
+      const decision = decide(entries, results, null, patience);
       entries.push({
         kind: 'milestone',
         run: 'model',
@@ -185,6 +189,26 @@ export function simulatePool(
   return { stop: stops / runs, se };
 }
 
+/**
+ * [Z11-90]'s rows: the patience rule on the anchors' rating, whose standard
+ * error at `gamesPerMember` games against each of three anchors is the
+ * pool's model's. P(`stop`) within 10, 20 and 40 milestones, flat and
+ * climbing. None stops sooner than `patience + 1` milestones: the first is a
+ * fresh start, and so the first best.
+ */
+export function patienceTable(runs: number, gamesPerMember: number, patience: number): string {
+  const se = simulatePool(0, 1, gamesPerMember, 1).se;
+  const lines = [
+    `| rating per milestone (σ ≈ ${se.toFixed(1)} Elo, ${gamesPerMember} games an anchor), patience ${patience} | P(\`stop\`) within 10 / 20 / 40 milestones |`,
+    '| --- | --- |',
+  ];
+  for (const step of [0, 2, 3, 5, 10, 20]) {
+    const at = (n: number): string => simulatePool(step, n, gamesPerMember, runs, 20261026, patience).stop.toFixed(2);
+    lines.push(`| ${step === 0 ? 'flat' : `climbs ${step} Elo`} | ${at(10)} / ${at(20)} / ${at(40)} |`);
+  }
+  return lines.join('\n');
+}
+
 /** The pool's rows, in the spec's own form: P(`stop`) within 5 and within 10 milestones. */
 export function poolTable(runs: number, gamesPerMember: number): string {
   const se = simulatePool(0, 1, gamesPerMember, 1).se;
@@ -196,6 +220,53 @@ export function poolTable(runs: number, gamesPerMember: number): string {
     const five = simulatePool(step, 5, gamesPerMember, runs).stop.toFixed(2);
     const ten = simulatePool(step, 10, gamesPerMember, runs).stop.toFixed(2);
     lines.push(`| ${step === 0 ? 'flat' : `climbs ${step} Elo`} | ${five} / ${ten} |`);
+  }
+  return lines.join('\n');
+}
+
+/**
+ * [0012 T12-34]'s rows: the ship match on a modelled pair of players, calling
+ * `verdict` itself. The candidate's expected score is the logistic of its true
+ * edge; each pair's first game, the candidate on the first seat, is won with
+ * that score plus [SEAT_EDGE] and the second with it minus, so a pair carries
+ * the first seat's advantage as a real pair does. No draws. One look every
+ * `batchPairs` pairs, until the verdict is not `continue`.
+ */
+export const SEAT_EDGE = 0.084;
+
+export function simulateShip(edge: number, runs: number, seed = 20261026, test: ShipTest = SHIP_TEST): { ships: number; meanGames: number; p90Games: number } {
+  const random = generator(seed);
+  const p = 1 / (1 + 10 ** (-edge / 400));
+  const clamp = (x: number): number => Math.min(1, Math.max(0, x));
+  let ships = 0;
+  const games: number[] = [];
+  for (let r = 0; r < runs; r++) {
+    const counts: Pentanomial = [0, 0, 0, 0, 0];
+    const looks: Pentanomial[] = [];
+    while (verdict(looks, test) === 'continue') {
+      for (let k = 0; k < test.batchPairs; k++) {
+        const first = random() < clamp(p + SEAT_EDGE) ? 1 : 0;
+        const second = random() < clamp(p - SEAT_EDGE) ? 1 : 0;
+        counts[2 * (first + second)]++;
+      }
+      looks.push([...counts] as Pentanomial);
+    }
+    if (verdict(looks, test) === 'accept') ships++;
+    games.push(2 * counts.reduce((a, b) => a + b, 0));
+  }
+  games.sort((a, b) => a - b);
+  return { ships: ships / runs, meanGames: games.reduce((a, b) => a + b, 0) / runs, p90Games: games[Math.floor(0.9 * runs)] };
+}
+
+/** The ship match's rows, in the spec's own form. */
+export function shipTable(runs: number): string {
+  const lines = [
+    `| True edge over \`master\` (first seat +${(100 * SEAT_EDGE).toFixed(1)} points, ${runs} matches a row) | Ships | Mean games | 90th percentile games |`,
+    '| --- | --- | --- | --- |',
+  ];
+  for (const edge of [-15, 0, 7, 15, 25, 40]) {
+    const s = simulateShip(edge, runs);
+    lines.push(`| ${edge > 0 ? '+' : ''}${edge} Elo | ${s.ships.toFixed(2)} | ${Math.round(s.meanGames)} | ${s.p90Games} |`);
   }
   return lines.join('\n');
 }

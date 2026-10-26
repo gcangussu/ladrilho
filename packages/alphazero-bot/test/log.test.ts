@@ -14,6 +14,7 @@ import {
   gateSetting,
   measureOf,
   ruleEntries,
+  stopPatience,
   type LadderResults,
   type LogEntry,
   type MilestoneEntry,
@@ -32,6 +33,8 @@ import {
   type SeedRun,
 } from '../eval/anchors.js';
 import { BUDGET, HALF_BUDGET } from '../eval/latency.js';
+import { SHIP_TEST, checkShip } from '../eval/ship.js';
+import type { ShipEntry } from '../eval/decision.js';
 import { readLog } from '../eval/log.js';
 import { GATES, LATENCY, LOG, PACKAGE } from '../eval/paths.js';
 import { gate, milestone, override, results } from './support/entries.js';
@@ -63,11 +66,32 @@ function replay(
   };
   log.forEach((e, i) => {
     const where = `entry ${i} (${e.kind}, run ${e.run})`;
-    if (!['milestone', 'override', 'manual-gate', 'rating'].includes(e.kind)) throw new Error(`${where}: unknown kind`);
+    if (!['milestone', 'override', 'manual-gate', 'rating', 'ship'].includes(e.kind)) throw new Error(`${where}: unknown kind`);
     if (typeof e.run !== 'string' || typeof e.date !== 'string') throw new Error(`${where}: no run or date`);
     if (e.kind === 'rating') {
       // [Z11-84]: about a checkpoint, not a run's course; held to its own numbers only.
       anchored(where, e.anchored as AnchoredRecord, e.results as Series);
+      return;
+    }
+    if (e.kind === 'ship') {
+      // [0012 T12-35]: about master, not a run's course; held to its own numbers.
+      const earlier = log.slice(0, i);
+      if (!earlier.some((x) => x.kind === 'milestone' && x.run === e.run && x.generation === e.generation)) {
+        throw new Error(`${where}: names no logged milestone`);
+      }
+      if (typeof e.reason !== 'string' || e.reason.length < 20) throw new Error(`${where}: no reason`);
+      if (e.decision === 'pin') {
+        if (e.master !== null) throw new Error(`${where}: a pin plays no master`);
+        return;
+      }
+      let run: SeedRun;
+      try {
+        run = checkShip(e, earlier, anchors?.simulations ?? -1);
+      } catch (err) {
+        throw new Error(`${where}: ${(err as Error).message}`);
+      }
+      if (seen.some((u) => overlaps(run, u))) throw new Error(`${where}: the seeds from ${run.base} were used before`);
+      seen.push(run);
       return;
     }
     if (done.has(e.run)) throw new Error(`${where}: follows a done`);
@@ -101,7 +125,9 @@ function replay(
       const setting = gateSetting((e as { config?: { gate?: unknown } }).config);
       if (e.gate.due !== due(before, r, setting)) throw new Error(`${where}: gate-was-due disagrees with due()`);
       if (e.gate.ran && !e.gate.due) throw new Error(`${where}: a gate ran that was not due`);
-      if (e.decision !== decide(before, r, e.gate.outcome)) throw new Error(`${where}: the decision disagrees with decide()`);
+      // [Z11-90]: the patience the entry's own copy of the config holds.
+      const patience = stopPatience((e as { config?: { stopPatience?: unknown } }).config);
+      if (e.decision !== decide(before, r, e.gate.outcome, patience)) throw new Error(`${where}: the decision disagrees with decide()`);
       if (typeof e.reason !== 'string' || e.reason.length < 20) throw new Error(`${where}: no reason`);
       if (e.decision === 'done') done.add(e.run);
     } else if (e.kind === 'override') {
@@ -197,6 +223,41 @@ describe('the committed log [Z11-34]', () => {
     replay([poolEntry(close)], () => null);
     expect(() => replay([poolEntry({ ...close, extraPerMember: 0 })], () => null)).toThrow(/extra games/);
     expect(() => replay([poolEntry({ ...close, rating: -5 })], () => null)).toThrow(/not the rating|settling/);
+
+    // [0012 T12-35]: a ship entry replays from its own counts, against the
+    // master of its time, on seeds no record used; each record that
+    // contradicts them is caught.
+    const base = milestone('m', results(0), 'continue');
+    const pin: LogEntry = { kind: 'ship', run: 'm', date: 'd', generation: base.generation, decision: 'pin', master: null, reason: 'the first master, named by hand' };
+    const cand = { ...milestone('n', results(0), 'continue'), generation: 7 } as LogEntry;
+    const test = SHIP_TEST;
+    const anchorsFor: AnchorsFile = { simulations: 200, gamesPerMember: 800, pin: { run: 'x', generation: 1, rating: 856 }, members: [], pairings: [], date: 'd', seconds: 0 };
+    const ok = (entries: LogEntry[]) => replay(entries, () => null, anchorsFor);
+    const played = (over: Partial<ShipEntry> = {}): LogEntry => ({
+      kind: 'ship', run: 'n', date: 'd', generation: 7, decision: 'accept', master: { run: 'm', generation: base.generation },
+      simulations: 200, seedBase: 900_000_000, test, looks: [[0, 0, 100, 0, 100]], seconds: 1,
+      reason: 'n/7 against master: accepted on its numbers', ...over,
+    });
+    ok([base, pin, cand, played()]);
+    expect(() => ok([base, pin, cand, played({ decision: 'reject' })])).toThrow(/disagrees with verdict/);
+    expect(() => ok([base, pin, cand, played({ master: { run: 'n', generation: 7 } })])).toThrow(/master of its time/);
+    expect(() => ok([base, cand, played()])).toThrow(/master of its time/);
+    expect(() => ok([base, pin, played()])).toThrow(/no logged milestone/);
+    expect(() => ok([base, pin, cand, played({ looks: [[0, 0, 100, 0, 99]] })])).toThrow(/batches/);
+    expect(() => ok([base, pin, cand, played({ looks: [[50, 0, 100, 0, 50], [40, 0, 210, 0, 150]] })])).toThrow(/cumulative/);
+    // Kept playing after the first look accepted.
+    expect(() => ok([base, pin, cand, played({ looks: [[0, 0, 100, 0, 100], [0, 0, 200, 0, 200]] })])).toThrow(/played on after look 0/);
+    // Past the cap: twenty-one looks of 400 games is 8 400.
+    const flat = (k: number): [number, number, number, number, number] => [50 * k, 0, 100 * k, 0, 50 * k];
+    expect(() => ok([base, pin, cand, played({ decision: 'reject', looks: Array.from({ length: 21 }, (_, k) => flat(k + 1)) })])).toThrow(/past the cap/);
+    expect(() => ok([base, pin, cand, played({ test: { ...SHIP_TEST, alpha: 0.5 } })])).toThrow(/not \[T12-34\]'s/);
+    expect(() => ok([base, pin, cand, played({ simulations: 800 })])).toThrow(/not the anchors' 200/);
+    expect(() => ok([base, pin, cand, played({ looks: [] })])).toThrow(/no looks/);
+    // A candidate that is master already: pinned, then played against itself.
+    const pinCand: LogEntry = { kind: 'ship', run: 'n', date: 'd', generation: 7, decision: 'pin', master: null, reason: 'n/7 pinned by hand first' };
+    expect(() => ok([base, pin, cand, pinCand, played({ master: { run: 'n', generation: 7 } })])).toThrow(/against itself/);
+    const replayed = played({ master: { run: 'n', generation: 7 } }) as ShipEntry;
+    expect(() => ok([base, pin, cand, played(), { ...replayed, run: 'm', generation: base.generation }])).toThrow(/used before/);
   });
 });
 

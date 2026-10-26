@@ -10,7 +10,7 @@ import { encode, legalActions, newGame } from 'engine';
 import { describe, expect, it } from 'vitest';
 import { DISPLAYS_FIXTURE, LAYOUT, displayFixture, displayLayout, permuteDisplays } from '../eval/augment.js';
 import { startingConfig } from '../eval/config.js';
-import { childConfig, parseFrom, parseSet } from '../eval/loop.js';
+import { STOP_PATIENCE, childConfig, parseFrom, parseSet } from '../eval/loop.js';
 
 describe('display permutation [Z11-65]', () => {
   it("keeps train/layout.json and the trainer's fixture what the engine says", () => {
@@ -139,6 +139,21 @@ describe('a run started from another [Z11-66]', () => {
     for (const bad of [{ improvedCVisit: 50 }, { improvedCScale: 11 }, { improvedCScale: 0.1, improvedCVisit: 20000 }]) {
       expect(() => childConfig(parent, origin, 42, undefined, bad)).toThrow(/improved/);
     }
+  });
+
+  /**
+   * [Z11-90]: a run on the anchors decides by patience, its parent's or
+   * [STOP_PATIENCE]; a run on another yardstick by [Z11-33]'s rule. Patience is
+   * how a run is measured, not what it trains, so it is no change in
+   * `from.changes`. Mutation, seen red: `patienceFor` ignoring the parent's.
+   */
+  it('writes the patience on the anchors, inherited first', () => {
+    const fresh = childConfig(parent, origin, 42, undefined, {}, undefined, 'anchors');
+    expect(fresh.stopPatience).toBe(STOP_PATIENCE);
+    expect(STOP_PATIENCE).toBe(5);
+    expect(fresh.from?.changes).toEqual({});
+    expect(childConfig({ ...parent, stopPatience: 3 }, origin, 42, undefined, {}, undefined, 'anchors').stopPatience).toBe(3);
+    expect('stopPatience' in childConfig(parent, origin, 42, undefined, {}, undefined, 'pool')).toBe(false);
   });
 
   /**
