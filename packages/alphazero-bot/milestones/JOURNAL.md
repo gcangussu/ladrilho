@@ -1250,6 +1250,52 @@ Neither stronger search (`fourteenth`, `fifteenth`), better final-boundary targe
 nor a different policy target (`sixteenth`) moves it. That is what a from-scratch comparison is
 for.
 
+## Gumbel's Phase 1: a better search at 200 simulations, a worse one at 1 000 (10-26)
+
+The plan's soundness checks for Gumbel search. All use `twelfth`/120's network with no noise.
+The harness is a scratch example on the committed crate, with one scratch hook (E4's noise
+seed); none of it is committed.
+
+**E1, Gumbel (scale 0, `m` = 16) against PUCT on the same network**, seeds from both seats:
+
+| Gumbel | PUCT | Games | Gumbel's score | Elo (95%) |
+| --- | --- | --- | --- | --- |
+| 16 | 16 | 2 000 | 45.0% | −35 (−49 to −20) |
+| 64 | 64 | 2 000 | 58.9% | +62 (+48 to +77) |
+| 200 | 200 | 4 000 | 55.0% | +35 (+25 to +46) |
+| 1 000 | 1 000 | 1 000 | 41.8% | −57 (−79 to −37) |
+| 200 | 1 000 | 2 000 | 29.3% | −153 |
+| 400 | 1 000 | 2 000 | 36.1% | −99 |
+
+- **The positive control (E1a) failed as written.** At 16 simulations, with 16 actions
+  considered, the halving gives each a single visit: a one-ply search against PUCT's deeper one.
+  With `m` = 4 or 8 at 16 simulations, Gumbel wins by +159 (+143 to +176) and +98 (+82 to
+  +113). So the code works and `m` must be small beside the budget. At 64, `m` = 32 is −14.
+- **E1b passes** at 200: +35, the gate being at least −10 with the lower bound above −30.
+- **At 1 000 Gumbel is the weaker search**, −57. That was a sanity row with no gate, but it
+  matters: run G from `twelfth`/120 would make every full search a worse one. No budget saving
+  either: Gumbel at 200 or 400 loses heavily to PUCT at 1 000.
+- **Scale 1 at 16 simulations** (the self-play draw) is −171: the draw costs play at tiny
+  budgets, as a sample should.
+
+**E4, exploration on fixed deals.** 32 deals, each played 20 times, the deal and the cap's draws
+fixed and only the noise or Gumbel stream varied, at the starting config's 200 simulations:
+
+| Mode | Distinct 10-ply openings per deal (of 20) | Entropy after ply 1 / 5 / 10 |
+| --- | --- | --- |
+| PUCT, Dirichlet noise and 10 sampled plies | 19.6 | 0.62 / 2.56 / 2.94 |
+| Gumbel, scale 1 | 17.9 | 0.37 / 2.16 / 2.67 |
+| Gumbel, scale 0 (the control) | 1.00 | 0 / 0 / 0 |
+
+The control is deterministic, as it must be, and Gumbel explores a little less than PUCT, well
+above the gate's half.
+
+**E3** was settled earlier: 1.09× per network call, 1.58× a generation at 1 000/200.
+
+**What it decides.** Gumbel is a better search than PUCT for Azul at small budgets and a worse
+one at large ones. So run G from `twelfth`/120 at 1 000/200 is set aside. The from-scratch pair
+at the starting config's 200 simulations is the test, where Gumbel is the stronger search.
+
 ## Next
 
 - **The boundary into the final round** is where the value limits play: fixing it is worth up to
