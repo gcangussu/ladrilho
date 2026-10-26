@@ -471590,5 +471590,760 @@
     "decision": "pin",
     "master": null,
     "reason": "The first master under the ship match ([T12-34]). twelfth/120 is the reference every run since was measured against directly, and the anchors' pinned 856. sixteenth/20, shipped by rating at 876, scored 48.3% against it over 500 games at the shipped settings (10 000 simulations, proof at 300 000), -12 Elo (-42 to +19): its rating was the best of thirty noisy draws, not a stronger player."
+  },
+  {
+    "kind": "ship",
+    "run": "sixteenth",
+    "date": "2026-10-26T12:21:43.418Z",
+    "generation": 260,
+    "decision": "reject",
+    "master": {
+      "run": "twelfth",
+      "generation": 120
+    },
+    "simulations": 200,
+    "seedBase": 896219951,
+    "test": {
+      "elo0": 0,
+      "elo1": 15,
+      "alpha": 0.05,
+      "beta": 0.05,
+      "maxGames": 8000,
+      "batchPairs": 200
+    },
+    "looks": [
+      [
+        39,
+        5,
+        106,
+        8,
+        42
+      ],
+      [
+        79,
+        18,
+        215,
+        11,
+        77
+      ],
+      [
+        114,
+        27,
+        320,
+        15,
+        124
+      ],
+      [
+        156,
+        28,
+        438,
+        17,
+        161
+      ],
+      [
+        204,
+        40,
+        527,
+        24,
+        205
+      ],
+      [
+        243,
+        46,
+        636,
+        34,
+        241
+      ]
+    ],
+    "seconds": 578,
+    "reason": "sixteenth/260 against master twelfth/120: 2400 games, 49.7%, LLR -3.48 in -2.94..2.94 for 0 against +15 Elo: master stays."
+  },
+  {
+    "kind": "ship",
+    "run": "sixteenth",
+    "date": "2026-10-26T12:29:03.332Z",
+    "generation": 270,
+    "decision": "reject",
+    "master": {
+      "run": "twelfth",
+      "generation": 120
+    },
+    "simulations": 200,
+    "seedBase": 701553857,
+    "test": {
+      "elo0": 0,
+      "elo1": 15,
+      "alpha": 0.05,
+      "beta": 0.05,
+      "maxGames": 8000,
+      "batchPairs": 200
+    },
+    "looks": [
+      [
+        42,
+        4,
+        103,
+        9,
+        42
+      ],
+      [
+        89,
+        13,
+        210,
+        14,
+        74
+      ],
+      [
+        128,
+        17,
+        323,
+        19,
+        113
+      ],
+      [
+        164,
+        20,
+        437,
+        27,
+        152
+      ],
+      [
+        205,
+        32,
+        527,
+        36,
+        200
+      ],
+      [
+        251,
+        43,
+        628,
+        40,
+        238
+      ]
+    ],
+    "seconds": 439,
+    "reason": "sixteenth/270 against master twelfth/120: 2400 games, 49.4%, LLR -4.10 in -2.94..2.94 for 0 against +15 Elo: master stays."
+  },
+  {
+    "kind": "ship",
+    "run": "sixteenth",
+    "date": "2026-10-26T12:38:11.566Z",
+    "generation": 280,
+    "decision": "reject",
+    "master": {
+      "run": "twelfth",
+      "generation": 120
+    },
+    "simulations": 200,
+    "seedBase": 1039337339,
+    "test": {
+      "elo0": 0,
+      "elo1": 15,
+      "alpha": 0.05,
+      "beta": 0.05,
+      "maxGames": 8000,
+      "batchPairs": 200
+    },
+    "looks": [
+      [
+        45,
+        2,
+        111,
+        8,
+        34
+      ],
+      [
+        91,
+        9,
+        199,
+        19,
+        82
+      ],
+      [
+        143,
+        13,
+        291,
+        24,
+        129
+      ],
+      [
+        185,
+        19,
+        396,
+        31,
+        169
+      ],
+      [
+        215,
+        25,
+        507,
+        41,
+        212
+      ],
+      [
+        257,
+        34,
+        605,
+        47,
+        257
+      ],
+      [
+        310,
+        42,
+        698,
+        48,
+        302
+      ]
+    ],
+    "seconds": 547,
+    "reason": "sixteenth/280 against master twelfth/120: 2800 games, 49.8%, LLR -3.35 in -2.94..2.94 for 0 against +15 Elo: master stays."
+  },
+  {
+    "kind": "ship",
+    "run": "sixteenth",
+    "date": "2026-10-26T12:42:36.414Z",
+    "generation": 290,
+    "decision": "reject",
+    "master": {
+      "run": "twelfth",
+      "generation": 120
+    },
+    "simulations": 200,
+    "seedBase": 749370386,
+    "test": {
+      "elo0": 0,
+      "elo1": 15,
+      "alpha": 0.05,
+      "beta": 0.05,
+      "maxGames": 8000,
+      "batchPairs": 200
+    },
+    "looks": [
+      [
+        32,
+        7,
+        118,
+        6,
+        37
+      ],
+      [
+        82,
+        10,
+        219,
+        10,
+        79
+      ],
+      [
+        128,
+        20,
+        321,
+        18,
+        113
+      ]
+    ],
+    "seconds": 264,
+    "reason": "sixteenth/290 against master twelfth/120: 1200 games, 48.7%, LLR -3.00 in -2.94..2.94 for 0 against +15 Elo: master stays."
+  },
+  {
+    "kind": "ship",
+    "run": "sixteenth",
+    "date": "2026-10-26T12:45:30.143Z",
+    "generation": 300,
+    "decision": "reject",
+    "master": {
+      "run": "twelfth",
+      "generation": 120
+    },
+    "simulations": 200,
+    "seedBase": 822746285,
+    "test": {
+      "elo0": 0,
+      "elo1": 15,
+      "alpha": 0.05,
+      "beta": 0.05,
+      "maxGames": 8000,
+      "batchPairs": 200
+    },
+    "looks": [
+      [
+        49,
+        7,
+        110,
+        3,
+        31
+      ],
+      [
+        95,
+        14,
+        210,
+        8,
+        73
+      ]
+    ],
+    "seconds": 173,
+    "reason": "sixteenth/300 against master twelfth/120: 800 games, 46.9%, LLR -3.38 in -2.94..2.94 for 0 against +15 Elo: master stays."
+  },
+  {
+    "kind": "ship",
+    "run": "fifteenth",
+    "date": "2026-10-26T12:51:22.038Z",
+    "generation": 40,
+    "decision": "reject",
+    "master": {
+      "run": "twelfth",
+      "generation": 120
+    },
+    "simulations": 200,
+    "seedBase": 457652960,
+    "test": {
+      "elo0": 0,
+      "elo1": 15,
+      "alpha": 0.05,
+      "beta": 0.05,
+      "maxGames": 8000,
+      "batchPairs": 200
+    },
+    "looks": [
+      [
+        45,
+        4,
+        101,
+        10,
+        40
+      ],
+      [
+        87,
+        9,
+        211,
+        15,
+        78
+      ],
+      [
+        134,
+        13,
+        314,
+        21,
+        118
+      ],
+      [
+        182,
+        17,
+        418,
+        27,
+        156
+      ]
+    ],
+    "seconds": 350,
+    "reason": "fifteenth/40 against master twelfth/120: 1600 games, 48.7%, LLR -3.79 in -2.94..2.94 for 0 against +15 Elo: master stays."
+  },
+  {
+    "kind": "ship",
+    "run": "fifteenth",
+    "date": "2026-10-26T13:14:32.709Z",
+    "generation": 50,
+    "decision": "reject",
+    "master": {
+      "run": "twelfth",
+      "generation": 120
+    },
+    "simulations": 200,
+    "seedBase": 1308385372,
+    "test": {
+      "elo0": 0,
+      "elo1": 15,
+      "alpha": 0.05,
+      "beta": 0.05,
+      "maxGames": 8000,
+      "batchPairs": 200
+    },
+    "looks": [
+      [
+        42,
+        8,
+        112,
+        8,
+        30
+      ],
+      [
+        71,
+        10,
+        222,
+        19,
+        78
+      ],
+      [
+        103,
+        18,
+        341,
+        28,
+        110
+      ],
+      [
+        134,
+        27,
+        458,
+        34,
+        147
+      ],
+      [
+        170,
+        33,
+        571,
+        37,
+        189
+      ],
+      [
+        209,
+        38,
+        691,
+        40,
+        222
+      ],
+      [
+        250,
+        41,
+        796,
+        46,
+        267
+      ],
+      [
+        293,
+        49,
+        897,
+        53,
+        308
+      ],
+      [
+        326,
+        55,
+        1013,
+        61,
+        345
+      ],
+      [
+        359,
+        58,
+        1125,
+        65,
+        393
+      ],
+      [
+        395,
+        64,
+        1232,
+        72,
+        437
+      ],
+      [
+        445,
+        69,
+        1334,
+        76,
+        476
+      ],
+      [
+        485,
+        76,
+        1438,
+        84,
+        517
+      ],
+      [
+        520,
+        79,
+        1547,
+        91,
+        563
+      ],
+      [
+        567,
+        86,
+        1651,
+        95,
+        601
+      ],
+      [
+        603,
+        93,
+        1763,
+        104,
+        637
+      ]
+    ],
+    "seconds": 1389,
+    "reason": "fifteenth/50 against master twelfth/120: 6400 games, 50.6%, LLR -3.16 in -2.94..2.94 for 0 against +15 Elo: master stays."
+  },
+  {
+    "kind": "ship",
+    "run": "fifteenth",
+    "date": "2026-10-26T13:23:17.252Z",
+    "generation": 60,
+    "decision": "reject",
+    "master": {
+      "run": "twelfth",
+      "generation": 120
+    },
+    "simulations": 200,
+    "seedBase": 598864003,
+    "test": {
+      "elo0": 0,
+      "elo1": 15,
+      "alpha": 0.05,
+      "beta": 0.05,
+      "maxGames": 8000,
+      "batchPairs": 200
+    },
+    "looks": [
+      [
+        40,
+        9,
+        107,
+        3,
+        41
+      ],
+      [
+        85,
+        14,
+        213,
+        7,
+        81
+      ],
+      [
+        119,
+        22,
+        327,
+        12,
+        120
+      ],
+      [
+        156,
+        28,
+        435,
+        21,
+        160
+      ],
+      [
+        193,
+        36,
+        552,
+        23,
+        196
+      ],
+      [
+        234,
+        39,
+        661,
+        29,
+        237
+      ]
+    ],
+    "seconds": 523,
+    "reason": "fifteenth/60 against master twelfth/120: 2400 games, 49.9%, LLR -2.96 in -2.94..2.94 for 0 against +15 Elo: master stays."
+  },
+  {
+    "kind": "ship",
+    "run": "fifteenth",
+    "date": "2026-10-26T13:29:20.662Z",
+    "generation": 70,
+    "decision": "reject",
+    "master": {
+      "run": "twelfth",
+      "generation": 120
+    },
+    "simulations": 200,
+    "seedBase": 1058512721,
+    "test": {
+      "elo0": 0,
+      "elo1": 15,
+      "alpha": 0.05,
+      "beta": 0.05,
+      "maxGames": 8000,
+      "batchPairs": 200
+    },
+    "looks": [
+      [
+        39,
+        6,
+        108,
+        3,
+        44
+      ],
+      [
+        77,
+        13,
+        218,
+        10,
+        82
+      ],
+      [
+        123,
+        20,
+        316,
+        15,
+        126
+      ],
+      [
+        166,
+        24,
+        426,
+        22,
+        162
+      ],
+      [
+        218,
+        25,
+        533,
+        29,
+        195
+      ]
+    ],
+    "seconds": 362,
+    "reason": "fifteenth/70 against master twelfth/120: 2000 games, 48.9%, LLR -4.31 in -2.94..2.94 for 0 against +15 Elo: master stays."
+  },
+  {
+    "kind": "ship",
+    "run": "fifteenth",
+    "date": "2026-10-26T13:32:44.824Z",
+    "generation": 80,
+    "decision": "reject",
+    "master": {
+      "run": "twelfth",
+      "generation": 120
+    },
+    "simulations": 200,
+    "seedBase": 367640084,
+    "test": {
+      "elo0": 0,
+      "elo1": 15,
+      "alpha": 0.05,
+      "beta": 0.05,
+      "maxGames": 8000,
+      "batchPairs": 200
+    },
+    "looks": [
+      [
+        40,
+        9,
+        111,
+        8,
+        32
+      ],
+      [
+        79,
+        16,
+        218,
+        15,
+        72
+      ],
+      [
+        124,
+        22,
+        324,
+        21,
+        109
+      ]
+    ],
+    "seconds": 203,
+    "reason": "fifteenth/80 against master twelfth/120: 1200 games, 48.7%, LLR -3.03 in -2.94..2.94 for 0 against +15 Elo: master stays."
+  },
+  {
+    "kind": "ship",
+    "run": "fourteenth",
+    "date": "2026-10-26T13:36:07.882Z",
+    "generation": 50,
+    "decision": "reject",
+    "master": {
+      "run": "twelfth",
+      "generation": 120
+    },
+    "simulations": 200,
+    "seedBase": 647156255,
+    "test": {
+      "elo0": 0,
+      "elo1": 15,
+      "alpha": 0.05,
+      "beta": 0.05,
+      "maxGames": 8000,
+      "batchPairs": 200
+    },
+    "looks": [
+      [
+        33,
+        12,
+        112,
+        6,
+        37
+      ],
+      [
+        77,
+        19,
+        223,
+        15,
+        66
+      ],
+      [
+        121,
+        29,
+        335,
+        22,
+        93
+      ]
+    ],
+    "seconds": 202,
+    "reason": "fourteenth/50 against master twelfth/120: 1200 games, 47.4%, LLR -5.11 in -2.94..2.94 for 0 against +15 Elo: master stays."
+  },
+  {
+    "kind": "ship",
+    "run": "fourteenth",
+    "date": "2026-10-26T13:42:36.589Z",
+    "generation": 60,
+    "decision": "reject",
+    "master": {
+      "run": "twelfth",
+      "generation": 120
+    },
+    "simulations": 200,
+    "seedBase": 892685531,
+    "test": {
+      "elo0": 0,
+      "elo1": 15,
+      "alpha": 0.05,
+      "beta": 0.05,
+      "maxGames": 8000,
+      "batchPairs": 200
+    },
+    "looks": [
+      [
+        34,
+        15,
+        111,
+        3,
+        37
+      ],
+      [
+        75,
+        20,
+        207,
+        11,
+        87
+      ],
+      [
+        123,
+        23,
+        311,
+        23,
+        120
+      ],
+      [
+        163,
+        33,
+        428,
+        25,
+        151
+      ]
+    ],
+    "seconds": 387,
+    "reason": "fourteenth/60 against master twelfth/120: 1600 games, 49.0%, LLR -3.50 in -2.94..2.94 for 0 against +15 Elo: master stays."
   }
 ]
