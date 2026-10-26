@@ -1236,6 +1236,20 @@ found four blockers, all fixed and tested:
 It is the reference every run since was measured against directly. `sixteenth`/20, shipped by
 rating at 876, scored −12 Elo (−42 to +19) against it in 500 games at the shipped settings.
 
+## Every recent milestone against `master`, by the ship match (10-26)
+
+35 ship matches ([T12-34]) against `twelfth`/120: the last five milestones of every run from
+`tenth` to `sixteenth`, `twelfth`/120 itself left out. All 35 rejected. Scores ranged from 46.8%
+to 50.6%; the closest were `fifteenth`/50 (50.6% over 6 400 games) and `fourteenth`/80 (50.6%
+over 6 000). Every run since `twelfth` scores about 50% against it: 49.4% to 50.6% for
+`thirteenth` to `sixteenth`. `twelfth`'s own later milestones (130 to 170, 47.4% to 49.6%) and
+`tenth`'s and `eleventh`'s (46.8% to 49.9%) score no better.
+
+Read with the anchors' history, the 4 × 256 network has been at its level since about `tenth`.
+Neither stronger search (`fourteenth`, `fifteenth`), better final-boundary targets (`thirteenth`)
+nor a different policy target (`sixteenth`) moves it. That is what a from-scratch comparison is
+for.
+
 ## Next
 
 - **The boundary into the final round** is where the value limits play: fixing it is worth up to
