@@ -1296,6 +1296,58 @@ above the gate's half.
 one at large ones. So run G from `twelfth`/120 at 1 000/200 is set aside. The from-scratch pair
 at the starting config's 200 simulations is the test, where Gumbel is the stronger search.
 
+## A Gumbel lineage from scratch, to its plateau (10-26)
+
+**The question (the user's):** does Gumbel self-play, trained from scratch to its plateau,
+make a stronger player than master (`twelfth`/120)? Not whether it learns faster, and not
+whether Gumbel alone is the cause. So there is no PUCT twin. The control is PUCT's own plateau:
+the lineage `first` to `twelfth` (about 1 550 generations, 09-29 to 10-05), and seven later
+recipes that all stayed level, with none of their 35 ship matches won. The verdict is the ship
+match ([0012 T12-34]) against master.
+
+A fine-tune of Gumbel from `twelfth`/120 was set aside. Its likely outcome, level, could not tell
+"Gumbel does not help" from "a fine-tune cannot leave this plateau". `sixteenth` had already
+shown that the improved target, Gumbel's own, teaches `twelfth` nothing.
+
+**Before choosing `first` as a starting point,** its start was reproduced with today's code.
+Generation 0's 500 self-play games from `first`'s checkpoint 0 came out byte-identical, and so
+did the training step that made checkpoint 1.
+
+**The stages.** The recipe is fixed from the start, and each later stage changes one thing:
+
+| Stage | Run | Starts from | Change | Yardstick |
+| --- | --- | --- | --- | --- |
+| G1 | `seventeenth` | `first`:0, random weights | Gumbel (`gumbelConsidered` 16), 3 000 games, auxiliary heads 0.5 / 0.5, display augmentation, at lr 0.02 and 200 simulations | ladder, patience 5 |
+| G1b, if needed | — | G1's best | none: the anchors instead of the ladder | anchors |
+| G2 | — | the stage before's best | lr 0.002 | anchors, patience 5 |
+| G3 | — | G2's best | lr 0.0002 | anchors, patience 5 |
+| G4 | — | G3's best | lr 0.00005 | anchors, patience 5 |
+| G5, only if G4 has not shipped | — | G4's best | self-play 1 000 with the 200 cap | anchors, patience 5 |
+
+- **Why 200 simulations until G5:** Phase 1 found Gumbel the stronger search there (+35 Elo),
+  and the weaker one at 1 000 (−57).
+- **When each stage starts:** when the stage before stops by patience. The next stage starts
+  from its best milestone, with its window, and its first milestone starts afresh. Stages run
+  without asking. Anything outside this table needs the user's go-ahead.
+- **Why G1 is on the ladder:** the anchors start at `seventh`/170 (758), where a network starting
+  from random weights scores nothing.
+- **Why the ladder stops short:** it saturated near `third`/`fourth` strength. On 10-01 that hid
+  a 180 Elo gain. So a G1 stop with `sharp` at 0.75 or more is read as saturation, not a plateau.
+  It is followed by G1b, at the same learning rate on the anchors. Before G1b, weaker anchors are
+  added from the PUCT lineage, chosen then from about `third`/90, `fourth`/70 and `fifth`/270, so
+  the scale reaches down to G1's level. A G1 stop below 0.75 goes straight to G2.
+- **The verdict:**
+  - **Yes** if any milestone of the lineage wins its ship match. Master then changes by
+    [T12-34].
+  - **No** if the last stage stops without one, which means not +15 Elo better.
+  - A "no" within about 10 Elo of 856 would justify a second G1 with a fresh seed, against seed
+    luck.
+
+**Built for it:** `train init --patience <n>` ([Z11-90]), so that a run on the ladder decides by
+patience and not by [Z11-33]'s one-back rule.
+
+**The estimate:** about 6 to 10 days of the machine.
+
 ## Next
 
 - **The boundary into the final round** is where the value limits play: fixing it is worth up to
