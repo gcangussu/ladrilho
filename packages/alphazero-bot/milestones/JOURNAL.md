@@ -1348,6 +1348,22 @@ patience and not by [Z11-33]'s one-back rule.
 
 **The estimate:** about 6 to 10 days of the machine.
 
+## G1 (`seventeenth`) ended by hand at 163: the ladder saturated (10-27)
+
+- **The climb.** Ladder progress went 3.11 at generation 10, 3.56 at 20, 3.87 at 60, and 3.94
+  at 160, the best. `sharp` went 0.38, 0.64, 0.88, then 0.95. The patience rule never fired. It
+  came within one milestone at 100 (4 of 5), and 110 then set a new best.
+- **Why it was stopped.** `sharp` has been at or above 0.75 since generation 40. Since 60, the
+  gains are within the ladder's noise. By this lineage's plan, that is saturation and not a
+  plateau, so the ladder can no longer tell where G1 stands. The user agreed to end it.
+- **On the anchors**, `seventeenth`/160 rated **493 ±10**: 15.1% against `seventh`/170, 14.9%
+  against `ninth`/110 and 11.6% against `twelfth`/120, 800 games each. That is about 360 Elo
+  below master's 856, and below the weakest anchor (758), where the scale is thin.
+- **Pace.** The PUCT lineage reached `seventh` strength only after about 1 000 generations, so
+  163 generations to 493 is not a slow start. But it is not the verdict, which is the plateau.
+- **What is next is the user's call.** The user stopped the lineage here: no next stage was
+  started.
+
 ## Next
 
 - **The boundary into the final round** is where the value limits play: fixing it is worth up to
