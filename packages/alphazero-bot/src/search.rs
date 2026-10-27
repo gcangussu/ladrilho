@@ -85,6 +85,18 @@ pub struct TreeStats {
     pub terminals: u32,
 }
 
+/// A boundary leaf of a search's tree (`Search::boundary_leaves`).
+#[derive(Clone, Debug)]
+pub struct BoundaryLeaf<S: Shuffler> {
+    /// The state the boundary ply was played from.
+    pub before: AzulState<S>,
+    pub action: Action,
+    /// The visits of the edge into the leaf.
+    pub taken: u32,
+    /// Its stored value, from the seat that opens the next round.
+    pub value: f32,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Kind {
     Expanded,
@@ -620,6 +632,52 @@ impl<S: Shuffler> Search<S> {
             }
         }
         RootStatistics { actions: actions.to_vec(), priors: self.root_priors.clone(), visits, q, value: root.value }
+    }
+
+    /// Every boundary leaf of the tree, by a walk from the root that replays
+    /// each edge's action, as `trail` does: the state the boundary ply was
+    /// played from, the ply, the edge's visits and the leaf's stored value
+    /// (from the seat that opens the next round). In the tree's edge order.
+    /// Reads the tree and changes nothing.
+    pub fn boundary_leaves(&self) -> Vec<BoundaryLeaf<S>> {
+        let mut out = Vec::new();
+        if self.nodes.is_empty() {
+            return out;
+        }
+        let mut stack = vec![(0u32, self.trail[0].clone())];
+        while let Some((node, state)) = stack.pop() {
+            let n = &self.nodes[node as usize];
+            let (actions, _, children) = self.edges.of(n.edges_start, usize::from(n.edges_len));
+            for (&action, &child) in actions.iter().zip(children) {
+                if child == NONE {
+                    continue;
+                }
+                let c = &self.nodes[child as usize];
+                match c.kind {
+                    Kind::Boundary => {
+                        out.push(BoundaryLeaf { before: state.clone(), action, taken: c.taken, value: c.value })
+                    }
+                    Kind::Expanded => {
+                        let mut next = state.clone();
+                        // It applied when the child was made, and replays the same.
+                        let _ = next.apply(action);
+                        stack.push((child, next));
+                    }
+                    Kind::Terminal => {}
+                }
+            }
+        }
+        out
+    }
+
+    /// Simulations run so far: the root's visits.
+    pub fn simulations_run(&self) -> u32 {
+        self.nodes.first().map_or(0, |n| n.visits)
+    }
+
+    /// The tree's shape so far.
+    pub fn stats(&self) -> TreeStats {
+        self.stats
     }
 
     /// [Z11-88]: a Gumbel search's draw, one per legal action in the root's

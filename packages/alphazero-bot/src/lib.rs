@@ -18,6 +18,7 @@ pub mod lookahead;
 pub mod memo;
 pub mod network;
 pub mod parity;
+pub mod pastdeal;
 pub mod rng;
 pub mod samples;
 pub mod search;
