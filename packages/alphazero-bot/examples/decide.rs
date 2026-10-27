@@ -7,9 +7,11 @@
 //!   decide run <checkpoint> <positions.jsonl> <fit.json> <threads> <out.jsonl> [arms]
 //!   decide score <checkpoint> <positions.jsonl> <runs.jsonl> <replays> <sims> <threads> <out.jsonl> [arms]
 //!   decide report <positions.jsonl> <runs.jsonl> <scores.jsonl> [arms]
+//!   decide match <checkpoint> <fit.json> <pairs> <first-seed> <threads> <out.jsonl>
+//!   decide match-report <out.jsonl>
 //!
-//! `run` and `score` append, and skip what their output already holds, so a
-//! stopped run resumes.
+//! `run`, `score` and `match` append, and skip what their output already
+//! holds, so a stopped run resumes.
 
 
 #![allow(clippy::needless_range_loop)]
@@ -20,7 +22,7 @@ use std::time::Instant;
 
 use azul_alphazero::memo::{Memo, choose_memoised};
 use azul_alphazero::network::{Evaluation, Evaluator, Network};
-use azul_alphazero::pastdeal::{Blend, Deep, Mode, PastDeal, Recal, choose_past_deal};
+use azul_alphazero::pastdeal::{Blend, Deep, Mode, PastDeal, Recal, applies, choose_past_deal};
 use azul_alphazero::rng::{Rng, splitmix64};
 use azul_alphazero::search::{Search, SearchConfig, SelfPlayNoise};
 use azul_alphazero::wire::{read_canonical, write_canonical};
@@ -441,6 +443,151 @@ fn paired(
     );
 }
 
+// ---- match ----
+
+/// The lookahead's gate, derived from stage 3: round 4 with at least 4 tiles
+/// left (and a bag that deals round 5 whole, where the lookahead applies).
+/// The control's extra time follows the same gate.
+fn gated(s: &AzulState<Seeded>) -> bool {
+    applies(s) && s.tiles_left() >= 4
+}
+
+/// The control's simulations under the gate: the grid arm whose median time
+/// matched look01's in stage 3, by phase.
+fn matched(tiles: u8) -> u32 {
+    match tiles {
+        0..=7 => 320_000,
+        8..=15 => 640_000,
+        _ => 80_000,
+    }
+}
+
+/// One player of a match game: the lookahead or the time-matched control,
+/// both the shipped search outside the gate.
+struct Side {
+    look: bool,
+    memo: Memo,
+    /// Tiles left and milliseconds, for every move under the gate.
+    ms: Vec<(u8, f64)>,
+}
+
+impl Side {
+    fn play(&mut self, net: &Network, s: &AzulState<Seeded>, look01: &PastDeal) -> azul_engine::Action {
+        if !gated(s) {
+            return choose_memoised(net, s, &config(SHIPPED, ENDGAME), &mut self.memo).unwrap().action;
+        }
+        let t = Instant::now();
+        let action = if self.look {
+            choose_past_deal(net, s, &config(SHIPPED, ENDGAME), look01, &mut self.memo, &mut || false).unwrap().result.action
+        } else {
+            choose_memoised(net, s, &config(matched(s.tiles_left()), ENDGAME), &mut self.memo).unwrap().action
+        };
+        self.ms.push((s.tiles_left(), t.elapsed().as_secs_f64() * 1e3));
+        action
+    }
+}
+
+/// Pairs of games from one seed each: both seats play the shipped search to
+/// the start of round 4 (the same moves, so played once), and then the
+/// lookahead takes each seat in turn against the control.
+fn tournament(a: &[String]) {
+    let net = load(&a[2]);
+    let fit: Value = serde_json::from_str(&std::fs::read_to_string(&a[3]).unwrap()).unwrap();
+    let pairs: usize = a[4].parse().unwrap();
+    let first: u64 = a[5].parse().unwrap();
+    let threads: usize = a[6].parse().unwrap();
+    let done: HashSet<u64> = lines(&a[7]).iter().map(|r| r["seed"].as_u64().unwrap()).collect();
+    let out = appender(&a[7]);
+    let look01 = arms(&fit).into_iter().find(|(n, ..)| n == "look01").unwrap().2;
+    let seeds: Vec<u64> = (first..first + pairs as u64).filter(|s| !done.contains(s)).collect();
+    eprintln!("{} pairs to play", seeds.len());
+    par(seeds.len(), threads, &|i| {
+        let seed = seeds[i];
+        let t = Instant::now();
+        let mut s = AzulState::<Seeded>::seeded(seed);
+        let mut memo = Memo::new();
+        while !s.is_terminal() && s.round_index() < 3 {
+            let r = choose_memoised(&net, &s, &config(SHIPPED, ENDGAME), &mut memo).unwrap();
+            s.apply(r.action).unwrap();
+        }
+        let games: Vec<Value> = [Player::P0, Player::P1]
+            .into_iter()
+            .map(|look_seat| {
+                let mut sides = [Side { look: false, memo: Memo::new(), ms: Vec::new() }, Side { look: false, memo: Memo::new(), ms: Vec::new() }];
+                sides[look_seat as usize].look = true;
+                let mut g = s.clone();
+                while !g.is_terminal() {
+                    let action = sides[g.current_player() as usize].play(&net, &g, &look01);
+                    g.apply(action).unwrap();
+                }
+                let result = match (g.outcome(), look_seat) {
+                    (Some(Outcome::Player0), Player::P0) | (Some(Outcome::Player1), Player::P1) => 1.0,
+                    (Some(Outcome::Draw), _) | (None, _) => 0.5,
+                    _ => 0.0,
+                };
+                let ms = |side: &Side| side.ms.iter().map(|&(t, m)| json!([t, m])).collect::<Vec<_>>();
+                let ctl = &sides[1 - look_seat as usize];
+                json!({
+                    "lookSeat": look_seat as usize, "result": result, "scores": g.scores(),
+                    "look": ms(&sides[look_seat as usize]), "ctl": ms(ctl),
+                })
+            })
+            .collect();
+        emit(&out, &json!({ "seed": seed, "games": games, "s": t.elapsed().as_secs_f64() }));
+    });
+}
+
+/// The match's score for the lookahead, a 95% bootstrap interval over pairs,
+/// and the gated moves' times by phase on each side.
+fn tournament_report(a: &[String]) {
+    let pairs = lines(&a[2]);
+    let sums: Vec<f64> =
+        pairs.iter().map(|p| p["games"].as_array().unwrap().iter().map(|g| g["result"].as_f64().unwrap()).sum()).collect();
+    let n = sums.len();
+    let mean = sums.iter().sum::<f64>() / (2 * n) as f64;
+    let mut rng = Rng::new(7);
+    let mut boots: Vec<f64> =
+        (0..2000).map(|_| (0..n).map(|_| sums[rng.below(n as u64) as usize]).sum::<f64>() / (2 * n) as f64).collect();
+    let (lo, hi) = (quantile(&mut boots, 0.025), quantile(&mut boots, 0.975));
+    let elo = |p: f64| 400.0 * (p / (1.0 - p)).log10();
+    let (w, d, l) = pairs.iter().flat_map(|p| p["games"].as_array().unwrap().iter()).fold((0, 0, 0), |(w, d, l), g| {
+        match g["result"].as_f64().unwrap() {
+            r if r > 0.75 => (w + 1, d, l),
+            r if r > 0.25 => (w, d + 1, l),
+            _ => (w, d, l + 1),
+        }
+    });
+    println!("look01 vs time-matched control: {} games, W-D-L {w}-{d}-{l}", 2 * n);
+    println!("score {:.1}% ({:.1}% to {:.1}%), Elo {:+.0} ({:+.0} to {:+.0})", 100.0 * mean, 100.0 * lo, 100.0 * hi, elo(mean), elo(lo), elo(hi));
+    let mut by: BTreeMap<String, usize> = BTreeMap::new();
+    for s in &sums {
+        *by.entry(format!("{s:.1}")).or_default() += 1;
+    }
+    println!("pairs by the lookahead's points out of 2: {by:?}");
+    for side in ["look", "ctl"] {
+        for ph in ["0-7", "8-15", "16-20"] {
+            let mut ms: Vec<f64> = pairs
+                .iter()
+                .flat_map(|p| p["games"].as_array().unwrap().iter())
+                .flat_map(|g| g[side].as_array().unwrap().iter())
+                .filter(|m| phase(m[0].as_u64().unwrap()) == ph)
+                .map(|m| m[1].as_f64().unwrap())
+                .collect();
+            if ms.is_empty() {
+                continue;
+            }
+            let total: f64 = ms.iter().sum();
+            println!(
+                "{side:>5} {ph:>6}  moves {:>5}  p50 {:>6.0} ms  p95 {:>6.0} ms  total {:>7.1} s",
+                ms.len(),
+                median(ms.clone()),
+                quantile(&mut ms, 0.95),
+                total / 1e3
+            );
+        }
+    }
+}
+
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     match a.get(1).map(String::as_str) {
@@ -448,6 +595,8 @@ fn main() {
         Some("run") => run(&a),
         Some("score") => score(&a),
         Some("report") => report(&a),
-        _ => eprintln!("usage: decide positions|run|score|report ..."),
+        Some("match") => tournament(&a),
+        Some("match-report") => tournament_report(&a),
+        _ => eprintln!("usage: decide positions|run|score|report|match|match-report ..."),
     }
 }
