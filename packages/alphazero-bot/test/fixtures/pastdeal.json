@@ -1,0 +1,19 @@
+{
+  "checkpointSha256": "ce8343e19ca184f88bd4336d9fe36d4bd2b0030a774419596ff867682b22df34",
+  "gate": 4,
+  "deals": 4,
+  "leaves": 64,
+  "budget": 100000,
+  "rollouts": true,
+  "blend": {
+    "intercept": 0.0,
+    "head": 0.0,
+    "dealt": 0.5,
+    "rollout": 0.5,
+    "sigma": 3.5
+  },
+  "recal": {
+    "a": 0.02,
+    "b": 0.97
+  }
+}

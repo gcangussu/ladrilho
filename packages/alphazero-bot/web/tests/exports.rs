@@ -2,10 +2,13 @@
 //! against the crate's own unmemoised `choose` on the same network and
 //! settings — the decoding of [T12-4], the settings of [T12-3] and the memo's
 //! transparency, all at once — with the endgame proof on at a cap `load` was
-//! given ([T12-33], [0011 Z11-76]).
+//! given ([T12-33], [0011 Z11-76]), and against `choose_played` with the
+//! past-deal refinement `load` was given ([T12-36], [0011 Z11-91]).
 
 use azul_alphazero::endgame::can_end_this_round;
+use azul_alphazero::memo::{Memo, choose_memoised};
 use azul_alphazero::network::Network;
+use azul_alphazero::pastdeal::{PastDeal, choose_played};
 use azul_alphazero::rng::Rng;
 use azul_alphazero::search::{SearchConfig, choose as crate_choose};
 use azul_alphazero::wire::{read_canonical, read_messages, write_canonical};
@@ -32,8 +35,24 @@ fn put(bytes: &[u8]) -> *const u8 {
 }
 
 fn load(checkpoint: &[u8], parity: &[u8], endgame_nodes: u32) -> i32 {
-    // SAFETY: both buffers came from `alloc`, at their own lengths, and are not used again.
-    unsafe { exports::load(put(checkpoint), checkpoint.len(), put(parity), parity.len(), CPUCT, FPU, endgame_nodes) }
+    load_with(checkpoint, parity, endgame_nodes, &[])
+}
+
+fn load_with(checkpoint: &[u8], parity: &[u8], endgame_nodes: u32, past_deal: &[u8]) -> i32 {
+    // SAFETY: every buffer came from `alloc`, at its own length, and is not used again.
+    unsafe {
+        exports::load(
+            put(checkpoint),
+            checkpoint.len(),
+            put(parity),
+            parity.len(),
+            CPUCT,
+            FPU,
+            endgame_nodes,
+            put(past_deal),
+            past_deal.len(),
+        )
+    }
 }
 
 fn error() -> String {
@@ -130,6 +149,73 @@ fn the_exports_play_at_the_cap_load_was_given() {
         let block = write_canonical(&s.to_canonical());
         assert_eq!(choose(&block, SIMULATIONS), i32::from(crate_choose(&net, s, &at(0)).unwrap().action));
     }
+}
+
+/// Round-4 positions of games played uniformly, where the refinement applies.
+fn gated_positions(pd: &PastDeal, simulations: u32, count: usize) -> Vec<AzulState> {
+    let mut out = Vec::new();
+    let mut rng = Rng::new(91);
+    let mut seed = 100;
+    while out.len() < count {
+        seed += 1;
+        let mut s = AzulState::seeded(seed);
+        while !s.is_terminal() && s.round_index() <= 3 {
+            if pd.applies(&s, simulations) && s.tiles_left() <= 8 {
+                out.push(s.clone());
+                break;
+            }
+            let legal = s.legal_actions();
+            s.apply(legal.as_slice()[rng.below(legal.len() as u64) as usize]).unwrap();
+        }
+    }
+    out
+}
+
+/// [T12-26], [T12-36]: loaded with a `pastdeal.json`, the exports play
+/// exactly what `choose_played` plays with it, bit for bit, on round-4
+/// positions where it applies; and the refinement changes some of those
+/// moves, so the case would see it dropped on the way in. The settings are
+/// the fixture's own, pinned for the test: 64 leaves, so 12 at 2 000
+/// simulations.
+///
+/// Mutations ([T12-29]), each in a copy with its anchor confirmed: `load`
+/// passing an empty buffer for the refinement, and `Player::choose` calling
+/// `choose_memoised`, each turn this case red.
+#[test]
+fn the_exports_play_the_refinement_load_was_given() {
+    const SIMS: u32 = 2_000;
+    let (checkpoint, parity) = (read("test/fixtures/checkpoint.bin"), read("test/fixtures/checkpoint.parity"));
+    let file = read("test/fixtures/pastdeal.json");
+    let pd = PastDeal::parse(&file).unwrap();
+    let net = Network::load(&checkpoint, &parity).unwrap();
+    let config = SearchConfig { simulations: SIMS, cpuct: CPUCT, fpu: FPU, endgame_nodes: ENDGAME };
+    assert_eq!(load_with(&checkpoint, &parity, ENDGAME, &file), 0, "{}", error());
+    let positions = gated_positions(&pd, SIMS, 20);
+    let mut changed = 0;
+    for s in &positions {
+        let block = write_canonical(&s.to_canonical());
+        let want = choose_played(&net, s, &config, Some(&pd), Memo::new()).unwrap();
+        assert_eq!(choose(&block, SIMS), i32::from(want.action));
+        assert_eq!(exports::value().to_bits(), want.value.to_bits());
+        if want.action != choose_memoised(&net, s, &config, Memo::new()).unwrap().action {
+            changed += 1;
+        }
+    }
+    assert!(changed >= 2, "the refinement changed only {changed} of {} moves", positions.len());
+}
+
+/// [T12-28]: a `pastdeal.json` that is malformed, or fitted to another
+/// checkpoint, refuses the load, with the crate's reason.
+#[test]
+fn a_refused_refinement_refuses_the_load() {
+    let (checkpoint, parity) = (read("test/fixtures/checkpoint.bin"), read("test/fixtures/checkpoint.parity"));
+    let file = String::from_utf8(read("test/fixtures/pastdeal.json")).unwrap();
+    assert_eq!(load_with(&checkpoint, &parity, ENDGAME, b"{"), -1);
+    assert!(error().contains("pastdeal.json"), "{}", error());
+    let other = file.replacen("ce8343e1", "ce8343e2", 1);
+    assert_eq!(load_with(&checkpoint, &parity, ENDGAME, other.as_bytes()), -1);
+    assert!(error().contains("fitted to checkpoint"), "{}", error());
+    assert_eq!(load_with(&checkpoint, &parity, ENDGAME, file.as_bytes()), 0, "{}", error());
 }
 
 #[test]

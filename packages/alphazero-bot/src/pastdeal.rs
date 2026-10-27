@@ -142,6 +142,16 @@ impl PastDeal {
         })
     }
 
+    /// The settings, if they were fitted to `checkpoint`'s bytes.
+    pub fn fitted_to(self, checkpoint: &[u8]) -> Result<PastDeal, String> {
+        use sha2::{Digest, Sha256};
+        let sha = hex::encode(Sha256::digest(checkpoint));
+        if sha != self.checkpoint_sha256 {
+            return Err(format!("pastdeal.json was fitted to checkpoint {}, not {sha}", self.checkpoint_sha256));
+        }
+        Ok(self)
+    }
+
     /// The leaf cap and the call budget at `simulations` ([Z11-93]):
     /// `min(cap, simulations × cap / 10 000)`, in integers.
     pub fn scaled(&self, simulations: u32) -> (u32, u64) {

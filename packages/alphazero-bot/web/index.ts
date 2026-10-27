@@ -2,7 +2,8 @@
  * The master opponent's browser entry point ([0012 T12-12], [T12-13]): the
  * trained player of spec 0011, compiled to WebAssembly from the crate as it
  * is, and the shipped milestone's weights, all from bytes in the bundle. It
- * plays with the endgame proof at the cap `shipped.json` ships ([T12-33]).
+ * plays with the endgame proof at the cap `shipped.json` ships ([T12-33]),
+ * and with the past-deal refinement it ships, if any ([T12-36]).
  *
  * Imported by the master worker and nothing else in the client
  * ([0006 W6-46]): the payload is megabytes, and only a game with a `master`
@@ -11,7 +12,7 @@
 
 import { fromJSON, toCanonical, type AzulJSON } from 'engine';
 import { canonicalWords } from './canonical.js';
-import { CHECKPOINT, CPUCT, ENDGAME_NODES, FPU, MODULE, PARITY, SHIPPED as PAYLOAD_SHIPPED } from './dist/payload.js';
+import { CHECKPOINT, CPUCT, ENDGAME_NODES, FPU, MODULE, PARITY, PAST_DEAL, SHIPPED as PAYLOAD_SHIPPED } from './dist/payload.js';
 import { MASTER_SIMULATIONS, validSimulations } from './settings.js';
 
 export { MASTER_SIMULATIONS, validSimulations };
@@ -32,20 +33,31 @@ export interface Master {
   memoryBytes(): number;
 }
 
-/** The milestone the payload carries ([T12-9]), and its endgame node cap ([T12-33]). */
+/** The milestone the payload carries ([T12-9]), its endgame node cap ([T12-33]) and its refinement ([T12-36]). */
 export const SHIPPED: Readonly<{
   run: string;
   generation: number;
   checkpointSha256: string;
   paritySha256: string;
   endgameNodes: number;
+  pastDeal: Readonly<{ sha256: string }> | null;
 }> = PAYLOAD_SHIPPED;
 
 /** The web crate's exports ([0012] *The web crate's exports*). */
 interface Exports {
   memory: { buffer: ArrayBuffer };
   alloc(len: number): number;
-  load(ck: number, ckLen: number, par: number, parLen: number, cpuct: number, fpu: number, endgameNodes: number): number;
+  load(
+    ck: number,
+    ckLen: number,
+    par: number,
+    parLen: number,
+    cpuct: number,
+    fpu: number,
+    endgameNodes: number,
+    pd: number,
+    pdLen: number,
+  ): number;
   words_ptr(): number;
   choose(nWords: number, simulations: number): number;
   value(): number;
@@ -90,12 +102,17 @@ function put(x: Exports, bytes: Uint8Array): number {
  * [T12-12]: instantiates the module from the bundle's bytes — never
  * `instantiateStreaming`, which takes a network response — and loads the
  * shipped checkpoint, parity checked ([0011 Z11-13]), at the shipped endgame
- * node cap ([T12-33]). Rejects with the crate's own words when the load is
- * refused. `parity` is for the suite alone, to show a corrupted file is
- * refused; `endgameNodes` for the latency lane alone, to measure a cap before
- * it is shipped. The interface passes neither.
+ * node cap ([T12-33]), with the shipped refinement ([T12-36]). Rejects with
+ * the crate's own words when the load is refused. `parity` is for the suite
+ * alone, to show a corrupted file is refused; `endgameNodes` and `pastDeal`
+ * (a `pastdeal.json`'s bytes, empty for none) for the latency lane alone, to
+ * measure a setting before it is shipped. The interface passes none.
  */
-export async function createMaster(parity: Uint8Array = decode(PARITY), endgameNodes: number = ENDGAME_NODES): Promise<Master> {
+export async function createMaster(
+  parity: Uint8Array = decode(PARITY),
+  endgameNodes: number = ENDGAME_NODES,
+  pastDeal: Uint8Array = decode(PAST_DEAL),
+): Promise<Master> {
   if (!Number.isInteger(endgameNodes) || endgameNodes < 0 || endgameNodes > 1_000_000_000) {
     throw new RangeError(`endgameNodes must be a whole number in 0..=1000000000, not ${String(endgameNodes)}`);
   }
@@ -104,7 +121,8 @@ export async function createMaster(parity: Uint8Array = decode(PARITY), endgameN
   const checkpoint = decode(CHECKPOINT);
   const ck = put(x, checkpoint);
   const par = put(x, parity);
-  if (x.load(ck, checkpoint.length, par, parity.length, CPUCT, FPU, endgameNodes) !== 0) {
+  const pd = put(x, pastDeal);
+  if (x.load(ck, checkpoint.length, par, parity.length, CPUCT, FPU, endgameNodes, pd, pastDeal.length) !== 0) {
     throw new Error(`the master's checkpoint was refused: ${errorText(x)}`);
   }
   return {

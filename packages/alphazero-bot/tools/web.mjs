@@ -6,8 +6,11 @@
  *
  * Refuses unless the shipped milestone's files match the sha256s
  * `web/shipped.json` records ([T12-9]); its `cpuct` and `fpu` come from the
- * config logged with that milestone ([0011 Z11-34]), and the endgame proof's
- * node cap from `shipped.json` itself ([T12-33]). The output is git-ignored
+ * config logged with that milestone ([0011 Z11-34]), the endgame proof's
+ * node cap from `shipped.json` itself ([T12-33]), and the past-deal
+ * refinement, if `shipped.json` names one, from the milestone's own
+ * `pastdeal.json`, which must match the sha256 it records and have been
+ * fitted to the shipped checkpoint ([T12-36]). The output is git-ignored
  * and written only when it changes, so a dev server is not reloaded for
  * nothing.
  */
@@ -27,14 +30,18 @@ const sha256 = (b) => createHash('sha256').update(b).digest('hex');
 const MAX_ENDGAME_NODES = 1_000_000_000;
 
 /**
- * The shipped milestone's checkpoint, parity file, `cpuct`, `fpu` and endgame
- * node cap, or a throw naming what does not match. `shipped` is
- * `web/shipped.json`'s content.
+ * The shipped milestone's checkpoint, parity file, `cpuct`, `fpu`, endgame
+ * node cap and `pastdeal.json` (empty for none), or a throw naming what does
+ * not match. `shipped` is `web/shipped.json`'s content.
  */
 export function shippedMilestone(shipped, packageDir = PACKAGE) {
   const n = shipped.endgameNodes;
   if (!Number.isInteger(n) || n < 0 || n > MAX_ENDGAME_NODES) {
     throw new Error(`shipped.json's endgameNodes must be a whole number in 0..=${MAX_ENDGAME_NODES}, not ${JSON.stringify(n)}`);
+  }
+  const pd = shipped.pastDeal;
+  if (pd !== null && (typeof pd !== 'object' || typeof pd?.sha256 !== 'string' || Object.keys(pd).length !== 1)) {
+    throw new Error(`shipped.json's pastDeal must be null or { sha256 }, not ${JSON.stringify(pd)}`);
   }
   const dir = join(packageDir, 'milestones', shipped.run, String(shipped.generation));
   const files = {};
@@ -47,12 +54,23 @@ export function shippedMilestone(shipped, packageDir = PACKAGE) {
   const log = JSON.parse(readFileSync(join(packageDir, 'milestones', 'log.json'), 'utf8'));
   const entry = log.find((e) => e.kind === 'milestone' && e.run === shipped.run && e.generation === shipped.generation);
   if (entry === undefined) throw new Error(`${shipped.run}/${shipped.generation} is not a logged milestone`);
+  let pastDeal = Buffer.alloc(0);
+  if (pd !== null) {
+    const path = join(dir, 'pastdeal.json');
+    if (!existsSync(path)) throw new Error(`shipped.json names a pastDeal, but ${shipped.run}/${shipped.generation} has no pastdeal.json`);
+    pastDeal = readFileSync(path);
+    if (sha256(pastDeal) !== pd.sha256) throw new Error(`${path} does not match shipped.json's pastDeal.sha256`);
+    if (JSON.parse(pastDeal.toString('utf8')).checkpointSha256 !== shipped.checkpointSha256) {
+      throw new Error(`${path} was not fitted to the shipped checkpoint`);
+    }
+  }
   return {
     checkpoint: files['checkpoint.bin'],
     parity: files['checkpoint.parity'],
     cpuct: entry.config.cpuct,
     fpu: entry.config.fpu,
     endgameNodes: n,
+    pastDeal,
   };
 }
 
@@ -73,6 +91,7 @@ export const ENDGAME_NODES = ${JSON.stringify(m.endgameNodes)};
 export const MODULE = '${module.toString('base64')}';
 export const CHECKPOINT = '${m.checkpoint.toString('base64')}';
 export const PARITY = '${m.parity.toString('base64')}';
+export const PAST_DEAL = '${m.pastDeal.toString('base64')}';
 `;
   mkdirSync(dirname(OUT), { recursive: true });
   if (!existsSync(OUT) || readFileSync(OUT, 'utf8') !== text) writeFileSync(OUT, text);

@@ -104,7 +104,8 @@ function configFaults(config: string): string[] {
   return out;
 }
 
-const CHOOSE = ['choose', '_memoised('].join('');
+/** [T12-3]: the crate's own chooser, with the refinement it ships ([T12-36]). */
+const CHOOSE = ['choose', '_played('].join('');
 const PLAYER_CODE = [
   ['impl ', 'Evaluator'].join(''),
   ['.for', 'ward('].join(''),
@@ -251,6 +252,8 @@ describe('the web crate [T12-1], [T12-2], [T12-3], [T12-5]', () => {
       expect(playerCodeFaults([lib, { path: 'web/src/x.rs', text: `fn g() { ${p} }` }]), p).not.toEqual([]);
     }
     expect(playerCodeFaults([{ path: 'web/src/lib.rs', text: 'fn f() { choose(&n, &s, &c); }' }])).not.toEqual([]);
+    // A player without the refinement: `choose_memoised` alone ([T12-36]).
+    expect(playerCodeFaults([{ path: 'web/src/lib.rs', text: `fn f() { ${['choose', '_memoised('].join('')}&n, &s, &c, m); }` }])).not.toEqual([]);
     // Named only in a comment, it plays nothing.
     expect(playerCodeFaults([{ path: 'web/src/lib.rs', text: `// ${CHOOSE}` }])).not.toEqual([]);
   });
