@@ -7,6 +7,7 @@
 #![forbid(unsafe_code)]
 
 mod commands;
+mod fit;
 
 use std::process::ExitCode;
 

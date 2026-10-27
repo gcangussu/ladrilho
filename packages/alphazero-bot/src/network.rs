@@ -33,6 +33,28 @@ pub trait Evaluator: Sync {
             self.evaluate(observation, legal, o);
         }
     }
+
+    /// [0011 Z11-94]: the legal action a greedy rollout plays, the highest
+    /// logit's, the lowest action on a tie. Unless the evaluator knows its
+    /// logits, the highest probability's: the softmax keeps their order, but
+    /// rounds through `exp`, which need not be the same on every build.
+    fn greedy(&self, observation: &[f32; ENCODED_SIZE], legal: &[Action]) -> Action {
+        let mut e = Evaluation::default();
+        self.evaluate(observation, legal, &mut e);
+        argmax(&e.policy, legal)
+    }
+}
+
+/// The legal action whose entry in `scores` is highest, the lowest action on a tie.
+pub fn argmax(scores: &[f32; POLICY], legal: &[Action]) -> Action {
+    let mut best = legal[0];
+    for &a in legal {
+        let (x, y) = (scores[usize::from(a)], scores[usize::from(best)]);
+        if x > y || (x == y && a < best) {
+            best = a;
+        }
+    }
+    best
 }
 
 /// One leaf a search waits on: its input and its legal set.
@@ -46,6 +68,10 @@ impl<E: Evaluator + ?Sized> Evaluator for &E {
 
     fn evaluate_batch(&self, requests: &[Request<'_>], out: &mut [Evaluation]) {
         (**self).evaluate_batch(requests, out);
+    }
+
+    fn greedy(&self, observation: &[f32; ENCODED_SIZE], legal: &[Action]) -> Action {
+        (**self).greedy(observation, legal)
     }
 }
 
@@ -753,6 +779,14 @@ impl Evaluator for Network {
         let mut logits = [0f32; POLICY];
         out.value = self.forward_rows(observation, legal, &mut logits);
         masked_softmax(&logits, legal, &mut out.policy);
+    }
+
+    /// The logits are pure `f32` arithmetic in source order, so the same bits
+    /// on every build ([0012 T12-26]); the softmax's `exp` is not read.
+    fn greedy(&self, observation: &[f32; ENCODED_SIZE], legal: &[Action]) -> Action {
+        let mut logits = [0f32; POLICY];
+        self.forward_rows(observation, legal, &mut logits);
+        argmax(&logits, legal)
     }
 
     /// `BATCH` at a time, each group computing the logits of the actions legal

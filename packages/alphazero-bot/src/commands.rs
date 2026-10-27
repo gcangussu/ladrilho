@@ -11,6 +11,7 @@ use azul_alphazero::parity;
 use azul_alphazero::memo::{Memo, search_memoised_until};
 use azul_alphazero::samples::{aux_path, look_path};
 use azul_alphazero::endgame::refine;
+use azul_alphazero::pastdeal::{PastDeal, choose_played, search_played};
 use azul_alphazero::search::{SearchResult, choose, search_until};
 use azul_alphazero::selfplay::{GAMES_PER_THREAD, self_play};
 use azul_alphazero::wire::{frame, read_canonical, read_message, read_messages};
@@ -20,7 +21,9 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 /// Each command loads one checkpoint, parity checked, and one run's
-/// `config.json`. Only `latency` takes `--simulations` ([Z11-60]).
+/// `config.json`. Only `latency` takes `--simulations` ([Z11-60]); `play`,
+/// `serve` and `latency` take `--past-deal`, a checkpoint's refinement
+/// settings, which no config holds ([Z11-91]).
 #[derive(Parser)]
 #[command(name = "alphazero", about = "The trained player's commands (spec 0011).")]
 pub struct Cli {
@@ -45,6 +48,9 @@ enum Command {
         search: Search,
         #[command(flatten)]
         timing: Timing,
+        /// [Z11-91]: the refinement's `pastdeal.json`, for `--search play` only.
+        #[arg(long)]
+        past_deal: Option<PathBuf>,
     },
     /// Positions on stdin one after another, each answered on stdout as `play`
     /// answers it, until stdin ends ([Z11-72]).
@@ -56,6 +62,9 @@ enum Command {
         search: Search,
         #[command(flatten)]
         timing: Timing,
+        /// [Z11-91]: the refinement's `pastdeal.json`, for `--search play` only.
+        #[arg(long)]
+        past_deal: Option<PathBuf>,
     },
     /// Self-play games, written as a sample file ([Z11-26]).
     Selfplay {
@@ -77,6 +86,28 @@ enum Command {
         config: PathBuf,
         #[arg(long)]
         simulations: Option<u32>,
+        /// [Z11-91]: time `choose` with the refinement, memoised within each move.
+        #[arg(long)]
+        past_deal: Option<PathBuf>,
+    },
+    /// [Z11-97]: the refinement's constants fitted to a checkpoint, on the
+    /// panel's boundaries into round 5, written as `pastdeal.json`.
+    PastDealFit {
+        checkpoint: PathBuf,
+        #[arg(long)]
+        panel: PathBuf,
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long, default_value_t = 8)]
+        deals: u32,
+        #[arg(long, default_value_t = 32)]
+        leaves: u32,
+        #[arg(long, default_value_t = 4_000)]
+        budget: u64,
+        #[arg(long, default_value_t = 4)]
+        gate: u32,
+        #[arg(long, default_value_t = 4)]
+        threads: usize,
     },
     /// Self-play's speed, written beside the config ([Z11-53]).
     Throughput {
@@ -146,15 +177,41 @@ fn load(checkpoint: &Path, config: &Path, batched: bool) -> Result<Loaded, Strin
     Ok(Loaded { net, config, checkpoint_sha256: hex::encode(Sha256::digest(&bytes)) })
 }
 
+/// [Z11-91]: a checkpoint's `pastdeal.json`, refused unless it was fitted to
+/// the checkpoint loaded, or if the search is not `play`'s, or with a clock:
+/// a clocked answer must be `play` configured for the count it reports
+/// ([Z11-24]), and two searches stopped part way are not that.
+fn past_deal(path: Option<&Path>, loaded: &Loaded, search: Search, timing: Timing) -> Result<Option<PastDeal>, String> {
+    let Some(path) = path else { return Ok(None) };
+    if !matches!(search, Search::Play) {
+        return Err("--past-deal is for --search play: milestones measure the search alone ([Z11-91])".into());
+    }
+    if timing.clock_ms.is_some() {
+        return Err("--past-deal cannot take --clock-ms: the refinement has no stop ([Z11-24], [Z11-91])".into());
+    }
+    let pd = PastDeal::parse(&read(path)?)?;
+    if pd.checkpoint_sha256 != loaded.checkpoint_sha256 {
+        return Err(format!("{} was fitted to checkpoint {}, not this one", path.display(), pd.checkpoint_sha256));
+    }
+    Ok(Some(pd))
+}
+
 pub fn run(cli: Cli) -> Result<(), String> {
     match cli.command {
-        Command::Play { checkpoint, config, search, timing } => play(&checkpoint, &config, search, timing),
-        Command::Serve { checkpoint, config, search, timing } => serve(&checkpoint, &config, search, timing),
+        Command::Play { checkpoint, config, search, timing, past_deal } => {
+            play(&checkpoint, &config, search, timing, past_deal.as_deref())
+        }
+        Command::Serve { checkpoint, config, search, timing, past_deal } => {
+            serve(&checkpoint, &config, search, timing, past_deal.as_deref())
+        }
         Command::Selfplay { checkpoint, config, generation, games, out } => {
             selfplay(&checkpoint, &config, generation, games, &out)
         }
-        Command::Latency { checkpoint, corpus, config, simulations } => {
-            latency(&checkpoint, &corpus, &config, simulations)
+        Command::Latency { checkpoint, corpus, config, simulations, past_deal } => {
+            latency(&checkpoint, &corpus, &config, simulations, past_deal.as_deref())
+        }
+        Command::PastDealFit { checkpoint, panel, out, deals, leaves, budget, gate, threads } => {
+            past_deal_fit(&checkpoint, &panel, &out, Structure { deals, leaves, budget, gate }, threads)
         }
         Command::Throughput { checkpoint, config } => throughput(&checkpoint, &config),
     }
@@ -211,9 +268,10 @@ fn proved<S: azul_engine::Shuffler>(state: &AzulState<S>, result: SearchResult, 
 }
 
 /// [Z11-23]: one position in, four words out, nothing kept.
-fn play(checkpoint: &Path, config: &Path, search: Search, timing: Timing) -> Result<(), String> {
+fn play(checkpoint: &Path, config: &Path, search: Search, timing: Timing, pd: Option<&Path>) -> Result<(), String> {
     let loaded = load(checkpoint, config, false)?;
     let s = settings(&loaded.config, search_kind(search))?;
+    let pd = past_deal(pd, &loaded, search, timing)?;
     let mut input = Vec::new();
     std::io::stdin().read_to_end(&mut input).map_err(|e| format!("reading stdin: {e}"))?;
     let messages = read_messages(&input)?;
@@ -222,8 +280,13 @@ fn play(checkpoint: &Path, config: &Path, search: Search, timing: Timing) -> Res
     };
     let state = position(block)?;
     let started = Instant::now();
-    let Some((result, _)) = search_until(&loaded.net, &state, &s.search, None, &mut stopper(timing.clock_ms, started))
-    else {
+    // With the refinement, memoised within the move ([Z11-69]): the second
+    // search asks again what the first asked.
+    let result = match &pd {
+        Some(pd) => search_played(&loaded.net, &state, &s.search, Some(pd), &mut Memo::new()).map(|p| p.result),
+        None => search_until(&loaded.net, &state, &s.search, None, &mut stopper(timing.clock_ms, started)).map(|r| r.0),
+    };
+    let Some(result) = result else {
         return Err(TERMINAL.into());
     };
     let a = proved(&state, result, s.search.endgame_nodes, started.elapsed().as_secs_f64() * 1000.0);
@@ -234,9 +297,10 @@ fn play(checkpoint: &Path, config: &Path, search: Search, timing: Timing) -> Res
 /// and parity checked once; each position is answered before the next is
 /// read, from a memo of the evaluations made so far ([Z11-69]), emptied
 /// whenever a position's round differs from the one before it.
-fn serve(checkpoint: &Path, config: &Path, search: Search, timing: Timing) -> Result<(), String> {
+fn serve(checkpoint: &Path, config: &Path, search: Search, timing: Timing, pd: Option<&Path>) -> Result<(), String> {
     let loaded = load(checkpoint, config, false)?;
     let s = settings(&loaded.config, search_kind(search))?;
+    let pd = past_deal(pd, &loaded, search, timing)?;
     let mut input = std::io::stdin().lock();
     let mut out = std::io::stdout().lock();
     let mut memo = Memo::new();
@@ -248,8 +312,11 @@ fn serve(checkpoint: &Path, config: &Path, search: Search, timing: Timing) -> Re
             round = Some(state.round_index());
         }
         let started = Instant::now();
-        let mut stop = stopper(timing.clock_ms, started);
-        let Some(result) = search_memoised_until(&loaded.net, &state, &s.search, &mut memo, &mut stop) else {
+        let result = match &pd {
+            Some(pd) => search_played(&loaded.net, &state, &s.search, Some(pd), &mut memo).map(|p| p.result),
+            None => search_memoised_until(&loaded.net, &state, &s.search, &mut memo, &mut stopper(timing.clock_ms, started)),
+        };
+        let Some(result) = result else {
             return Err(TERMINAL.into());
         };
         let a = proved(&state, result, s.search.endgame_nodes, started.elapsed().as_secs_f64() * 1000.0);
@@ -278,6 +345,7 @@ fn selfplay(checkpoint: &Path, config: &Path, generation: u64, games: u64, out: 
 struct LatencyReport {
     simulations: u32,
     checkpoint_sha256: String,
+    past_deal: bool,
     measured: usize,
     skipped: u64,
     milliseconds: Vec<f64>,
@@ -285,9 +353,10 @@ struct LatencyReport {
 
 /// [Z11-40]: `choose` timed on every corpus position, single-threaded, from
 /// the position handed in to the action returned.
-fn latency(checkpoint: &Path, corpus: &Path, config: &Path, simulations: Option<u32>) -> Result<(), String> {
+fn latency(checkpoint: &Path, corpus: &Path, config: &Path, simulations: Option<u32>, pd: Option<&Path>) -> Result<(), String> {
     let loaded = load(checkpoint, config, false)?;
     let s = settings(&loaded.config, SearchKind::Latency(simulations))?;
+    let pd = past_deal(pd, &loaded, Search::Play, Timing { clock_ms: None, split_ms: false })?;
     let mut states = Vec::new();
     for (i, block) in read_messages(&read(corpus)?)?.iter().enumerate() {
         let c = read_canonical(block).map_err(|e| format!("corpus position {i}: {e}"))?;
@@ -299,7 +368,11 @@ fn latency(checkpoint: &Path, corpus: &Path, config: &Path, simulations: Option<
     let mut skipped = 0u64;
     for st in &states {
         let started = Instant::now();
-        let chosen = choose(&loaded.net, st, &s.search);
+        let chosen = match &pd {
+            // A fresh memo a move ([Z11-69]), dropped before the proof.
+            Some(pd) => choose_played(&loaded.net, st, &s.search, Some(pd), Memo::new()),
+            None => choose(&loaded.net, st, &s.search),
+        };
         let ms = started.elapsed().as_secs_f64() * 1000.0;
         match chosen {
             Some(_) => times.push(ms),
@@ -311,6 +384,7 @@ fn latency(checkpoint: &Path, corpus: &Path, config: &Path, simulations: Option<
         to_json(&LatencyReport {
             simulations: s.search.simulations,
             checkpoint_sha256: loaded.checkpoint_sha256,
+            past_deal: pd.is_some(),
             measured: times.len(),
             skipped,
             milliseconds: times,
@@ -379,6 +453,55 @@ fn throughput(checkpoint: &Path, config: &Path) -> Result<(), String> {
     });
     let dir = config.parent().unwrap_or(Path::new("."));
     write_atomic(&dir.join("throughput.json"), text.as_bytes())?;
+    print!("{text}");
+    Ok(())
+}
+
+/// The refinement's structural settings, which the fit does not choose.
+struct Structure {
+    deals: u32,
+    leaves: u32,
+    budget: u64,
+    gate: u32,
+}
+
+/// [Z11-97]: fits the blend and the recalibration to `checkpoint` on the
+/// panel, and writes `pastdeal.json` with the structure given, the
+/// checkpoint's sha256 and what the fit measured.
+fn past_deal_fit(checkpoint: &Path, panel: &Path, out: &Path, st: Structure, threads: usize) -> Result<(), String> {
+    let bytes = read(checkpoint)?;
+    let parity = read(&checkpoint.with_extension("parity"))
+        .map_err(|e| format!("no parity file beside the checkpoint, so it is not loaded ([Z11-13]): {e}"))?;
+    let net = Network::load_single(&bytes, &parity).map_err(|e| format!("{}: {e}", checkpoint.display()))?;
+    let panel_bytes = read(panel)?;
+    let fitted = crate::fit::fit(&net, &panel_bytes, hex::encode(Sha256::digest(&panel_bytes)), st.deals, threads)?;
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct File<'a> {
+        checkpoint_sha256: String,
+        gate: u32,
+        deals: u32,
+        leaves: u32,
+        budget: u64,
+        rollouts: bool,
+        blend: azul_alphazero::pastdeal::Blend,
+        recal: azul_alphazero::pastdeal::Recal,
+        fit: &'a crate::fit::Measured,
+    }
+    let text = to_json(&File {
+        checkpoint_sha256: hex::encode(Sha256::digest(&bytes)),
+        gate: st.gate,
+        deals: st.deals,
+        leaves: st.leaves,
+        budget: st.budget,
+        rollouts: true,
+        blend: fitted.blend,
+        recal: fitted.recal,
+        fit: &fitted.measured,
+    });
+    // What is written must be what the player reads.
+    PastDeal::parse(text.as_bytes())?;
+    write_atomic(out, text.as_bytes())?;
     print!("{text}");
     Ok(())
 }
