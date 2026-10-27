@@ -2433,7 +2433,8 @@ input {
 }
 
 .sheet-body,
-.sheet-col {
+.sheet-col,
+.sheet-deal {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -2474,12 +2475,6 @@ input {
     z-index: 2;
     box-shadow: 0 -0.75rem 0.75rem var(--surface), 0 1.1rem 0 var(--surface);
   }
-}
-
-.sheet-deal {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
 }
 
 /* A phone: the sheet rises from the bottom edge, under the thumb. */

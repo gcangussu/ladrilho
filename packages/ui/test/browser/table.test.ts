@@ -165,6 +165,9 @@ describe('the arrangements [U3-95]', () => {
 
 describe('the new-game sheet at a real size [W6-49]', () => {
   // Seen red, on a copy, with the short-height sticky Deal removed: 512 against 390.
+  // And seen red on 10-27 with `.sheet-deal`'s base rule after the short-height
+  // query, which made its `display: contents` dead: 606 against 390 once the
+  // master's presets pushed Deal's group below the fold.
   // Found by looking: at 844 × 390 the sheet scrolled and Deal sat below its
   // fold, and at 390 × 844 the master's setting pushed it off the bottom.
   it.each([
