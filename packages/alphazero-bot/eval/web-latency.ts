@@ -53,7 +53,7 @@ const HEAVIEST = 498;
 
 export function budgetOf(simulations: number): Budget {
   if (simulations === MASTER_SIMULATIONS.default) return 'default';
-  const quick = (MASTER_SIMULATIONS as { quick?: number }).quick;
+  const quick = MASTER_SIMULATIONS.quick;
   return simulations === quick ? 'quick' : 'report';
 }
 
@@ -86,7 +86,7 @@ async function main(): Promise<void> {
   const pastDeal = pd === undefined ? undefined : pd === 'none' ? new Uint8Array(0) : new Uint8Array(readFileSync(pd));
   const counts =
     values.simulations === undefined
-      ? [...new Set([(MASTER_SIMULATIONS as { quick?: number }).quick, MASTER_SIMULATIONS.default].filter((n): n is number => n !== undefined))]
+      ? [...new Set([MASTER_SIMULATIONS.quick, MASTER_SIMULATIONS.default])]
       : values.simulations.split(',').map(Number);
   if (counts.some((n) => !Number.isInteger(n) || n < MASTER_SIMULATIONS.min || n > MASTER_SIMULATIONS.max)) {
     throw new Error(`--simulations takes counts in [${MASTER_SIMULATIONS.min}, ${MASTER_SIMULATIONS.max}]`);

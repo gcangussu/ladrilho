@@ -294,8 +294,13 @@ describe('the entry point [T12-12], [T12-15], [T12-17]', () => {
 });
 
 describe('the settings [T12-16]', () => {
+  // The counts themselves are the climb's, held to the log by [T12-37]'s case.
   it('has the default and the range', () => {
-    expect(MASTER_SIMULATIONS).toEqual({ default: 10_000, min: 100, max: 200_000 });
+    const { quick, default: balanced, deep, min, max, ...rest } = MASTER_SIMULATIONS;
+    expect({ min, max, rest }).toEqual({ min: 100, max: 200_000, rest: {} });
+    for (const n of [quick, balanced, ...(deep === undefined ? [] : [deep])]) expect(validSimulations(n), String(n)).toBe(true);
+    expect(quick).toBeLessThanOrEqual(balanced);
+    if (deep !== undefined) expect(deep).toBeGreaterThan(balanced);
     for (const n of [100, 10_000, 200_000]) expect(validSimulations(n), String(n)).toBe(true);
     for (const n of [99, 200_001, 1000.5, Number.NaN, '1000', null, undefined]) expect(validSimulations(n), String(n)).toBe(false);
   });

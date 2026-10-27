@@ -20,7 +20,7 @@
  * [0003 U3-68], through the same helpers the components label them with.
  */
 
-import { render, within } from '@solidjs/testing-library';
+import { fireEvent, render, within } from '@solidjs/testing-library';
 import { flush } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CENTER, Rng, apply, decodeAction, legalActions, newGame, toJSON, type AzulJSON } from 'engine';
@@ -36,6 +36,7 @@ import { holdsRecordInvariants } from './record-helpers.js';
 import {
   EXPERT_AVAILABLE,
   LEVELS,
+  MASTER_PRESETS,
   MASTER_SIMULATIONS,
   seatingFromUrl,
   seatingToUrl,
@@ -1027,6 +1028,48 @@ describe("the master's setting in the sheet [W6-45]", () => {
       expect(state.view().seating.simulations).toEqual([2500, 700]);
       expect(state.view().seed).not.toBe(before);
     });
+
+  // [0012 T12-37]'s configurations, a new caller of [W6-44]'s staging: a
+  // preset stages its count for its seat alone, and a link carries it as it
+  // carries a typed number. Seen red, on a copy with its anchor confirmed: the
+  // preset's `onChange` staging both seats.
+  it('[W6-45] [W6-44] offers the configurations, each staging its count for its seat alone', async () => {
+    const { screen, state } = await mount('?seed=42&seating=master-master&p1Simulations=700');
+    const sheet = openSheet(screen);
+    editSeat(sheet, 1);
+    const group = within(sheet).getByRole('group', { name: 'Player 2 thinks' });
+    const presets = within(group).getAllByRole('radio') as HTMLInputElement[];
+    expect(presets.map((r) => r.value)).toEqual(MASTER_PRESETS.map((p) => p.name));
+    expect(presets.find((r) => r.checked)?.value).toBe('Balanced');
+    presets[0].click();
+    flush();
+    expect(spinbuttons(sheet)[0].value).toBe(String(MASTER_SIMULATIONS.quick));
+    expect(presets.find((r) => r.checked)?.value).toBe('Quick');
+    // A number of one's own is no configuration: none is checked.
+    commit(spinbuttons(sheet)[0], '2600');
+    expect(presets.some((r) => r.checked)).toBe(false);
+    // A refusal's line goes when a configuration is chosen.
+    commit(spinbuttons(sheet)[0], '50');
+    expect(within(sheet).getByRole('status').textContent).toContain('100 to 200,000');
+    presets[0].click();
+    flush();
+    expect(within(sheet).getByRole('status').textContent).toBe('');
+    // Every configuration is a stop of the slider, which reaches the default
+    // exactly: a count the climb names off the 1-2-5 ladder fails here.
+    const slider = within(sheet).getByRole('slider') as HTMLInputElement;
+    const stops: number[] = [];
+    for (let i = Number(slider.min); i <= Number(slider.max); i++) {
+      fireEvent.input(slider, { target: { value: String(i) } });
+      flush();
+      stops.push(Number(spinbuttons(sheet)[0].value));
+    }
+    for (const p of MASTER_PRESETS) expect(stops, p.name).toContain(p.simulations);
+    presets[0].click();
+    flush();
+    deal(sheet);
+    expect(state.view().seating.simulations).toEqual([700, MASTER_SIMULATIONS.quick]);
+    expect(simulationsToUrl(state.view().seating)).toEqual({ p1Simulations: '700', p2Simulations: String(MASTER_SIMULATIONS.quick) });
+  });
 });
 
 describe("the master worker's one player [W6-47]", () => {

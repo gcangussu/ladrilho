@@ -121,7 +121,8 @@ result, winrate) keep their meaning.
   `./web/settings` for `ui`, [0012 T12-12] and [0012 T12-15].)*
 - **[Z11-2]** The crate MUST be named `azul_alphazero`, with its `Cargo.toml` at the package root,
   Rust edition 2024, `publish = false`, one library target and one binary target named
-  `alphazero`. It MUST depend on `azul_engine` by path (`../engine-rs`). Everything that is the
+  `alphazero`, and no other: no `examples/`, `benches/` or `src/bin/`, of which Cargo makes
+  targets without a word in the manifest. It MUST depend on `azul_engine` by path (`../engine-rs`). Everything that is the
   player — the network, the search, the pre-deal view, the sample, checkpoint and parity formats,
   self-play — MUST be written in the crate on the engine alone. General-purpose functionality MAY
   come from crates.io, and only from this list, which the source check of [Z11-47] holds the

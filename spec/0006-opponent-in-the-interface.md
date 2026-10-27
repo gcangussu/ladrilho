@@ -205,8 +205,9 @@ type FromWorker =
 - **[W6-5]** A person MUST be able to occupy either seat. The computer MUST NOT be fixed to seat 1.
 
 - **[W6-54]** A page whose URL carries no seating, or one [W6-4] discards, MUST open with a person
-  as Player 1 and `master` as Player 2, at the default simulations setting of [W6-44]. A URL that
-  names a seating, `human-human` included, is unaffected.
+  as Player 1 and `master` as Player 2, at the default simulations setting of [W6-44] — since
+  intent 0016, the `Balanced` configuration of [W6-45], whatever count the climb has made it. A
+  URL that names a seating, `human-human` included, is unaffected.
 
   *Hot seat was the default until the client was published, because it was the first game there
   was. Intent 0003 gives the reason to change it: "the main reason anyone opens a board game
@@ -935,6 +936,12 @@ seat, and a worker that a game without it never builds.*
   seating, both settings and the person's moves reproduce the whole game, `master`'s play
   included — [W6-4]'s promise, kept for the new level.*
 
+  *(Amended by intent 0016.) The default is now the climb's ([0012 T12-37]), so it can move, and a
+  link writes a setting only when it is not the default of its day: a link made before the default
+  moved replays at the new one. That is the same kind of change as shipping a new `master` or a
+  refinement ([0012 T12-36]), each of which changes what every link replays; the promise holds
+  within one build, as it always has.*
+
 - **[W6-45]** The master's setting MUST be offered inside the new-game sheet ([W6-49]), beside the
   seat it belongs to, and only while that seat is staged as `master`. *(It was a closed `Advanced`
   disclosure beside the seat selectors; [W6-49] moved both into the sheet.)*
@@ -945,11 +952,21 @@ seat, and a worker that a game without it never builds.*
     which is intent 0010's "set the number themselves"; it is labelled `Player 1: simulations
     per move` or `Player 2: simulations per move`, with `min`, `max` and the staged value. One
     line states the default and the range.
+  - *(Amended by intent 0016, [0012 T12-37].)* Before them, a group of radio buttons with the
+    legend `Player 1 thinks` or `Player 2 thinks` MUST offer `MASTER_PRESETS`, quickest first:
+    `Quick`, `Balanced` (the default) and, only when the climb named one, `Deep`. Each says what
+    it is for and its count — `Thinks least · 5,000 simulations` — and never a time. A radio is
+    checked exactly when the seat's staged setting is its count, so a number of one's own checks
+    none. Choosing one MUST stage its count as a valid value does, for that seat alone, and clear
+    the status line. The line under the number input begins `Or a number of your own:`.
   - A valid value, committed on `change`, MUST stage [W6-44] for that seat alone. An invalid one
     MUST leave both staged settings as they were, restore the input to the seat's staged setting,
     and say why — with the range — in a `role="status"` line inside the sheet. Nothing deals until
     the sheet is committed.
   - It stays available while a search is in flight, as the new-game control does ([W6-23]).
+
+  *The configurations name no times because intent 0016 promises them on one laptop only; what a
+  person can rely on everywhere is the order, and that `Balanced` is the default.*
 
   *A status line of its own rather than [0003 U3-56]'s live region, which is derived from the view
   model alone: a refused entry changes nothing the view model holds, and giving it a place there

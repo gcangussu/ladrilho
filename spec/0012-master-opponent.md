@@ -64,6 +64,13 @@ Some findings decide the design:
   streaming 2.5 MB of weights. The memo of [0011 Z11-69] is the one large saving: 44% of a
   single search's calls repeat an earlier one, so it cuts calls a move from about 3600 to about
   2000. With the memo on both sides, wasm runs at 1.69× native.
+  *Remeasured on 10-27 with the crate as shipped (`choose_played`, the proof, the memo within
+  each move), interleaved on the idle machine of record, both sides twice over every
+  non-terminal corpus position, the faster of each position's two times kept: the module took
+  1.46–1.49× native AVX2 in total, at 10 000 and 50 000 simulations, with the past-deal
+  refinement and without, and its per-position ratio had a median of 1.46–1.49 and a 10–90%
+  range of 1.32–1.61. The module is not as fast as native, and the gap does not close with the
+  count. Native figures are therefore no stand-in for [T12-25]'s, which time the module.*
 - **The fork bought 2% for a second search to keep in step.**
 - **ONNX passed parity but lost.** It met [0011 Z11-13]'s parity (worst relative error 1.4e-6),
   yet it was slower, brought a 13.6 MB runtime, and still needed the crate's search. Its values

@@ -3,6 +3,7 @@ import { For, Show, createSignal } from 'solid-js';
 import { parseSeed } from '../game.js';
 import {
   LEVELS,
+  MASTER_PRESETS,
   MASTER_SIMULATIONS,
   validSimulations,
   type Level,
@@ -105,6 +106,21 @@ function nearestStop(value: number): number {
     if (Math.abs(Math.log(STOPS[i] / value)) < Math.abs(Math.log(STOPS[best] / value))) best = i;
   }
   return best;
+}
+
+/**
+ * Each configuration's line [W6-45], [0012 T12-37]: what it is for, never how
+ * long it takes, since the times are promised on one laptop only (intent 0016).
+ */
+const PRESET_LINES: Readonly<Record<(typeof MASTER_PRESETS)[number]['name'], string>> = {
+  Quick: 'Thinks least',
+  Balanced: 'The default: thinks as long as it pays',
+  Deep: 'Thinks longest, and was shown to play stronger',
+};
+
+/** The configuration a count is, if it is one. */
+export function presetOf(simulations: number): (typeof MASTER_PRESETS)[number] | undefined {
+  return MASTER_PRESETS.find((p) => p.simulations === simulations);
 }
 
 /** What one deal starts with: the staged seating, and a seed only when asked for [U3-104]. */
@@ -257,6 +273,31 @@ export function NewGameSheet(props: {
             {/* [W6-45]: beside the seat it belongs to, and only while it is a master. */}
             <Show when={players()[editing()] === 'master'}>
               <div class="budget">
+                <fieldset class="choices presets">
+                  <legend>{`Player ${editing() + 1} thinks`}</legend>
+                  <For each={MASTER_PRESETS}>
+                    {(preset) => (
+                      <label class={['choice', { chosen: sims()[editing()] === preset.simulations }]}>
+                        <input
+                          type="radio"
+                          name="master-preset"
+                          value={preset.name}
+                          checked={sims()[editing()] === preset.simulations}
+                          onChange={() => {
+                            setRefusal('');
+                            stage(editing(), preset.simulations);
+                          }}
+                        />
+                        <span class="choice-text">
+                          <span class="choice-name">{preset.name}</span>
+                          <span class="choice-line">
+                            {`${PRESET_LINES[preset.name]} · ${preset.simulations.toLocaleString('en')} simulations`}
+                          </span>
+                        </span>
+                      </label>
+                    )}
+                  </For>
+                </fieldset>
                 <label class="budget-row">
                   <span>Thinking time</span>
                   <input
@@ -285,7 +326,7 @@ export function NewGameSheet(props: {
                   />
                 </label>
                 <p class="sheet-note">
-                  {`More simulations play stronger and slower. Default ${MASTER_SIMULATIONS.default.toLocaleString('en')}; from ${RANGE}.`}
+                  {`Or a number of your own: more simulations play stronger and slower. Default ${MASTER_SIMULATIONS.default.toLocaleString('en')}; from ${RANGE}.`}
                 </p>
               </div>
             </Show>

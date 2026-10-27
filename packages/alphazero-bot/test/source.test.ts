@@ -136,6 +136,16 @@ function cargoFaults(toml: string): string[] {
 }
 
 /** [Z11-64]: debug assertions on, at `opt-level = 2`, in the test profile. */
+/**
+ * [Z11-2]: the directories Cargo makes targets of without a word in the
+ * manifest, which `cargoFaults` cannot see. `exists` answers for a path
+ * relative to the package.
+ */
+const AUTO_TARGETS = ['examples', 'benches', 'src/bin'] as const;
+function autoTargetFaults(exists: (path: string) => boolean): string[] {
+  return AUTO_TARGETS.filter((d) => exists(d)).map((d) => `${d}/ would add targets beside the library and the binary`);
+}
+
 function profileFaults(toml: string): string[] {
   const s = section(toml, '[profile.test]');
   if (s === null) return ['no [profile.test]'];
@@ -260,6 +270,7 @@ describe('the source check [Z11-47]', () => {
     expect(importFaults(SOURCES)).toEqual([]);
     expect(manifestFaults(pkg)).toEqual([]);
     expect(cargoFaults(toml)).toEqual([]);
+    expect(autoTargetFaults((p) => existsSync(join(PACKAGE, p)))).toEqual([]);
     expect(profileFaults(toml)).toEqual([]);
     expect(buildFlagFaults(cargoConfig)).toEqual([]);
     expect(lockedFaults(pkg.scripts)).toEqual([]);
@@ -318,6 +329,8 @@ describe('the source check [Z11-47]', () => {
       toml.replace('path = "../engine-rs"', 'git = "https://example.com/engine"'),
     ];
     for (const v of variants) expect(cargoFaults(v), v).not.toEqual([]);
+    for (const d of AUTO_TARGETS) expect(autoTargetFaults((p) => p === d), d).not.toEqual([]);
+    expect(autoTargetFaults((p) => p === 'tests' || p === 'src')).toEqual([]);
     expect(profileFaults(toml.replace('opt-level = 2', 'opt-level = 0'))).not.toEqual([]);
     expect(profileFaults(toml.replace('debug-assertions = true', 'debug-assertions = false'))).not.toEqual([]);
     expect(profileFaults(toml.replace('[profile.test]', '[profile.bench]'))).not.toEqual([]);

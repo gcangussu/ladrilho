@@ -163,7 +163,7 @@ fn it_applies_exactly_where_the_gate_says() {
             c.lid[usize::from(t)] += 1;
         }
         let short = AzulState::from_canonical(&c, Seeded::new(0)).unwrap();
-        assert_eq!(p.applies(&short, 10_000), false, "a bag of 19");
+        assert!(!p.applies(&short, 10_000), "a bag of 19");
         seen[2] |= s.tiles_left() >= 4;
     }
     assert_eq!(seen, [true; 4], "every edge of the gate was met");
@@ -322,7 +322,7 @@ fn it_is_deterministic() {
 /// `root` with one wall row of the player to move filled to four tiles, the
 /// tiles taken from the lid, else the bag; `None` if the engine refuses it.
 fn with_four_in_a_row(root: &AzulState<Seeded>) -> Option<AzulState<Seeded>> {
-    let mut c = root.to_canonical();
+    let c = root.to_canonical();
     let me = c.current_player.index();
     for row in 0..5 {
         let filled = (0..5).filter(|&col| c.walls[me][row * 5 + col] != 0).count();
@@ -352,10 +352,11 @@ fn with_four_in_a_row(root: &AzulState<Seeded>) -> Option<AzulState<Seeded>> {
             }
             c2.walls[me][row * 5 + col] = 1;
         }
-        if ok && c2.bag.len() >= 20 {
-            if let Ok(s) = AzulState::from_canonical(&c2, Seeded::new(0)) {
-                return Some(s);
-            }
+        if ok
+            && c2.bag.len() >= 20
+            && let Ok(s) = AzulState::from_canonical(&c2, Seeded::new(0))
+        {
+            return Some(s);
         }
     }
     None

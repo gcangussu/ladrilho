@@ -19,11 +19,11 @@ import type { AzulJSON, Player } from 'engine';
 import type { Choice, Tier } from 'bot';
 import type { ExpertChoice } from 'ai-bot';
 import type { MasterChoice } from 'alphazero-bot/web';
-import { MASTER_SIMULATIONS, validSimulations } from 'alphazero-bot/web/settings';
+import { MASTER_PRESETS, MASTER_SIMULATIONS, validSimulations } from 'alphazero-bot/web/settings';
 import baseline from 'ai-bot/gate/baseline.json' with { type: 'json' };
 
 export type { Choice, ExpertChoice, MasterChoice, Tier };
-export { MASTER_SIMULATIONS, validSimulations };
+export { MASTER_PRESETS, MASTER_SIMULATIONS, validSimulations };
 
 /**
  * What can occupy a seat [0008 A8-33], [W6-43]: one of `bot`'s three tiers,

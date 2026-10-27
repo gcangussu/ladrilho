@@ -57,7 +57,7 @@ describe('the climb [T12-37], [Z11-99]', () => {
     expect(master).not.toBeNull();
     const c = climbed(log, master!);
     expect(MASTER_SIMULATIONS.default).toBe(c.default);
-    expect((MASTER_SIMULATIONS as { deep?: number }).deep ?? null).toBe(c.deep);
+    expect(MASTER_SIMULATIONS.deep ?? null).toBe(c.deep);
   });
 });
 
