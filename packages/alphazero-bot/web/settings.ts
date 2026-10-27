@@ -16,7 +16,7 @@ export interface MasterSimulations {
   readonly max: number;
 }
 
-export const MASTER_SIMULATIONS: MasterSimulations = Object.freeze({ quick: 5_000, default: 10_000, min: 100, max: 200_000 });
+export const MASTER_SIMULATIONS: MasterSimulations = Object.freeze({ quick: 10_000, default: 100_000, deep: 200_000, min: 100, max: 200_000 });
 
 /** An integer in `[min, max]`. */
 export function validSimulations(n: unknown): n is number {

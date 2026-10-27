@@ -926,20 +926,20 @@ describe('the master is offered, and seated [W6-43], [W6-44]', () => {
   });
 
   it("[W6-44] reads each seat's setting from the URL, and discards a bad one alone", () => {
-    expect(simulationsFromUrl('?p1Simulations=500&p2Simulations=99')).toEqual([500, 10_000]);
-    expect(simulationsFromUrl('?p1Simulations=abc&p2Simulations=200000')).toEqual([10_000, 200_000]);
+    expect(simulationsFromUrl('?p1Simulations=500&p2Simulations=99')).toEqual([500, MASTER_SIMULATIONS.default]);
+    expect(simulationsFromUrl('?p1Simulations=abc&p2Simulations=200000')).toEqual([MASTER_SIMULATIONS.default, 200_000]);
     for (const bad of ['1e3', '200001', '-5', '100.5', '', ' 300']) {
-      expect(simulationsFromUrl(`?p1Simulations=${encodeURIComponent(bad)}`), bad).toEqual([10_000, 10_000]);
+      expect(simulationsFromUrl(`?p1Simulations=${encodeURIComponent(bad)}`), bad).toEqual([MASTER_SIMULATIONS.default, MASTER_SIMULATIONS.default]);
     }
-    expect(simulationsFromUrl('')).toEqual([10_000, 10_000]);
+    expect(simulationsFromUrl('')).toEqual([MASTER_SIMULATIONS.default, MASTER_SIMULATIONS.default]);
     expect(seatingFromUrl('?seating=master-master&p1Simulations=300')).toEqual({
       players: ['master', 'master'],
-      simulations: [300, 10_000],
+      simulations: [300, MASTER_SIMULATIONS.default],
     });
   });
 
   it('[W6-44] puts a setting in a link only for a master seat away from the default', () => {
-    expect(simulationsToUrl({ players: ['master', 'master'], simulations: [300, 10_000] })).toEqual({ p1Simulations: '300' });
+    expect(simulationsToUrl({ players: ['master', 'master'], simulations: [300, MASTER_SIMULATIONS.default] })).toEqual({ p1Simulations: '300' });
     expect(simulationsToUrl({ players: ['sharp', 'master'], simulations: [300, 700] })).toEqual({ p2Simulations: '700' });
     expect(simulationsToUrl({ players: [null, 'easy'], simulations: [300, 700] })).toEqual({});
     // The round trip a link makes.
@@ -961,12 +961,12 @@ describe('the master is offered, and seated [W6-43], [W6-44]', () => {
     const { state, harness } = await load('?seed=42&seating=master-human&p1Simulations=300');
     state.startNewGame();
     flush();
-    expect(state.view().seating.simulations).toEqual([300, 10_000]);
+    expect(state.view().seating.simulations).toEqual([300, MASTER_SIMULATIONS.default]);
     state.startWithSeating({ players: ['master', 'sharp'] });
     flush();
-    expect(state.view().seating.simulations).toEqual([300, 10_000]);
+    expect(state.view().seating.simulations).toEqual([300, MASTER_SIMULATIONS.default]);
     const before = state.view().seed;
-    state.startWithSeating({ players: ['master', 'sharp'], simulations: [400, 10_000] });
+    state.startWithSeating({ players: ['master', 'sharp'], simulations: [400, MASTER_SIMULATIONS.default] });
     flush();
     expect(state.view().seed).not.toBe(before);
     expect(harness.pending.at(-1)).toMatchObject({ tier: 'master', simulations: 400 });
@@ -996,9 +996,9 @@ describe("the master's setting in the sheet [W6-45]", () => {
     const inputs = spinbuttons(sheet);
     expect(inputs).toHaveLength(1);
     expect(within(sheet).getByLabelText(simulationsLabel(1))).toBe(inputs[0]);
-    expect([inputs[0].value, inputs[0].min, inputs[0].max]).toEqual(['10000', '100', '200000']);
-    expect(within(sheet).getByRole('slider')).toHaveAttribute('aria-valuetext', '10,000 simulations');
-    expect(sheet.textContent).toContain('Default 10,000; from 100 to 200,000.');
+    expect([inputs[0].value, inputs[0].min, inputs[0].max]).toEqual(['100000', '100', '200000']);
+    expect(within(sheet).getByRole('slider')).toHaveAttribute('aria-valuetext', '100,000 simulations');
+    expect(sheet.textContent).toContain('Default 100,000; from 100 to 200,000.');
   });
 
   // Seen red, on a copy, with the refusal branch's `return` deleted: the
@@ -1015,7 +1015,7 @@ describe("the master's setting in the sheet [W6-45]", () => {
       commit(first, '2500');
       // Staged, not dealt [W6-49].
       expect(state.view().seed).toBe(before);
-      expect(state.view().seating.simulations).toEqual([10_000, 700]);
+      expect(state.view().seating.simulations).toEqual([MASTER_SIMULATIONS.default, 700]);
 
       for (const bad of ['50', '200001', '12.5', '']) {
         commit(spinbuttons(sheet)[0], bad);

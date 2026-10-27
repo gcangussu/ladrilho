@@ -125,7 +125,9 @@ milestone, pool rating) keep their meaning.
 
 | Constant | Value |
 | --- | --- |
-| `MASTER_SIMULATIONS.default` | 10 000 |
+| `MASTER_SIMULATIONS.quick` | 10 000 |
+| `MASTER_SIMULATIONS.default` | 100 000 |
+| `MASTER_SIMULATIONS.deep` | 200 000 |
 | `MASTER_SIMULATIONS.min` | 100 |
 | `MASTER_SIMULATIONS.max` | 200 000 |
 
@@ -138,6 +140,10 @@ Elo), and 200 000, 500 000 and 1 000 000 against 100 000 scored 57%, 50% and 47%
 to 200 000 the setting buys waiting, not strength (`milestones/JOURNAL.md`, 10-22). The maximum
 stays 200 000, where "more simulations play stronger" is still true. Its slowest moves take
 about 9 s on the machine of record.*
+
+*`quick`, `default` and `deep` are [T12-37]'s, from the climb of 10-27 on `twelfth`/120. The
+default, 10 000 until then, was set by intent 0010's budget of every move under a second; that
+budget is now `quick`'s, and 10 000 is the largest count that still keeps it.*
 
 ## Data model
 
@@ -158,8 +164,10 @@ interface Shipped {
 
 ```ts
 // alphazero-bot/web/settings — constants only, no payload [T12-15]
-export const MASTER_SIMULATIONS: Readonly<{ default: 10000; min: 100; max: 200000 }>;
+export const MASTER_SIMULATIONS: Readonly<{ quick: 10000; default: 100000; deep?: 200000; min: 100; max: 200000 }>;
 export function validSimulations(n: unknown): n is number;  // an integer in [min, max]
+// [T12-37]: quickest first; Deep only while `deep` is set
+export const MASTER_PRESETS: readonly { name: 'Quick' | 'Balanced' | 'Deep'; simulations: number }[];
 
 // alphazero-bot/web — the player
 export interface MasterChoice {
@@ -478,6 +486,14 @@ interface Seating {
   doubling of the wait has to buy about 15 rating points. A step over budget that still wins is
   offered as `deep` rather than lost, and one that does not win is not offered at all.*
 
+  *The climb of 10-27 on `twelfth`/120, played natively with the refinement off, `fits` from
+  [T12-25]'s record of that day: 25 000 against 10 000, 800 games, 54.4%; 50 000 against 25 000,
+  800 games, 54.6%; 100 000 against 50 000, 1 200 games, 53.0%; each accepted and in budget. Then
+  200 000 against 100 000, 1 600 games, 52.7%, accepted but over budget (p95 3 328 ms, p99
+  5 529 ms), so it is `deep` and the climb ended. Each doubling bought about +19 to +32 Elo,
+  less as the count grew. `quick` is 10 000, the largest of
+  2 000, 5 000 and 10 000 whose every move was under a second (max 805 ms).*
+
 ### The browser entry point
 
 - **[T12-12]** `createMaster()` MUST decode the payload's base64 into bytes, instantiate the module
@@ -667,6 +683,18 @@ These requirements were proposals for *0006*, in the manner of [0008 A8-33]. Eac
   endgame caps of 400 000, 500 000 and 600 000 it also passed (max 689, 663 and 687 ms, 31 MB
   after the corpus), where 500 000 failed on 10-05; the journal's sweep found that no cap above
   300 000 changes a move worth measuring, so the shipped cap stands ([T12-33]).*
+
+  *Measured on 10-27 for the new budget, with `pastdeal.json` on and the shipped cap, at every
+  count the climb could reach (the slower pass of two, 1 978 positions): 10 000, p95 464 ms, p99
+  594 ms, max 805 ms; 25 000, p95 850 ms, p99 1 231 ms, max 3 000 ms; 50 000, p95 1 239 ms, p99
+  1 843 ms, max 2 553 ms; 100 000, p95 1 994 ms, p99 3 239 ms, max 4 633 ms, 43 MB after the
+  corpus; 200 000, p95 3 328 ms, p99 5 529 ms, max 8 289 ms, 75 MB. 25 000's maximum is one
+  move of the first pass, which took 1 487 ms in the second; the load average was 2.3 at the
+  start. At 100 000, 11 of the 38 corpus games had a move over 3 s and none one over 5 s; the
+  slowest moves are in round 4, where the refinement applies (p99 4 232 ms there). Timed with
+  the refinement, these bound the default without it as well: off, a move does no more work.
+  At the maximum, 4.3 s and 35 MB on the slowest position at 10 000, 8.0 s and 72 MB on the
+  heaviest.*
 
 ## Verification
 

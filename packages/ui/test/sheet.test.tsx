@@ -108,7 +108,7 @@ describe('the sheet [W6-49]', () => {
     deal(sheet);
 
     expect(deals).toHaveBeenCalledTimes(1);
-    expect(state.view().seating).toEqual({ players: ['easy', 'master'], simulations: [10_000, 2500] });
+    expect(state.view().seating).toEqual({ players: ['easy', 'master'], simulations: [100_000, 2500] });
     expect(state.view().seed).toBe(12345);
     expect(screen.queryByRole('dialog')).toBeNull();
   });
@@ -142,7 +142,7 @@ describe('seats and the swap [W6-50]', () => {
     expect(within(sheet).getByRole('button', { name: /^Player 2/ })).toHaveTextContent('Master');
 
     deal(sheet);
-    expect(state.view().seating).toEqual({ players: [null, 'master'], simulations: [10_000, 300] });
+    expect(state.view().seating).toEqual({ players: [null, 'master'], simulations: [100_000, 300] });
   });
 
   it('[W6-50] says which seat is being edited, and edits that one', async () => {
@@ -187,14 +187,14 @@ describe("the master's setting in the sheet [W6-45]", () => {
     const sheet = openSheet(screen);
     const slider = within(sheet).getByRole('slider') as HTMLInputElement;
     const number = within(sheet).getByRole('spinbutton') as HTMLInputElement;
-    expect(slider).toHaveAttribute('aria-valuetext', '10,000 simulations');
-    expect(number.value).toBe('10000');
+    expect(slider).toHaveAttribute('aria-valuetext', '100,000 simulations');
+    expect(number.value).toBe('100000');
 
     // The slider's stops are a 1-2-5 ladder; one step up from the default.
     fireEvent.input(slider, { target: { value: String(Number(slider.value) + 1) } });
     flush();
-    expect(number.value).toBe('20000');
-    expect(slider).toHaveAttribute('aria-valuetext', '20,000 simulations');
+    expect(number.value).toBe('200000');
+    expect(slider).toHaveAttribute('aria-valuetext', '200,000 simulations');
 
     commit(number, '12345');
     expect(slider).toHaveAttribute('aria-valuetext', '12,345 simulations');

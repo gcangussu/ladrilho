@@ -492635,5 +492635,198 @@
     },
     "seconds": 486,
     "reason": "rated 493 ±10 against the anchors over 800 games an anchor"
+  },
+  {
+    "kind": "climb",
+    "run": "twelfth",
+    "date": "2026-10-27T17:22:57.275Z",
+    "generation": 120,
+    "from": 10000,
+    "to": 25000,
+    "latency": {
+      "p95": 850,
+      "p99": 1231,
+      "max": 3000,
+      "pastDeal": "milestones/twelfth/120/pastdeal.json"
+    },
+    "fits": true,
+    "decision": "accept",
+    "seedBase": 878367502,
+    "test": {
+      "elo0": 0,
+      "elo1": 15,
+      "alpha": 0.05,
+      "beta": 0.05,
+      "maxGames": 8000,
+      "batchPairs": 200
+    },
+    "looks": [
+      [
+        29,
+        4,
+        115,
+        7,
+        45
+      ],
+      [
+        59,
+        9,
+        224,
+        18,
+        90
+      ]
+    ],
+    "seconds": 1218,
+    "reason": "25000 simulations against 10000 on twelfth/120: 800 games, 54.4%, LLR 3.04; at 25000, p95 850 ms, p99 1231 ms, max 3000 ms: stronger and in budget: the next default."
+  },
+  {
+    "kind": "climb",
+    "run": "twelfth",
+    "date": "2026-10-27T17:53:28.852Z",
+    "generation": 120,
+    "from": 25000,
+    "to": 50000,
+    "latency": {
+      "p95": 1239,
+      "p99": 1843,
+      "max": 2553,
+      "pastDeal": "milestones/twelfth/120/pastdeal.json"
+    },
+    "fits": true,
+    "decision": "accept",
+    "seedBase": 1357203500,
+    "test": {
+      "elo0": 0,
+      "elo1": 15,
+      "alpha": 0.05,
+      "beta": 0.05,
+      "maxGames": 8000,
+      "batchPairs": 200
+    },
+    "looks": [
+      [
+        27,
+        2,
+        126,
+        6,
+        39
+      ],
+      [
+        40,
+        6,
+        268,
+        12,
+        74
+      ]
+    ],
+    "seconds": 1831,
+    "reason": "50000 simulations against 25000 on twelfth/120: 800 games, 54.6%, LLR 4.25; at 50000, p95 1239 ms, p99 1843 ms, max 2553 ms: stronger and in budget: the next default."
+  },
+  {
+    "kind": "climb",
+    "run": "twelfth",
+    "date": "2026-10-27T19:30:37.265Z",
+    "generation": 120,
+    "from": 50000,
+    "to": 100000,
+    "latency": {
+      "p95": 1994,
+      "p99": 3239,
+      "max": 4633,
+      "pastDeal": "milestones/twelfth/120/pastdeal.json"
+    },
+    "fits": true,
+    "decision": "accept",
+    "seedBase": 603896471,
+    "test": {
+      "elo0": 0,
+      "elo1": 15,
+      "alpha": 0.05,
+      "beta": 0.05,
+      "maxGames": 8000,
+      "batchPairs": 200
+    },
+    "looks": [
+      [
+        27,
+        0,
+        132,
+        10,
+        31
+      ],
+      [
+        49,
+        5,
+        267,
+        17,
+        62
+      ],
+      [
+        73,
+        6,
+        396,
+        25,
+        100
+      ]
+    ],
+    "seconds": 5828,
+    "reason": "100000 simulations against 50000 on twelfth/120: 1200 games, 53.0%, LLR 3.42; at 100000, p95 1994 ms, p99 3239 ms, max 4633 ms: stronger and in budget: the next default."
+  },
+  {
+    "kind": "climb",
+    "run": "twelfth",
+    "date": "2026-10-27T21:57:22.010Z",
+    "generation": 120,
+    "from": 100000,
+    "to": 200000,
+    "latency": {
+      "p95": 3328,
+      "p99": 5529,
+      "max": 8289,
+      "pastDeal": "milestones/twelfth/120/pastdeal.json"
+    },
+    "fits": false,
+    "decision": "accept",
+    "seedBase": 927365119,
+    "test": {
+      "elo0": 0,
+      "elo1": 15,
+      "alpha": 0.05,
+      "beta": 0.05,
+      "maxGames": 8000,
+      "batchPairs": 200
+    },
+    "looks": [
+      [
+        24,
+        3,
+        149,
+        2,
+        22
+      ],
+      [
+        41,
+        6,
+        288,
+        7,
+        58
+      ],
+      [
+        62,
+        15,
+        426,
+        16,
+        81
+      ],
+      [
+        72,
+        17,
+        576,
+        23,
+        112
+      ]
+    ],
+    "seconds": 8804,
+    "reason": "200000 simulations against 100000 on twelfth/120: 1600 games, 52.7%, LLR 4.64; at 200000, p95 3328 ms, p99 5529 ms, max 8289 ms: stronger, over budget: deep."
   }
 ]
