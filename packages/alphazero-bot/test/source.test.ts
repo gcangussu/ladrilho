@@ -329,6 +329,9 @@ describe('the source check [Z11-47]', () => {
       toml.replace('path = "../engine-rs"', 'git = "https://example.com/engine"'),
     ];
     for (const v of variants) expect(cargoFaults(v), v).not.toEqual([]);
+    // Seen red ([Z11-48]), in a copy with its anchor confirmed: the check
+    // finding nothing, `exists(d) && false`. And the live case above,
+    // `finds the package as it is`, with an `examples/x.rs` added to the copy.
     for (const d of AUTO_TARGETS) expect(autoTargetFaults((p) => p === d), d).not.toEqual([]);
     expect(autoTargetFaults((p) => p === 'tests' || p === 'src')).toEqual([]);
     expect(profileFaults(toml.replace('opt-level = 2', 'opt-level = 0'))).not.toEqual([]);

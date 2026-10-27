@@ -4,10 +4,13 @@
  * held to ([T12-25]).
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { ClimbEntry, LogEntry, PastDealEntry } from '../eval/decision.js';
 import { readLog } from '../eval/log.js';
+import { milestoneCheckpoint } from '../eval/paths.js';
 import { CLIMB_FROM, climbed, pastDealFaults } from '../eval/pastdeal.js';
 import { SHIPPED, SHIP_TEST, currentMaster, shippedFor } from '../eval/ship.js';
 import { QUICK_MAX_MS, WEB_BUDGET, faults, figures, keepsBudget, pct, slower } from '../eval/web-budget.js';
@@ -89,19 +92,29 @@ describe('the refinement on master [T12-36], [Z11-98]', () => {
     expect(pastDealFaults(readLog(), s, MASTER_SIMULATIONS.default)).toEqual([]);
   });
 
-  /** Mutation, seen red: `shippedFor` keeping the old master's refinement. */
+  /**
+   * Mutation, seen red ([T12-29]), in a copy with its anchor confirmed:
+   * `shippedFor` keeping the old master's refinement. Posed on a shipped
+   * file whose refinement is set, since the committed one may hold none.
+   */
   it('does not carry over to a new master', () => {
     const now = JSON.parse(readFileSync(SHIPPED, 'utf8')) as { run: string; generation: number };
-    expect(shippedFor({ run: now.run, generation: now.generation }).pastDeal).toEqual(
-      (JSON.parse(readFileSync(SHIPPED, 'utf8')) as { pastDeal: unknown }).pastDeal,
-    );
-    const other = readLog().find((e): e is LogEntry & { generation: number } => e.kind === 'milestone' && !(e.run === now.run && (e as { generation: number }).generation === now.generation));
-    if (other === undefined) return;
+    const pd = { sha256: 'ab'.repeat(32) };
+    const dir = mkdtempSync(join(tmpdir(), 'shipped-'));
+    const path = join(dir, 'shipped.json');
+    writeFileSync(path, JSON.stringify({ ...now, pastDeal: pd }));
     try {
-      expect(shippedFor({ run: other.run, generation: other.generation }).pastDeal).toBeNull();
-    } catch (e) {
-      // A milestone whose files are not committed cannot be named at all.
-      if (!/ENOENT/.test(String(e))) throw e;
+      expect(shippedFor({ run: now.run, generation: now.generation }, path).pastDeal).toEqual(pd);
+      const other = readLog().find(
+        (e): e is LogEntry & { generation: number } =>
+          e.kind === 'milestone' &&
+          !(e.run === now.run && (e as { generation: number }).generation === now.generation) &&
+          existsSync(milestoneCheckpoint(e.run, (e as { generation: number }).generation)),
+      );
+      expect(other, 'a committed milestone other than master').toBeDefined();
+      expect(shippedFor({ run: other!.run, generation: other!.generation }, path).pastDeal).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true });
     }
   });
 });

@@ -1031,8 +1031,10 @@ describe("the master's setting in the sheet [W6-45]", () => {
 
   // [0012 T12-37]'s configurations, a new caller of [W6-44]'s staging: a
   // preset stages its count for its seat alone, and a link carries it as it
-  // carries a typed number. Seen red, on a copy with its anchor confirmed: the
-  // preset's `onChange` staging both seats.
+  // carries a typed number. Each seen red, on a copy with its anchor
+  // confirmed: the preset's `onChange` staging both seats in one write (two
+  // `stage` calls are one under Solid 2's staged writes, and passed); the
+  // preset leaving a refusal's line; `quick` set off the slider's stops.
   it('[W6-45] [W6-44] offers the configurations, each staging its count for its seat alone', async () => {
     const { screen, state } = await mount('?seed=42&seating=master-master&p1Simulations=700');
     const sheet = openSheet(screen);
