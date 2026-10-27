@@ -69,6 +69,12 @@ export interface PlayerSpec {
   config: string;
   search: 'play' | 'milestone';
   /**
+   * A checkpoint's `pastdeal.json`, for `play` alone ([0011 Z11-91]): the
+   * refinement's match plays it ([Z11-98]). No milestone, gate, pool or
+   * ship match passes one.
+   */
+  pastDeal?: string;
+  /**
    * How long one move may take before the process is given up on: a process
    * that never answers must not stop a milestone for ever. Ten minutes unless
    * set; the slowest search any lane runs takes seconds.
@@ -94,7 +100,7 @@ export function alphazeroChooser(spec: PlayerSpec, onMove?: (a: Answer) => void)
     const words = canonicalWords(toCanonical(fromJSON(position, 0)));
     server ??= new Server(
       spec.binary,
-      ['serve', spec.checkpoint, '--config', spec.config, '--search', spec.search],
+      ['serve', spec.checkpoint, '--config', spec.config, '--search', spec.search, ...(spec.pastDeal === undefined ? [] : ['--past-deal', spec.pastDeal])],
       spec.answerMilliseconds ?? 10 * 60 * 1000,
     );
     const answer = readAnswer(server.ask(frame(words)));

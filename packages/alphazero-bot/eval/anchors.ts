@@ -107,8 +107,9 @@ export function usedSeeds(file: AnchorsFile | null, log: readonly LogEntry[]): S
   for (const e of log) {
     const r = (e as { anchored?: AnchoredRecord }).anchored;
     if (r !== undefined) out.push({ base: r.seedBase, n: r.gamesPerMember });
-    // [0012 T12-35]: a ship match's seeds, each played from both seats.
-    if (e.kind === 'ship' && e.seedBase !== undefined && e.looks !== undefined) {
+    // [0012 T12-35]: a ship match's seeds, each played from both seats; and
+    // the climb's and the refinement's matches, played the same way.
+    if ((e.kind === 'ship' || e.kind === 'pastDeal' || e.kind === 'climb') && e.seedBase !== undefined && e.looks !== undefined) {
       const last = e.looks[e.looks.length - 1];
       out.push({ base: e.seedBase, n: last === undefined ? 0 : last.reduce((a, b) => a + b, 0) });
     }

@@ -33,7 +33,8 @@ import {
   type SeedRun,
 } from '../eval/anchors.js';
 import { BUDGET, HALF_BUDGET } from '../eval/latency.js';
-import { SHIP_TEST, checkShip } from '../eval/ship.js';
+import { SHIP_TEST, checkLooks, checkShip } from '../eval/ship.js';
+import { keepsBudget } from '../eval/web-budget.js';
 import type { ShipEntry } from '../eval/decision.js';
 import { readLog } from '../eval/log.js';
 import { GATES, LATENCY, LOG, PACKAGE } from '../eval/paths.js';
@@ -66,7 +67,7 @@ function replay(
   };
   log.forEach((e, i) => {
     const where = `entry ${i} (${e.kind}, run ${e.run})`;
-    if (!['milestone', 'override', 'manual-gate', 'rating', 'ship'].includes(e.kind)) throw new Error(`${where}: unknown kind`);
+    if (!['milestone', 'override', 'manual-gate', 'rating', 'ship', 'pastDeal', 'climb'].includes(e.kind)) throw new Error(`${where}: unknown kind`);
     if (typeof e.run !== 'string' || typeof e.date !== 'string') throw new Error(`${where}: no run or date`);
     if (e.kind === 'rating') {
       // [Z11-84]: about a checkpoint, not a run's course; held to its own numbers only.
@@ -87,6 +88,32 @@ function replay(
       let run: SeedRun;
       try {
         run = checkShip(e, earlier, anchors?.simulations ?? -1);
+      } catch (err) {
+        throw new Error(`${where}: ${(err as Error).message}`);
+      }
+      if (seen.some((u) => overlaps(run, u))) throw new Error(`${where}: the seeds from ${run.base} were used before`);
+      seen.push(run);
+      return;
+    }
+    if (e.kind === 'pastDeal' || e.kind === 'climb') {
+      // [0011 Z11-98], [Z11-99]: about master, held to their own numbers;
+      // how they bear on what ships is [0012 T12-36] and [T12-37]'s.
+      const earlier = log.slice(0, i);
+      if (!earlier.some((x) => x.kind === 'milestone' && x.run === e.run && x.generation === e.generation)) {
+        throw new Error(`${where}: names no logged milestone`);
+      }
+      if (typeof e.reason !== 'string' || e.reason.length < 20) throw new Error(`${where}: no reason`);
+      if (e.kind === 'pastDeal' && e.decision === 'drop') {
+        if (e.sha256 !== null || e.looks !== undefined) throw new Error(`${where}: a drop plays nothing`);
+        return;
+      }
+      if (e.kind === 'climb') {
+        if (!(e.from < e.to)) throw new Error(`${where}: a climb goes up`);
+        if (e.fits !== keepsBudget(e.latency)) throw new Error(`${where}: fits disagrees with its figures`);
+      }
+      let run: SeedRun;
+      try {
+        run = checkLooks(e);
       } catch (err) {
         throw new Error(`${where}: ${(err as Error).message}`);
       }

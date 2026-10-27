@@ -16,6 +16,7 @@ import { readJson, sha256File, writeJson } from './files.js';
 import { checkCounts } from './milestone.js';
 import { PACKAGE, milestoneCheckpoint } from './paths.js';
 import { memberName } from './pool.js';
+import type { PlayerSpec } from './chooser.js';
 import { playSeries, simulationCounts, type GameRecord } from './series.js';
 
 /** [T12-34]'s test: H0 at most `elo0`, H1 at least `elo1`, errors `alpha` and `beta`. */
@@ -132,6 +133,41 @@ export interface ShipMatch {
 }
 
 /**
+ * [T12-34]'s test, played: `subject` against `opponent` from seed `base` on,
+ * each seed from both seats, `batchPairs` pairs between looks, until the
+ * verdict. The ship match plays it, and so do the climb and the refinement's
+ * match ([0011 Z11-98], [Z11-99]). `label` names it in the progress lines.
+ */
+export async function playSequential(
+  subject: PlayerSpec,
+  opponent: PlayerSpec,
+  base: number,
+  workers: number,
+  label: string,
+  test: ShipTest = SHIP_TEST,
+): Promise<ShipMatch> {
+  const started = Date.now();
+  const seeds = pairedSeeds(base, test.maxGames / 2);
+  const looks: Pentanomial[] = [];
+  let counts: Pentanomial = [0, 0, 0, 0, 0];
+  const all: GameRecord[] = [];
+  for (let at = 0; verdict(looks, test) === 'continue'; at += 2 * test.batchPairs) {
+    const batch = seeds.slice(at, at + 2 * test.batchPairs);
+    const games = await playSeries(
+      { subject: { kind: 'alphazero', player: subject }, opponent: { kind: 'alphazero', player: opponent }, seeds: batch },
+      workers,
+    );
+    all.push(...games);
+    counts = addPairs(counts, games);
+    looks.push(counts);
+    const pairs = counts.reduce((a, b) => a + b, 0);
+    process.stderr.write(`${label}: ${pairs} pairs, LLR ${llr(counts, test).toFixed(2)} in ${bounds(test).map((b) => b.toFixed(2)).join('..')}\n`);
+  }
+  const decision = verdict(looks, test) as 'accept' | 'reject';
+  return { seedBase: base, looks, decision, simulations: simulationCounts(all), seconds: Math.round((Date.now() - started) / 1000) };
+}
+
+/**
  * [T12-34]: `candidate` against `master`, both by the milestone search at the
  * anchors' count, `batchPairs` pairs between looks, on seeds no record used.
  */
@@ -145,34 +181,18 @@ export async function playShip(
   workers: number,
   test: ShipTest = SHIP_TEST,
 ): Promise<ShipMatch> {
-  const started = Date.now();
-  const maxPairs = test.maxGames / 2;
-  const base = allocateBase(key, maxPairs, usedSeeds(file, log));
-  const seeds = pairedSeeds(base, maxPairs);
-  const looks: Pentanomial[] = [];
-  let counts: Pentanomial = [0, 0, 0, 0, 0];
-  const all: GameRecord[] = [];
+  const base = allocateBase(key, test.maxGames / 2, usedSeeds(file, log));
   const opponent = milestoneCheckpoint(master.run, master.generation);
-  for (let at = 0; verdict(looks, test) === 'continue'; at += 2 * test.batchPairs) {
-    const batch = seeds.slice(at, at + 2 * test.batchPairs);
-    const games = await playSeries(
-      {
-        subject: { kind: 'alphazero', player: { binary: side.binary, checkpoint: candidate, config: side.config, search: 'milestone' } },
-        opponent: { kind: 'alphazero', player: { binary: side.binary, checkpoint: opponent, config: side.config, search: 'milestone' } },
-        seeds: batch,
-      },
-      workers,
-    );
-    all.push(...games);
-    counts = addPairs(counts, games);
-    looks.push(counts);
-    const pairs = counts.reduce((a, b) => a + b, 0);
-    process.stderr.write(`ship vs ${memberName(master)}: ${pairs} pairs, LLR ${llr(counts, test).toFixed(2)} in ${bounds(test).map((b) => b.toFixed(2)).join('..')}\n`);
-  }
-  const simulations = simulationCounts(all);
-  checkCounts(simulations, file.simulations, 'ship');
-  const decision = verdict(looks, test) as 'accept' | 'reject';
-  return { seedBase: base, looks, decision, simulations, seconds: Math.round((Date.now() - started) / 1000) };
+  const match = await playSequential(
+    { binary: side.binary, checkpoint: candidate, config: side.config, search: 'milestone' },
+    { binary: side.binary, checkpoint: opponent, config: side.config, search: 'milestone' },
+    base,
+    workers,
+    `ship vs ${memberName(master)}`,
+    test,
+  );
+  checkCounts(match.simulations, file.simulations, 'ship');
+  return match;
 }
 
 /** A pair-score count's games and score, the candidate's share. */
@@ -217,18 +237,22 @@ export const SHIPPED = join(PACKAGE, 'web', 'shipped.json');
 
 /**
  * `web/shipped.json` naming `m`, its files' hashes with it, the rest of the
- * file as it was. Computed before anything is written, so a missing file
- * fails before the log names a `master` the payload cannot.
+ * file as it was but for the past-deal refinement: fitted to one network, it
+ * does not carry over to another, so a new `master` ships with none until a
+ * person settles it ([T12-36]). Computed before anything is written, so a
+ * missing file fails before the log names a `master` the payload cannot.
  */
 export function shippedFor(m: { run: string; generation: number }, path: string = SHIPPED): Record<string, unknown> {
   const shipped = readJson<Record<string, unknown>>(path);
   const checkpoint = milestoneCheckpoint(m.run, m.generation);
+  const same = shipped.run === m.run && shipped.generation === m.generation;
   return {
     ...shipped,
     run: m.run,
     generation: m.generation,
     checkpointSha256: sha256File(checkpoint),
     paritySha256: sha256File(checkpoint.replace(/\.bin$/, '.parity')),
+    pastDeal: same ? (shipped.pastDeal ?? null) : null,
   };
 }
 
@@ -289,8 +313,19 @@ export function checkShip(e: ShipEntry, earlier: readonly LogEntry[], simulation
     throw new Error('did not play the master of its time');
   }
   if (memberName(e) === memberName(e.master)) throw new Error('played master against itself');
-  if (JSON.stringify(e.test) !== JSON.stringify(SHIP_TEST)) throw new Error('its test is not [T12-34]\'s');
   if (e.simulations !== simulations) throw new Error(`played at ${e.simulations} simulations, not the anchors' ${simulations}`);
+  return checkLooks(e);
+}
+
+/**
+ * A played sequential match's record held to [SHIP_TEST]: each look is one
+ * more batch than the last, and cumulative; it stopped at the first look that
+ * crossed a bound, and played no look past the cap; and its decision is that
+ * verdict. The seeds it played, for the caller's check that no earlier record
+ * used them.
+ */
+export function checkLooks(e: { test?: ShipTest; looks?: Pentanomial[]; seedBase?: number; decision: string }): { base: number; n: number } {
+  if (JSON.stringify(e.test) !== JSON.stringify(SHIP_TEST)) throw new Error('its test is not [T12-34]\'s');
   const looks = e.looks ?? [];
   if (looks.length === 0 || e.seedBase === undefined) throw new Error('a played match with no looks or no seeds');
   const test = SHIP_TEST;

@@ -128,7 +128,51 @@ export interface ShipEntry {
   reason: string;
 }
 
-export type LogEntry = MilestoneEntry | OverrideEntry | ManualGateEntry | RatingEntry | ShipEntry;
+/**
+ * [0011 Z11-98]: the past-deal refinement's match on `master`, its settings
+ * against none at the default count, or the `drop` that ships `master`
+ * without it, with the reason ([0012 T12-36]).
+ */
+export interface PastDealEntry {
+  kind: 'pastDeal';
+  run: string;
+  date: string;
+  generation: number;
+  decision: 'accept' | 'reject' | 'drop';
+  /** The `pastdeal.json` played, by its sha256; `null` for a drop. */
+  sha256: string | null;
+  simulations?: number;
+  seedBase?: number;
+  test?: { elo0: number; elo1: number; alpha: number; beta: number; maxGames: number; batchPairs: number };
+  looks?: [number, number, number, number, number][];
+  seconds?: number;
+  reason: string;
+}
+
+/**
+ * [0011 Z11-99]: one step of the climb on `master`: `to` simulations against
+ * `from`, neither with the refinement, and whether `to` keeps the default's
+ * budget with it, by the latency lane's figures ([0012 T12-25], [T12-37]).
+ */
+export interface ClimbEntry {
+  kind: 'climb';
+  run: string;
+  date: string;
+  generation: number;
+  from: number;
+  to: number;
+  /** The slower pass's figures at `to`, with the refinement `master` ships or was measured with. */
+  latency: { p95: number; p99: number; max: number; pastDeal: string };
+  fits: boolean;
+  decision: 'accept' | 'reject';
+  seedBase: number;
+  test: { elo0: number; elo1: number; alpha: number; beta: number; maxGames: number; batchPairs: number };
+  looks: [number, number, number, number, number][];
+  seconds: number;
+  reason: string;
+}
+
+export type LogEntry = MilestoneEntry | OverrideEntry | ManualGateEntry | RatingEntry | ShipEntry | PastDealEntry | ClimbEntry;
 
 /**
  * Progress to nine decimals, the grain every comparison of it is made at.

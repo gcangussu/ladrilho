@@ -30,6 +30,7 @@ import {
 } from './loop.js';
 import { anchorsExist, readAnchors } from './anchors.js';
 import { CORPUS } from './paths.js';
+import { climb, pastDealDrop, pastDealFit, pastDealMatch } from './pastdeal.js';
 import { seriesWorker } from './series.js';
 import { POOL, readSeed } from './pool.js';
 import { patienceTable, poolTable, shipTable, table } from './stop-rule-simulation.js';
@@ -165,6 +166,27 @@ async function main(): Promise<void> {
       }
       return shipCommand(resolve(rest[0] ?? ''), workers(rest));
     }
+    case 'past-deal': {
+      // [0011 Z11-97], [Z11-98], [0012 T12-36].
+      const usage = 'usage: past-deal fit <checkpoint> | past-deal match <checkpoint> | past-deal drop <run>:<g> --reason "…"';
+      if (rest[0] === 'fit') return pastDealFit(resolve(rest[1] ?? ''));
+      if (rest[0] === 'match') return pastDealMatch(resolve(rest[1] ?? ''), workers(rest));
+      if (rest[0] === 'drop') {
+        const reason = option(rest, 'reason');
+        if (reason === undefined) throw new Error(usage);
+        return pastDealDrop(parseFrom(rest[1] ?? ''), reason);
+      }
+      throw new Error(usage);
+    }
+    case 'climb': {
+      // [0011 Z11-99], [0012 T12-37].
+      const to = Number(option(rest, 'to'));
+      const latency = option(rest, 'latency');
+      if (rest[0] === undefined || rest[0].startsWith('--') || latency === undefined) {
+        throw new Error('usage: climb <checkpoint> --to <simulations> --latency <web-latency --json file>');
+      }
+      return climb(resolve(rest[0]), to, resolve(latency), workers(rest));
+    }
     case 'stop-simulation':
       process.stdout.write(`${table(Number(option(rest, 'runs') ?? 20000))}\n\n`);
       // The committed pool's own count, so the spec's table is what this prints ([Z11-56]).
@@ -194,7 +216,8 @@ async function main(): Promise<void> {
       throw new Error(
         'usage: train init --run <name> [--from <run>:<generation>] [--augment none|displays] [--set <setting>=<n>]… [--gate end|off] [--yardstick ladder|pool|anchors] [--patience <n>] | train --run <name> [--override "<reason>"] | latency --run <name> | ' +
           'throughput --run <name> | milestone <checkpoint> | panel <checkpoint> [--against <checkpoint>] | gate <checkpoint> | stop-simulation | latency-corpus | ' +
-          'augment-fixtures | pool init --members <run>:<g>,… --games <n> | anchors init|add|rate … | ship <checkpoint> | ship pin <run>:<g> --reason "…"',
+          'augment-fixtures | pool init --members <run>:<g>,… --games <n> | anchors init|add|rate … | ship <checkpoint> | ship pin <run>:<g> --reason "…" | ' +
+          'past-deal fit|match <checkpoint> | past-deal drop <run>:<g> --reason "…" | climb <checkpoint> --to <n> --latency <file>',
       );
   }
 }

@@ -33,13 +33,8 @@ import { parseArgs } from 'node:util';
 import { createMaster, MASTER_SIMULATIONS, SHIPPED } from '../web/index.js';
 import { corpusBlocks, parseBlock } from './blocks.js';
 import { acquire } from './lock.js';
+import { MAX_MEMORY_MB, faults, figures, pct, slower as slowerOf, type Budget, type PassFigures } from './web-budget.js';
 
-/** [T12-25]'s budgets at the default, on the machine of record. */
-export const BUDGET = Object.freeze({ p95: 3000, p99: 5000, max: 10_000 });
-/** At `quick`: every move, as intent 0010 first promised. */
-export const QUICK_MAX_MS = 1000;
-/** The budget for memory, at every count and at the maximum. */
-export const MAX_MEMORY_MB = 512;
 /**
  * The one-minute load average above which the lane will not start: the
  * desktop alone keeps it near 1 to 2 on the machine of record.
@@ -56,42 +51,10 @@ export const PASSES = 2;
  */
 const HEAVIEST = 498;
 
-/** [Z11-40]'s rank: the value at `⌈p/100 · n⌉` of the sorted times. */
-export const pct = (sorted: readonly number[], p: number): number => sorted[Math.max(0, Math.ceil((p / 100) * sorted.length) - 1)];
-
-export interface PassFigures {
-  p50: number;
-  p95: number;
-  p99: number;
-  max: number;
-}
-
-export function figures(times: readonly number[]): PassFigures {
-  const sorted = [...times].sort((a, b) => a - b);
-  return { p50: pct(sorted, 50), p95: pct(sorted, 95), p99: pct(sorted, 99), max: sorted.at(-1) ?? 0 };
-}
-
-/** What a count must meet: the default's budget, `quick`'s ceiling, or nothing. */
-export type Budget = 'default' | 'quick' | 'report';
-
 export function budgetOf(simulations: number): Budget {
   if (simulations === MASTER_SIMULATIONS.default) return 'default';
   const quick = (MASTER_SIMULATIONS as { quick?: number }).quick;
   return simulations === quick ? 'quick' : 'report';
-}
-
-/** Why a count's passes fail its budget; empty when they meet it. Every pass must. */
-export function faults(budget: Budget, passes: readonly PassFigures[]): string[] {
-  const out: string[] = [];
-  passes.forEach((f, i) => {
-    if (budget === 'default') {
-      if (f.p95 > BUDGET.p95) out.push(`pass ${i + 1}: p95 ${f.p95.toFixed(0)} ms over ${BUDGET.p95}`);
-      if (f.p99 > BUDGET.p99) out.push(`pass ${i + 1}: p99 ${f.p99.toFixed(0)} ms over ${BUDGET.p99}`);
-      if (f.max > BUDGET.max) out.push(`pass ${i + 1}: a move of ${f.max.toFixed(0)} ms, over ${BUDGET.max}`);
-    }
-    if (budget === 'quick' && !(f.max < QUICK_MAX_MS)) out.push(`pass ${i + 1}: a move of ${f.max.toFixed(0)} ms, not under ${QUICK_MAX_MS}`);
-  });
-  return out;
 }
 
 /** The corpus's games, as index ranges: each starts at a first move, the first round (index 0) with every display full. */
@@ -196,7 +159,7 @@ async function main(): Promise<void> {
       }
       for (const w of why) console.log(`  FAILED: ${w}`);
       failed ||= why.length > 0;
-      record.push({ simulations: n, budget, passes: each, memoryBytes: memory, milliseconds: passes });
+      record.push({ simulations: n, budget, passes: each, slower: slowerOf(each), memoryBytes: memory, milliseconds: passes });
     }
     console.log(`\nload average after: ${loadavg().map((x) => x.toFixed(2)).join(' ')}`);
     if (values.json !== undefined) {
