@@ -402,7 +402,7 @@ network value `V` from when it was expanded.
   The leaf is valued:
   - **terminal**: `+1`, `-1` or `0` for the seat to move there, from `outcome` ([0001 E1-39]);
   - **boundary**: the network's value on the pre-deal view ([Z11-9]), from the seat that opens the
-    next round;
+    next round, or, in the past-deal refinement's second search, the value [Z11-96] gives it;
   - **new**: the network on `encode()`, whose policy becomes the node's priors and whose value is
     the leaf's and the node's `V`.
 
@@ -413,7 +413,10 @@ network value `V` from when it was expanded.
   would spend most of the search re-running the same forward pass.*
 
 - **[Z11-15]** No node below a boundary ply may be expanded, and nothing the search computes may
-  read a display, bag order or tile dealt by a boundary ply except through the pre-deal view.
+  read a display, bag order or tile dealt by a boundary ply except through the pre-deal view. The
+  past-deal refinement ([Z11-92]) deals displays of its own, outside the tree, from the bag's
+  counts and the crate's generator: it reads neither the bag's order, nor the shuffler, nor a
+  tile any boundary ply dealt, and [Z11-21] holds with it on.
 - **[Z11-16]** At a node with visit total `Nₜ`, selection MUST take the legal action maximising
 
   ```
@@ -433,6 +436,7 @@ network value `V` from when it was expanded.
   clock: only a command's `--clock-ms` curtails a search.
 - **[Z11-19]** In play (the lanes, [Z11-24]) the search MUST start from an empty tree on every
   move, use no noise, and return the action with the most root visits, ties to the lowest index.
+  Where the past-deal refinement applies, that is its second search's action ([Z11-96]).
   Self-play MAY reuse the subtree of the move played.
 - **[Z11-20]** In self-play the root's priors MUST be mixed with Dirichlet noise,
   `P' = (1 − ε) · P + ε · Dir(α)`, and the move MUST be sampled from the root visits raised to
@@ -444,14 +448,16 @@ network value `V` from when it was expanded.
   [Z11-89] there is neither noise nor sampling: the Gumbel draw takes their place in that
   generator, and the move is the search's.
 - **[Z11-21]** Two states that differ only in the order of their bag and in their shuffler's seed
-  MUST get identical root visits and value from a search in play mode.
+  MUST get identical root visits and value from a search in play mode, the past-deal refinement
+  included where it applies ([Z11-91]).
 
   *The whole information barrier in one assertion, and it holds by construction if [Z11-15] does.
   Both differences matter: the bag's order decides the next ordinary deal, and the shuffler decides
   the order after a recycle. The eval lanes also hand the player only what `toJSON` shows
   ([0005 M5-2]); self-play has no such seam, so this is what keeps it honest.*
 
-- **[Z11-76]** When `endgame_nodes` is not 0, `choose` (and `choose_memoised`, [Z11-72]) MUST
+- **[Z11-76]** When `endgame_nodes` is not 0, `choose` (and `choose_memoised`, [Z11-72], and
+  `choose_played`, [Z11-96]) MUST
   follow the search with an **endgame proof**, which may replace the search's action and nothing
   else: the visits and the value stay the search's. The proof runs only when some wall row of
   either player holds exactly four tiles, the one way the game can end at this round's end, since a
@@ -482,6 +488,125 @@ network value `V` from when it was expanded.
   replacing a proven loss gives up only the chance that the opponent errs into losing it. What the
   proof costs is time, which the node cap bounds. The browser plays it at the
   cap [0012 T12-33] ships.*
+
+  *With the refinement, the proof follows the second search. No reachable round-4 position lets
+  it run — a row gains at most one tile a round, so none holds four before round 5 — but the
+  engine accepts posed ones, and the test poses them.*
+
+### The past-deal refinement
+
+*Intent 0016.* In round 4 the network values a boundary into round 5 worse than anywhere else in
+a game: it sees the pre-deal view and not the deal, and the final round turns on the deal
+(`milestones/JOURNAL.md`, 10-22). More simulations do not help there: past 10 000 nearly every one
+re-reads a boundary value already stored, and 640 000 played no better than 10 000. The
+refinement values the most-visited of those boundaries again, on deals it makes itself from the
+bag's counts, and searches again with what it found. It is for play alone. Self-play, the
+milestones, the gate, the pool, the anchors and the ship match never use it, so nothing they
+measure moves, and neither does the ladder hash's subject ([Z11-63]).
+
+- **[Z11-91]** A checkpoint MAY have refinement settings,
+  `milestones/<run>/<generation>/pastdeal.json` ([Z11-97]), which `play`, `serve` and `latency`
+  take as `--past-deal <file>`. Each command MUST refuse it with an error beside `--search
+  milestone` or `--clock-ms`, and refuse a file fitted to another checkpoint. The file MUST be read
+  by `PastDeal::parse` alone, natively and in the browser ([0012 T12-36]), which refuses an
+  unknown field, a sha256 that is not 64 hex digits, a non-positive `sigma`, and `gate`, `deals`,
+  `leaves` or `budget` outside 0–20, 1–64, 1–256 and 1–1 000 000.
+
+  The refinement MUST apply to a search of root `r` at `s` simulations exactly when `r` is not
+  terminal, is in round index 3, holds at least `gate` tiles on its board and at least 20 in its
+  bag, and the leaf cap scaled to `s` ([Z11-93]) is at least 1. Where it does not apply, the move
+  MUST be `choose_memoised`'s ([Z11-72]), bit for bit.
+
+  *Measured on 1,849 round-4 positions, each move scored by 64 replays (JOURNAL, 10-27): with
+  fewer than 4 tiles left it gained nothing, and from 4 up it gained about 0.011 win probability
+  a decision. Under 20 tiles the deal recycles the lid, which the pool does not model.*
+
+- **[Z11-92]** The **pool** of a root MUST be `deals` orders of its bag, the same for every leaf
+  refined in its search. Its seed MUST be `splitmix64` folded, from `0x9e3779b97f4a7c15`, over the
+  two walls' cells in order, the two scores as `u32`, the bag's count of each colour in colour
+  order, and the round index: never the bag's order, the displays, or the lid, which a floor's
+  overflow changes in the middle of a round. Each order MUST be the bag's tiles sorted by colour,
+  shuffled by Fisher–Yates, descending, with the crate's generator ([Z11-20]) on that seed, and
+  followed by one draw from it, the seed of that deal's shuffler. A leaf's deal `k` MUST be the
+  state before its boundary ply with the bag laid out as order `k` and the shuffler seeded by deal
+  `k`'s seed, with the ply then applied.
+
+  *No move of a round touches the bag, so every boundary into round 5 deals from the same tiles,
+  and one pool compares every leaf on the same luck. The pool reads only the bag's public counts,
+  which [Z11-21] holds it to.*
+
+- **[Z11-93]** After the first search, its boundary leaves into round 5 MUST be taken in the order
+  of `Search::boundary_leaves`' walk — depth first from the root, a stack, each node's edges in
+  the tree's order — and sorted by the visits of the edge into each, descending, the walk's order
+  kept on ties. In that order a leaf MUST be refined unless its pre-deal view is one already
+  refined, until `leaves` views are refined or, checked before each leaf, the calls spent
+  refining reach `budget`. At `s` simulations, `leaves` and `budget` MUST each be
+  `min(x, s · x / 10 000)` in integers. The refinement's evaluations MUST NOT go through
+  [Z11-69]'s memo, so a memo warm from earlier moves changes no refined value. The leaves MUST be
+  dropped before the second search.
+
+- **[Z11-94]** A leaf's **rungs** on deal `k` MUST be the network's value on the dealt position,
+  from the seat to move there, which opens round 5; and, if `rollouts`, the final score margin,
+  from that seat, of a greedy rollout from the dealt position to the game's end, each move the
+  legal action of the highest logit, ties to the lowest action.
+
+  *Logits, not the policy: the policy goes through `exp`, which may round differently in the last
+  bit on another build, and one flipped choice changes a whole rollout. The logits are the same
+  bits everywhere ([0012 T12-26]).*
+
+- **[Z11-95]** A refined leaf's value MUST be `intercept + head · v + dealt · mean(values) + rollout
+  · erf(mean(margins) / (sigma · √2))`, clamped to [−1, 1], where `v` is its stored value and
+  `erf` is Abramowitz and Stegun's 7.1.26; every other boundary leaf into round 5 MUST take the
+  **recalibrated** head, `a + b · v`, clamped. Both MUST be computed in `f64` and stored as `f32`.
+
+- **[Z11-96]** The **second search** MUST start from an empty tree at the same config, with every
+  boundary leaf into round 5 valued as [Z11-95] says and everything else as [Z11-14] says. Both
+  searches MUST share the move's memo, which stores the network's own answers. The move MUST be
+  the second search's, and `choose_played` MUST then apply [Z11-76]'s proof to it, dropping the
+  memo first. Each search runs exactly its simulations ([Z11-18]), and nothing stops the
+  refinement part way: a clocked answer must be `play` configured for the count it reports
+  ([Z11-24]), and two searches stopped part way are not that. The root value is the second
+  search's, on the blend's scale, so the interface's estimate shifts on the moves it applies to
+  ([0006 W6-56]).
+
+- **[Z11-97]** `alphazero past-deal-fit <checkpoint> --panel <file> --out <file> [--deals 8]
+  [--leaves 32] [--budget 4000] [--gate 4] [--threads n]`, which `pnpm -F alphazero-bot past-deal
+  fit <checkpoint>` runs on `panel/positions.bin` ([Z11-83]), MUST write the checkpoint's
+  `pastdeal.json`, for a person to commit. On every panel boundary view into round 5 whose bag
+  holds at least 20 tiles it takes the checkpoint's own value on the view and, on `deals` deals of
+  the view's pool, [Z11-94]'s rungs with rollouts. It fits by least squares against the replays'
+  mean: `[1, v]` for the recalibration, and `[1, v, mean value, erf(mean margin / (σ√2))]` for the
+  blend at each σ of 2, 2.5, 3, 3.5, 4, 5, 6 and 8, five-fold cross-validated by position index
+  mod 5 and scored by [Z11-83]'s noise-corrected error, the σ of least error kept. The result does
+  not depend on `--threads`. The file holds `checkpointSha256`, `gate`, `deals`, `leaves`,
+  `budget`, `rollouts`, `blend` and `recal`, and a `fit` record of the panel's sha256, the
+  boundaries used and the errors, which nothing reads back.
+
+- **[Z11-98]** `pnpm -F alphazero-bot past-deal match <checkpoint>` MUST refuse any checkpoint but
+  `master`'s, and play `master` with its `pastdeal.json` against `master` without it, both at the
+  interface's default count ([0012 T12-16]) through `--search play` at the shipped proof cap, by
+  [0012 T12-34]'s test, on seeds [Z11-85] allocates under `pastdeal:<run>/<g>/<simulations>/<sha256>`.
+  It MUST append a `pastDeal` entry — the decision, the file's sha256, the count, the seed base,
+  the test, the looks, the seconds and a reason — and set `shipped.json`'s `pastDeal` to the file
+  on an accept and to `null` on a reject. `past-deal drop <run>:<g> --reason "…"` MUST append a
+  `pastDeal` entry whose decision is `drop`, with no sha256 and no looks, and set it to `null`.
+  [Z11-45]'s replay MUST hold each played entry to the test's looks and verdict, and its seeds
+  apart from every earlier record's.
+
+- **[Z11-99]** `pnpm -F alphazero-bot climb <checkpoint> --to <n> --latency <file>` MUST refuse
+  any checkpoint but `master`'s, and once `master`'s climb has ended ([0012 T12-37]). Otherwise it
+  MUST play `n` simulations against the default the climb has reached, both through `--search
+  play` at the shipped proof cap and neither refined, by [0012 T12-34]'s test, on seeds under
+  `climb:<run>/<g>/<from>/<n>`. `--latency` is [0012 T12-25]'s `--json` record of `master`
+  timing `n`. It MUST append a `climb` entry with `from`, `n`, the slower pass's p95, p99 and max
+  at `n` with the refinement that record timed, `fits` (whether those keep the default's
+  budget), the decision, the seed base, the test, the looks, the seconds and a reason. [Z11-45]'s
+  replay holds it as [Z11-98]'s, and `fits` to its own figures.
+
+  *The climb plays counts alone, without the refinement, so its verdicts say what simulations buy
+  and nothing else: the refinement acts only in round 4, where simulations bought nothing, so the
+  two are measured apart, and the refinement's own match ([Z11-98]) says whether it still pays at the
+  default the climb chose.*
 
 ## Interfaces
 
@@ -536,11 +661,12 @@ The binary's commands, each loading one checkpoint and one run's settings:
 
 | Command | Does |
 | --- | --- |
-| `alphazero play <checkpoint> --config <file> --search play\|milestone [--clock-ms N] [--split-ms]` | reads one position from stdin, writes one answer to stdout ([Z11-23]) |
-| `alphazero serve <checkpoint> --config <file> --search play\|milestone [--clock-ms N] [--split-ms]` | reads positions from stdin until it ends, answering each as `play` would ([Z11-72]) |
+| `alphazero play <checkpoint> --config <file> --search play\|milestone [--clock-ms N] [--split-ms] [--past-deal <file>]` | reads one position from stdin, writes one answer to stdout ([Z11-23], [Z11-91]) |
+| `alphazero serve <checkpoint> --config <file> --search play\|milestone [--clock-ms N] [--split-ms] [--past-deal <file>]` | reads positions from stdin until it ends, answering each as `play` would ([Z11-72], [Z11-91]) |
 | `alphazero selfplay <checkpoint> --config <file> --generation G --games N --out <file>` | [Z11-26] |
-| `alphazero latency <checkpoint> <corpus> --config <file> [--simulations N]` | [Z11-40], [Z11-57] |
+| `alphazero latency <checkpoint> <corpus> --config <file> [--simulations N] [--past-deal <file>]` | [Z11-40], [Z11-57], [Z11-91] |
 | `alphazero throughput <checkpoint> --config <file>` | [Z11-53] |
+| `alphazero past-deal-fit <checkpoint> --panel <file> --out <file> [--deals N] [--leaves N] [--budget N] [--gate N] [--threads N]` | [Z11-97] |
 
 - **[Z11-60]** Every command MUST take the run's `config.json` and build its `SearchConfig` from it
   in one function, the only place in the crate that reads search settings. `--search` chooses the
@@ -548,7 +674,10 @@ The binary's commands, each loading one checkpoint and one run's settings:
   and `throughput` use `selfPlaySimulations`, the noise settings and `threads`. `--simulations`
   overrides the count for `latency` alone, which is how [Z11-57] steps it; every other command
   refuses it. `--clock-ms` ([Z11-23]) is a stop the command applies, not a search setting: the
-  count it stops below still comes only from the config, through the one function.
+  count it stops below still comes only from the config, through the one function. The past-deal
+  refinement's settings are a checkpoint's, fitted after its run's config was fixed ([Z11-25]),
+  so they come from `--past-deal <file>`, never from the config ([Z11-91]); `PastDeal::parse` is
+  the one function that reads them.
 
   `selfPlaySimulations` (and `cheapSimulations`) MUST be at most 65,535, because a sample stores
   root visits as `u16` ([Z11-27]). A count that writes no sample — `playSimulations`,
@@ -653,7 +782,9 @@ The binary's commands, each loading one checkpoint and one run's settings:
   exactly what the same game gives unmemoised. The memo sits below the search: the search still
   asks once per node and keeps no transposition table ([Z11-42]). `serve`, and so the milestones
   and the gate, memoise too ([Z11-72]); `play` and the latency lane do not, so the shipped budget
-  of [Z11-57] is measured on the unmemoised search.
+  of [Z11-57] is measured on the unmemoised search. With `--past-deal`, `play` and the latency
+  lane give each move a fresh memo for its two searches, which ask the same questions twice
+  ([Z11-96]); their answers are unchanged.
 
   *Measured on run `fourth`'s generation 20 checkpoint, 59% of a game's calls repeat an earlier
   one — about a quarter of them transposed move orders inside one search, the rest the subtree of

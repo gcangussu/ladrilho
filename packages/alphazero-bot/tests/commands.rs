@@ -357,3 +357,97 @@ fn only_self_play_is_bounded_by_its_sample_format() {
     let w = words(&play(&past, "play", &input).stdout);
     assert_eq!(w[2], 70_000);
 }
+
+/// [Z11-91]: `--past-deal` is a play setting with no stop. `play` and `serve`
+/// refuse it beside `--search milestone` and beside `--clock-ms`, and refuse a
+/// file fitted to another checkpoint; given the fixture's own, `play` and
+/// `serve` answer every position as `choose_played` does with it, round-4
+/// positions where it applies included ([Z11-96]).
+///
+/// Mutation, seen red ([Z11-48]), in a copy with its anchor confirmed: `play`
+/// searching with `search_until` whatever `--past-deal` says.
+#[test]
+fn past_deal_is_a_play_setting_with_no_stop() {
+    use azul_alphazero::memo::Memo;
+    use azul_alphazero::pastdeal::{PastDeal, choose_played};
+    use azul_alphazero::search::SearchConfig;
+    let e = env(&[("playSimulations", "2000")]);
+    let file = support::crate_dir().join("test/fixtures/pastdeal.json");
+    let file = file.to_str().unwrap();
+    let pd = PastDeal::parse(&support::read(std::path::Path::new(file))).unwrap();
+    let positions: Vec<_> = (0..12)
+        .filter_map(|seed| {
+            support::game_positions(seed).into_iter().find(|s| s.round_index() == 3 && pd.applies(s, 2_000) && s.tiles_left() <= 10)
+        })
+        .collect();
+    assert!(positions.len() >= 6);
+    let block = frame(&block_of(&positions[0]));
+    for extra in [&["--search", "milestone", "--past-deal", file][..], &["--search", "play", "--clock-ms", "100", "--past-deal", file]] {
+        let mut args = vec!["play", &e.checkpoint, "--config", &e.config];
+        args.extend_from_slice(extra);
+        let o = run(&args, &block);
+        assert!(!o.status.success() && stderr(&o).contains("--past-deal"), "{extra:?}: {}", stderr(&o));
+    }
+    let dir = scratch();
+    let other = dir.path().join("other.json");
+    let text = String::from_utf8(support::read(std::path::Path::new(file))).unwrap();
+    std::fs::write(&other, text.replacen("ce8343e1", "0e8343e1", 1)).unwrap();
+    let o = run(&["play", &e.checkpoint, "--config", &e.config, "--search", "play", "--past-deal", other.to_str().unwrap()], &block);
+    assert!(!o.status.success() && stderr(&o).contains("fitted to checkpoint"), "{}", stderr(&o));
+
+    let net = support::fixture();
+    let config = SearchConfig { simulations: 2_000, cpuct: 1.25, fpu: 0.25, endgame_nodes: 0 };
+    let input: Vec<u8> = positions.iter().flat_map(|s| frame(&block_of(s))).collect();
+    let o = run(&["serve", &e.checkpoint, "--config", &e.config, "--search", "play", "--past-deal", file], &input);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let served = words(&o.stdout);
+    for (i, s) in positions.iter().enumerate() {
+        let want = choose_played(&net, s, &config, Some(&pd), Memo::new()).unwrap();
+        let alone = words(&run(&["play", &e.checkpoint, "--config", &e.config, "--search", "play", "--past-deal", file], &frame(&block_of(s))).stdout);
+        assert_eq!((alone[1], alone[3]), (u32::from(want.action), want.value.to_bits()), "position {i}: play");
+        assert_eq!(served[5 * i + 1..5 * i + 4], alone[1..4], "position {i}: serve");
+    }
+}
+
+/// [Z11-97]: `past-deal-fit` writes a file the player reads, fitted to the
+/// checkpoint it was given, with the structure asked for; and the same bytes
+/// whatever the thread count.
+///
+/// Mutation, seen red ([Z11-48]), in a copy with its anchor confirmed: each
+/// thread's rows kept in the order the threads finish.
+#[test]
+fn the_fit_writes_what_the_player_reads() {
+    use azul_alphazero::pastdeal::PastDeal;
+    let dir = scratch();
+    let panel = support::crate_dir().join("panel/positions.bin");
+    let checkpoint = fixture_paths().0;
+    let out = |threads: &str| {
+        let path = dir.path().join(format!("pastdeal-{threads}.json"));
+        let o = run(
+            &[
+                "past-deal-fit",
+                checkpoint.to_str().unwrap(),
+                "--panel",
+                panel.to_str().unwrap(),
+                "--out",
+                path.to_str().unwrap(),
+                "--deals",
+                "4",
+                "--leaves",
+                "12",
+                "--threads",
+                threads,
+            ],
+            &[],
+        );
+        assert!(o.status.success(), "{}", stderr(&o));
+        support::read(&path)
+    };
+    let one = out("1");
+    assert_eq!(out("3"), one, "the thread count changed the fit");
+    let pd = PastDeal::parse(&one).unwrap();
+    assert_eq!((pd.deals, pd.leaves, pd.budget, pd.gate, pd.rollouts), (4, 12, 4_000, 4, true));
+    let sha = String::from_utf8(one).unwrap();
+    assert!(sha.contains("ce8343e19ca184f88bd4336d9fe36d4bd2b0030a774419596ff867682b22df34"));
+    assert!(pd.blend.sigma > 0.0);
+}

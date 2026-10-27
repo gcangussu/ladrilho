@@ -25,7 +25,7 @@ const step = (from: number, to: number, decision: 'accept' | 'reject', fits: boo
 const deal = (decision: PastDealEntry['decision'], sha256: string | null, simulations?: number, m = M): LogEntry =>
   ({ kind: 'pastDeal', run: m.run, generation: m.generation, date: 'd', decision, sha256, ...(simulations === undefined ? {} : { simulations }), reason: REASON }) satisfies PastDealEntry;
 
-describe('the climb [T12-37]', () => {
+describe('the climb [T12-37], [Z11-99]', () => {
   /**
    * Mutations, seen red: a step accepted over budget taken as the next
    * default; a rejected step not ending the climb.
@@ -61,7 +61,7 @@ describe('the climb [T12-37]', () => {
   });
 });
 
-describe('the refinement on master [T12-36]', () => {
+describe('the refinement on master [T12-36], [Z11-98]', () => {
   const shipped = (pastDeal: { sha256: string } | null) => ({ ...M, pastDeal });
 
   /**

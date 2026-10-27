@@ -5,7 +5,7 @@ mod support;
 
 use azul_alphazero::endgame::{can_end_this_round, refine};
 use azul_alphazero::memo::{Memo, choose_memoised, search_memoised_until};
-use azul_alphazero::network::{Evaluation, Evaluator};
+use azul_alphazero::network::{Evaluation, Evaluator, argmax};
 use azul_alphazero::pastdeal::{Blend, PastDeal, Pool, Recal, choose_played, search_played};
 use azul_alphazero::search::{Search, SearchConfig};
 use azul_alphazero::view::{is_boundary, pre_deal_view};
@@ -409,4 +409,36 @@ fn the_settings_file_is_read_strictly() {
         assert!(text.contains(from), "{from}");
         assert!(PastDeal::parse(text.replacen(from, to, 1).as_bytes()).is_err(), "{to}");
     }
+}
+
+/// [Z11-94]: a rollout's move is the legal action of the highest logit, the
+/// lowest action on a tie, read from the logits the forward pass computes,
+/// not from the policy, whose `exp` may round differently on another build.
+/// This catches a wrong argmax; a `greedy` reading the policy would mostly
+/// agree with the logits' and is not what it can see.
+///
+/// Mutations, seen red: ties to the highest action; `Network::greedy` taking
+/// the lowest logit.
+#[test]
+fn the_greedy_move_is_the_highest_logit() {
+    let net = fixture();
+    let mut checked = 0;
+    for s in support::game_positions(90).into_iter().chain(support::game_positions(91)) {
+        let legal = s.legal_actions();
+        let mut logits = [0f32; 180];
+        net.forward(&s.encode(), &mut logits);
+        let mut want = legal.as_slice()[0];
+        for &a in legal.as_slice() {
+            if logits[usize::from(a)] > logits[usize::from(want)] {
+                want = a;
+            }
+        }
+        assert_eq!(net.greedy(&s.encode(), legal.as_slice()), want);
+        checked += 1;
+    }
+    assert!(checked > 40);
+    let mut flat = [0f32; 180];
+    assert_eq!(argmax(&flat, &[7, 3, 9]), 3, "a tie goes to the lowest action");
+    flat[9] = 1.0;
+    assert_eq!(argmax(&flat, &[7, 3, 9]), 9);
 }
