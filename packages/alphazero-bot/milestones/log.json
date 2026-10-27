@@ -492828,5 +492828,41 @@
     ],
     "seconds": 8804,
     "reason": "200000 simulations against 100000 on twelfth/120: 1600 games, 52.7%, LLR 4.64; at 200000, p95 3328 ms, p99 5529 ms, max 8289 ms: stronger, over budget: deep."
+  },
+  {
+    "kind": "pastDeal",
+    "run": "twelfth",
+    "date": "2026-10-27T23:03:43.731Z",
+    "generation": 120,
+    "decision": "accept",
+    "sha256": "b70de5151c72ef2e979d5bf6cd0e414e572bc4692cee9cad73c35fc2d79be3d5",
+    "simulations": 100000,
+    "seedBase": 1060523156,
+    "test": {
+      "elo0": 0,
+      "elo1": 15,
+      "alpha": 0.05,
+      "beta": 0.05,
+      "maxGames": 8000,
+      "batchPairs": 200
+    },
+    "looks": [
+      [
+        13,
+        8,
+        137,
+        13,
+        29
+      ],
+      [
+        29,
+        13,
+        278,
+        20,
+        60
+      ]
+    ],
+    "seconds": 3802,
+    "reason": "twelfth/120 with its pastdeal.json against itself without, at 100000 simulations: 800 games, 54.3%, LLR 4.74 in -2.94..2.94: master ships with it."
   }
 ]

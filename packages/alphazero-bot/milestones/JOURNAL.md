@@ -1364,6 +1364,33 @@ patience and not by [Z11-33]'s one-back rule.
 - **What is next is the user's call.** The user stopped the lineage here: no next stage was
   started.
 
+## Master searches past the deal, and thinks ten times longer (10-27)
+
+- **The refinement** ([Z11-91]..[Z11-98]). In round 4, with at least 4 tiles left, the boundary
+  leaves the search visits most are valued again on a pool of deals shared by every leaf: the
+  network's value of each dealt position, blended with a greedy rollout's margin. A second search
+  then runs on the refined values. On 1 849 positions, each move scored by 64 replays, it gained
+  about +0.012 win probability per decision at 8 to 15 tiles left, against a search given the
+  same time. In 1 000 games
+  at 10 000 simulations it scored 54.8% against that time-matched control, +33 Elo (+18 to +48),
+  using less round-4 time (1 802 s against 2 261 s). It is the first change to the round-5
+  boundary that beat more simulations: 640 000 played no better there than 10 000.
+- **The budget changed** with the user (intent 0016): per move, p95 at most 3 s and p99 at most
+  5 s on this machine, idle, in place of every move under a second. And thought is spent only
+  where a match shows it wins.
+- **The climb** ([Z11-99]), with the refinement off, each step an SPRT against the one below it:
+  25 000 over 10 000, 54.4% of 800 games; 50 000 over 25 000, 54.6% of 800; 100 000 over 50 000,
+  53.0% of 1 200; then 200 000 over 100 000, 52.7% of 1 600, but over budget (p99 5.5 s). So the
+  default is **100 000** (p95 2.0 s, p99 3.2 s, max 4.6 s in the module, with the refinement), the
+  Deep setting is 200 000, and Quick is 10 000, whose every move is under a second (max 805 ms).
+  Each doubling bought less: about +32 Elo at first, +19 at the last.
+- **The refinement at the new default** ([T12-36]): with its `pastdeal.json` against itself
+  without, at 100 000, **54.3% of 800 games** (about +30 Elo), LLR 4.74. It carried over: its work
+  is capped at 10 000's size, so it is a tenth of the search at 100 000, and still pays about what
+  it paid at 10 000 against the time-matched control. `shipped.json` now names it.
+- **The browser** runs the module at about 1.47× native AVX2 (1.46 to 1.49, interleaved on the
+  idle machine), so a native time is never a stand-in for the budget's, which is the module's.
+
 ## Next
 
 - **The boundary into the final round** is where the value limits play: fixing it is worth up to
@@ -1371,16 +1398,15 @@ patience and not by [Z11-33]'s one-back rule.
   - teach the network the value there. More labelled positions alone were memorised, not learnt
     (10-23), so it likely needs inputs carrying the end-of-game scoring: added as zero-initialised
     input columns the network is unchanged at step 0, but it is a change to [Z11-8];
-  - or a search past it in play: the two-pass form (the 16 most-visited leaves re-valued by the
-    head and 16 rollouts) won 52.9% of 1 000 games at the default (+20, −1 to +42) at p95 1.0 s
-    native on round-4 moves. That is a change to [Z11-15] and the user's call.
+  - or a search past it in play: shipped on 10-27 as the past-deal refinement, about +30 Elo at
+    the new default. What remains is the network's own value there.
 - **Tried and dropped (10-22, 10-23):** weight averaging, blending the search's value into
   move samples' targets, a margin score term.
 - **Self-play code:** Gumbel search, for better policy targets at low simulation counts;
   restarts from saved round starts; reanalyse.
 - **Capacity:** only testable from scratch (10-23); it needs a new latency record.
-- **Shipping:** the latency record has room (p95 551 ms against 1.5 s), so a shipped move could
-  use about twice the simulations. That is a new latency lane, and the user's call.
+- **Shipping:** done on 10-27: the default is 100 000 under the new budget. A new master reruns
+  the climb and the refinement's match ([T12-36], [T12-37]).
 
 ## Ways of working that this run settled
 

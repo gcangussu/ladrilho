@@ -715,8 +715,9 @@ These requirements were proposals for *0006*, in the manner of [0008 A8-33]. Eac
   holds four tiles, and assert two things:
   - the **same action** as `alphazero play --search play` on a config carrying the shipped
     milestone's `cpuct` and `fpu`, `playSimulations: 800` and `playEndgameNodes` equal to the
-    shipped endgame cap ([T12-33]): `--search play`, because the proof follows no other
-    ([0011 Z11-77]);
+    shipped endgame cap ([T12-33]), and `--past-deal` with the shipped milestone's `pastdeal.json`
+    whenever `shipped.json` names one ([T12-36]): `--search play`, because the proof follows no
+    other ([0011 Z11-77]);
   - a **value within 1e-5** of `play`'s value.
 
   It MUST also assert that, on at least three of the late positions, `play` with the proof off

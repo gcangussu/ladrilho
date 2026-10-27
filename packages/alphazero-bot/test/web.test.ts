@@ -19,6 +19,7 @@ import { describe, expect, it } from 'vitest';
 import { canonicalWords as laneWords, frame, readAnswer } from '../eval/chooser.js';
 import { alphazero } from '../eval/crate.js';
 import { corpusBlocks, parseBlock } from '../eval/blocks.js';
+import { sha256File } from '../eval/files.js';
 import { LOG, PACKAGE, REPO, binary } from '../eval/paths.js';
 import { SOURCE_PATHS, ladderPaths } from '../eval/provenance.js';
 import { currentMaster } from '../eval/ship.js';
@@ -536,7 +537,9 @@ describe('the same moves as the crate [T12-27]', () => {
   // payload's cap, `web.mjs` writing `ENDGAME_NODES = 0` into the payload, and
   // the web crate's player building its `SearchConfig` with `endgame_nodes: 0`
   // (the module rebuilt) each turn it red on the late positions. Every
-  // position is compared, so a single drifted move fails this case.
+  // position is compared, so a single drifted move fails this case. And the
+  // shipped refinement ([T12-36]) on both sides: seen red with the module
+  // carrying it and `play` without, corpus position 1's value off by 0.095.
   it(
     'chooses what `alphazero play` chooses at the shipped cap, on 50 corpus positions and late ones where the proof changes the move',
     { timeout: 900_000 },
@@ -551,8 +554,11 @@ describe('the same moves as the crate [T12-27]', () => {
       writeFileSync(on, JSON.stringify({ ...entry.config, playSimulations: 800, playEndgameNodes: shipped.endgameNodes }));
       writeFileSync(off, JSON.stringify({ ...entry.config, playSimulations: 800, playEndgameNodes: 0 }));
       const checkpoint = join(PACKAGE, 'milestones', shipped.run, String(shipped.generation), 'checkpoint.bin');
+      const pastDeal = join(PACKAGE, 'milestones', shipped.run, String(shipped.generation), 'pastdeal.json');
+      if (shipped.pastDeal !== null) expect(sha256File(pastDeal)).toBe(shipped.pastDeal.sha256);
+      const refined = shipped.pastDeal === null ? [] : ['--past-deal', pastDeal];
       const play = (config: string, words: number[]) =>
-        readAnswer(alphazero(binary('debug'), ['play', checkpoint, '--config', config, '--search', 'play'], frame(words)));
+        readAnswer(alphazero(binary('debug'), ['play', checkpoint, '--config', config, '--search', 'play', ...refined], frame(words)));
       const master = await createMaster();
       const compare = (position: AzulJSON, words: number[], label: string) => {
         const native = play(on, words);
