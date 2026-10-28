@@ -1391,6 +1391,16 @@ patience and not by [Z11-33]'s one-back rule.
 - **The browser** runs the module at about 1.47× native AVX2 (1.46 to 1.49, interleaved on the
   idle machine), so a native time is never a stand-in for the budget's, which is the module's.
 
+## The shipped player made faster and lighter (10-28)
+
+A performance pass on master, natively and in the browser, every move and value bit-identical to
+before (all 1 978 corpus positions at 10 000, both builds). The browser module is 16% faster at the
+default 100 000 and 20% at 10 000; the first move of a game no longer runs in V8's baseline code. Native
+moves are 20–25% faster. Memory is 27–28% lower on the heaviest position (browser 70 → 50 MB at
+200 000). The forward pass is now at V8's arithmetic floor (no FMA, by [Z11-10]) and bound by
+memory natively. Kept and rejected changes, with figures and method: `PERF-2026-10-28.md`. The
+lane of [0012 T12-25] was not rerun: the machine was never idle.
+
 ## Next
 
 - **The boundary into the final round** is where the value limits play: fixing it is worth up to
