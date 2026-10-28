@@ -188,25 +188,40 @@ struct Node {
     /// The network's value for an expanded node; the leaf value for a terminal
     /// or boundary one. From `seat`'s perspective.
     value: f32,
-    /// Simulations that went on below it.
-    visits: u32,
-    /// The visits of the edge into it: one more than `visits` for an expanded
-    /// node, the leaf's first, and every visit for a terminal or boundary one.
+    /// The visits of the edge into it: for an expanded node one more than the
+    /// simulations that went on below it (`visits`), the leaf's first; every
+    /// visit for a terminal or boundary one. The root, which no edge leads
+    /// to, starts at one and counts its simulations the same way.
     taken: u32,
     /// Sum of the values backed up through the edge into it, from the parent's
     /// seat to move.
     total: f64,
-    edges_start: usize,
+    /// Edges number under four billion: a search a hundred times the
+    /// largest the player runs holds about three hundred million.
+    edges_start: u32,
     edges_len: u8,
 }
 
+/// Twenty-four bytes: a search holds one for every node it expands, a third
+/// of what its edges hold.
+const _: () = assert!(std::mem::size_of::<Node>() == 24);
+
 impl Node {
     fn leaf(seat: Player, kind: Kind, value: f32) -> Node {
-        Node { seat, kind, value, visits: 0, taken: 0, total: 0.0, edges_start: 0, edges_len: 0 }
+        Node { seat, kind, value, taken: 0, total: 0.0, edges_start: 0, edges_len: 0 }
+    }
+
+    /// Simulations that went on below an expanded node.
+    fn visits(&self) -> u32 {
+        self.taken - 1
+    }
+
+    fn start(&self) -> usize {
+        self.edges_start as usize
     }
 
     fn edges(&self) -> std::ops::Range<usize> {
-        self.edges_start..self.edges_start + usize::from(self.edges_len)
+        self.start()..self.start() + usize::from(self.edges_len)
     }
 }
 
@@ -365,7 +380,8 @@ impl<S: Shuffler> Search<S> {
         match p.wait {
             Wait::Root => {
                 self.push_expanded(p.state.current_player(), p.legal.as_ref(), eval);
-                let (_, priors, _) = self.edges.of(self.nodes[0].edges_start, usize::from(self.nodes[0].edges_len));
+                self.nodes[0].taken = 1;
+                let (_, priors, _) = self.edges.of(self.nodes[0].start(), usize::from(self.nodes[0].edges_len));
                 self.root_priors = priors.to_vec();
                 if let Some(g) = self.gumbel.as_mut() {
                     let m = (g.config.considered as usize).min(self.root_priors.len());
@@ -396,7 +412,7 @@ impl<S: Shuffler> Search<S> {
     /// its priors, its value the node's `V`.
     fn push_expanded(&mut self, seat: Player, legal: Option<&ActionList>, eval: &Evaluation) -> u32 {
         let legal = legal.map_or(&[][..], ActionList::as_slice);
-        let edges_start = self.edges.push(legal, &eval.policy);
+        let edges_start = self.edges.push(legal, &eval.policy) as u32;
         self.stats.expanded += 1;
         // At most every action: it fits.
         let edges_len = legal.len() as u8;
@@ -433,11 +449,11 @@ impl<S: Shuffler> Search<S> {
             return self.select_gumbel(g, node);
         }
         let n = &self.nodes[node as usize];
-        let sqrt_total = f64::from(n.visits).sqrt();
+        let sqrt_total = f64::from(n.visits()).sqrt();
         let cpuct = f64::from(self.config.cpuct);
         let unvisited = f64::from(n.value) - f64::from(self.config.fpu);
         let mut best = f64::NEG_INFINITY;
-        let (_, priors, children) = self.edges.of(n.edges_start, usize::from(n.edges_len));
+        let (_, priors, children) = self.edges.of(n.start(), usize::from(n.edges_len));
         let mut chosen = 0;
         for (i, (&prior, &child)) in priors.iter().zip(children).enumerate() {
             let (q, visits) = match child {
@@ -453,7 +469,7 @@ impl<S: Shuffler> Search<S> {
                 chosen = i;
             }
         }
-        n.edges_start + chosen
+        n.start() + chosen
     }
 
     /// Each edge of `node`'s visits and backed-up value from its seat, 0 where
@@ -467,7 +483,7 @@ impl<S: Shuffler> Search<S> {
     /// `child_statistics` into vectors it clears first.
     fn child_statistics_into(&self, node: u32, visits: &mut Vec<u32>, q: &mut Vec<f64>) {
         let n = &self.nodes[node as usize];
-        let (_, _, children) = self.edges.of(n.edges_start, usize::from(n.edges_len));
+        let (_, _, children) = self.edges.of(n.start(), usize::from(n.edges_len));
         visits.clear();
         q.clear();
         for &c in children {
@@ -495,12 +511,12 @@ impl<S: Shuffler> Search<S> {
         let Scratch { visits, q, values } = &mut *scratch;
         self.child_statistics_into(node, visits, q);
         let (visits, q) = (&visits[..], &q[..]);
-        let (_, priors, _) = self.edges.of(n.edges_start, usize::from(n.edges_len));
+        let (_, priors, _) = self.edges.of(n.start(), usize::from(n.edges_len));
         let t = &g.config.transform;
         let chosen = if node == 0 {
             completed_q_into(&self.root_priors, visits, q, n.value, t, values);
             let completed = &values[..];
-            let k = n.visits as usize;
+            let k = n.visits() as usize;
             // Each simulation adds one root visit, so k is always inside the
             // table. Each halving phase leaves enough actions at the count it
             // names, so the fallback is never taken; were it, a debug build
@@ -514,7 +530,7 @@ impl<S: Shuffler> Search<S> {
             improved_policy_into(priors, visits, q, n.value, t, values);
             interior_pick(values, visits)
         };
-        n.edges_start + chosen
+        n.start() + chosen
     }
 
     /// One simulation: down to a leaf, then either its value backed up, or a
@@ -579,16 +595,17 @@ impl<S: Shuffler> Search<S> {
     /// simulation.
     fn backup(&mut self, mut value: f32, mut seat: Player) {
         for &(node, e) in self.path.iter().rev() {
-            let n = &mut self.nodes[node as usize];
+            let n = &self.nodes[node as usize];
             if n.seat != seat {
                 value = -value;
                 seat = n.seat;
             }
-            n.visits += 1;
             let child = &mut self.nodes[self.edges.child(e) as usize];
             child.taken += 1;
             child.total += f64::from(value);
         }
+        // The root is on every path and is no edge's child.
+        self.nodes[0].taken += 1;
         self.remaining -= 1;
     }
 
@@ -615,7 +632,7 @@ impl<S: Shuffler> Search<S> {
     /// seat (0 where unvisited); and the root's own network value.
     pub fn root_statistics(&self) -> RootStatistics {
         let root = &self.nodes[0];
-        let (actions, _, children) = self.edges.of(root.edges_start, usize::from(root.edges_len));
+        let (actions, _, children) = self.edges.of(root.start(), usize::from(root.edges_len));
         let mut visits = Vec::with_capacity(actions.len());
         let mut q = Vec::with_capacity(actions.len());
         for &child in children {
@@ -647,7 +664,7 @@ impl<S: Shuffler> Search<S> {
         let mut stack = vec![(0u32, self.trail[0].clone())];
         while let Some((node, state)) = stack.pop() {
             let n = &self.nodes[node as usize];
-            let (actions, _, children) = self.edges.of(n.edges_start, usize::from(n.edges_len));
+            let (actions, _, children) = self.edges.of(n.start(), usize::from(n.edges_len));
             for (&action, &child) in actions.iter().zip(children) {
                 if child == NONE {
                     continue;
@@ -672,7 +689,7 @@ impl<S: Shuffler> Search<S> {
 
     /// Simulations run so far: the root's visits.
     pub fn simulations_run(&self) -> u32 {
-        self.nodes.first().map_or(0, |n| n.visits)
+        self.nodes.first().map_or(0, Node::visits)
     }
 
     /// The tree's shape so far.
@@ -708,7 +725,7 @@ impl<S: Shuffler> Search<S> {
         let mut total = 0f64;
         let mut count = 0u32;
         let root = &self.nodes[0];
-        let (actions, _, children) = self.edges.of(root.edges_start, usize::from(root.edges_len));
+        let (actions, _, children) = self.edges.of(root.start(), usize::from(root.edges_len));
         let mut action = actions[0];
         let mut most = 0u32;
         for (&a, &child) in actions.iter().zip(children) {
@@ -818,10 +835,10 @@ mod tests {
             }
             for node in 1..search.nodes.len() as u32 {
                 let n = &search.nodes[node as usize];
-                if n.kind != Kind::Expanded || n.visits == 0 {
+                if n.kind != Kind::Expanded || n.visits() == 0 {
                     continue;
                 }
-                let (_, priors, children) = search.edges.of(n.edges_start, usize::from(n.edges_len));
+                let (_, priors, children) = search.edges.of(n.start(), usize::from(n.edges_len));
                 let (mut visits, mut q) = (Vec::new(), Vec::new());
                 for &c in children {
                     if c == NONE {
@@ -834,7 +851,7 @@ mod tests {
                     }
                 }
                 let want = interior_pick(&improved_policy(priors, &visits, &q, n.value, &DEFAULT_TRANSFORM), &visits);
-                assert_eq!(search.select(node), n.edges_start + want, "seed {seed} node {node}");
+                assert_eq!(search.select(node), n.start() + want, "seed {seed} node {node}");
                 checked += 1;
             }
         }
