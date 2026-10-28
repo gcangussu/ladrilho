@@ -243,22 +243,25 @@ function rustFaults(files: Source[]): string[] {
 
 const SCRIPTS: Record<string, RegExp> = {
   // [0012 T12-7]: the web crate is tested and linted beside the crate, and the
-  // payload the suite imports is built before it runs.
-  test: /^cargo test --locked && cargo test --locked --manifest-path web\/Cargo\.toml && node tools\/web\.mjs && vitest run$/,
+  // payload the suite imports is built before it runs. [Z11-104]: each script
+  // that reads a milestone checkpoint fetches the needed set first.
+  test: /^node tools\/checkpoints\.mjs fetch && cargo test --locked && cargo test --locked --manifest-path web\/Cargo\.toml && node tools\/web\.mjs && vitest run$/,
   typecheck:
-    /^node tools\/web\.mjs && tsc --noEmit && cargo clippy --locked --all-targets -- -D warnings && cargo clippy --locked --all-targets --manifest-path web\/Cargo\.toml -- -D warnings$/,
-  web: /^node tools\/web\.mjs$/,
-  'web-latency': /web-latency\.mjs$/,
-  'test:train': /pytest/,
+    /^node tools\/checkpoints\.mjs fetch && node tools\/web\.mjs && tsc --noEmit && cargo clippy --locked --all-targets -- -D warnings && cargo clippy --locked --all-targets --manifest-path web\/Cargo\.toml -- -D warnings$/,
+  checkpoints: /^node tools\/checkpoints\.mjs$/,
+  web: /^node tools\/checkpoints\.mjs fetch && node tools\/web\.mjs$/,
+  'web-latency': /^node tools\/checkpoints\.mjs fetch && .*web-latency\.mjs$/,
+  'test:train': /^node tools\/checkpoints\.mjs fetch && .*pytest/,
   train: /cli\.mjs train$/,
   'stop-simulation': /cli\.mjs stop-simulation$/,
   milestone: /cli\.mjs milestone$/,
   gate: /cli\.mjs gate$/,
   latency: /cli\.mjs latency$/,
   throughput: /cli\.mjs throughput$/,
+  tile: /^node tools\/checkpoints\.mjs fetch && /,
   // [0013 G13-50], [0013 G13-51]: the harness, and its suite that needs the cache, kept out of `test`.
-  grzhx: /^node grzhx\/bundle\.mjs && node node_modules\/\.alphazero\/grzhx\.mjs$/,
-  'test:grzhx': /^vitest run --config grzhx\/vitest\.config\.ts$/,
+  grzhx: /^node tools\/checkpoints\.mjs fetch && node grzhx\/bundle\.mjs && node node_modules\/\.alphazero\/grzhx\.mjs$/,
+  'test:grzhx': /^node tools\/checkpoints\.mjs fetch && vitest run --config grzhx\/vitest\.config\.ts$/,
 };
 
 describe('the source check [Z11-47]', () => {

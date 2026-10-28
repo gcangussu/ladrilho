@@ -4,3 +4,6 @@ runs/
 train/.venv/
 web/dist/
 grzhx/host/.venv/
+# [0011 Z11-103]: milestone checkpoints live on the Release; milestones/checkpoints.json records them.
+milestones/*/*/checkpoint.bin
+milestones/*/*/checkpoint.bin.download

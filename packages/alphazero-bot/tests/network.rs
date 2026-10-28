@@ -113,7 +113,7 @@ fn a_forward_pass_that_disagrees_with_pytorch_is_refused() {
     Network::load(&checkpoint, &within).expect("inside the relative bound");
 }
 
-/// [Z11-44]: the fixture and every checkpoint under `milestones/` load, which
+/// [Z11-44]: the fixture and every checkpoint on disk under `milestones/` load, which
 /// runs [Z11-13]'s parity check on each.
 ///
 /// Mutation, seen red ([Z11-48]): in `Network::forward`, the first block's

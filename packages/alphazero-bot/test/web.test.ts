@@ -23,6 +23,7 @@ import { sha256File } from '../eval/files.js';
 import { LOG, PACKAGE, REPO, binary } from '../eval/paths.js';
 import { SOURCE_PATHS, ladderPaths } from '../eval/provenance.js';
 import { currentMaster } from '../eval/ship.js';
+import { readManifest } from '../tools/checkpoints.mjs';
 import { shippedMilestone } from '../tools/web.mjs';
 import { canonicalWords as webWords } from '../web/canonical.js';
 import { CPUCT, ENDGAME_NODES, FPU, SHIPPED as PAYLOAD_SHIPPED } from '../web/dist/payload.js';
@@ -353,11 +354,13 @@ function masterOf(log: LogEntry[], anchors: Anchors | null): { run: string; gene
 describe('the shipped milestone [T12-9], [T12-10], [T12-11], [T12-35]', () => {
   const shipped = JSON.parse(read('web/shipped.json'));
 
-  it('is a committed, logged milestone whose files match', () => {
+  it('is a recorded, logged milestone whose files match', () => {
+    // [0011 Z11-103]: the parity file is committed; the checkpoint is
+    // recorded in checkpoints.json, at the sha256 shipped.json names.
     const dir = `milestones/${shipped.run}/${shipped.generation}`;
     const tracked = execFileSync('git', ['ls-files', dir], { cwd: PACKAGE, encoding: 'utf8' }).split('\n');
-    expect(tracked).toContain(`${dir}/checkpoint.bin`);
     expect(tracked).toContain(`${dir}/checkpoint.parity`);
+    expect(readManifest(PACKAGE).checkpoints[`${shipped.run}/${shipped.generation}`]?.sha256).toBe(shipped.checkpointSha256);
     expect(() => shippedMilestone(shipped)).not.toThrow();
   });
 

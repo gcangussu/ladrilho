@@ -190,6 +190,7 @@ result, winrate) keep their meaning.
   | `gate <checkpoint>` | [Z11-35], [Z11-61] |
   | `latency --run <name>` | [Z11-40], [Z11-57] |
   | `throughput --run <name>` | [Z11-53] |
+  | `checkpoints <command>` | [Z11-103]: fetch, record, upload and verify milestone checkpoints |
   | `web` | [0012 T12-7]: the master's payload |
   | `web-latency` | [0012 T12-25] |
   | `grzhx <command>` | [0013 G13-31] and the harness's other commands: the master against grzhx's AlphaZero |
@@ -390,7 +391,38 @@ result, winrate) keep their meaning.
   An absolute bound would one day reject a correct checkpoint in the middle of a run. A transposed
   matrix, a swapped tensor or a missed bias is an error of order one either way, and surfaces on
   the first load, with a number — in the root suite, which loads the committed fixture checkpoint
-  and every committed milestone ([Z11-44]), without the trainer's environment.*
+  and every milestone on disk ([Z11-44]), without the trainer's environment.*
+- **[Z11-103]** Milestone checkpoints MUST NOT be committed. Each MUST be an asset of one GitHub
+  Release of this repository, `checkpoints`, named `<run>-<generation>.bin`, and MUST be recorded
+  in the committed `milestones/checkpoints.json` — the repository, the Release, and for each
+  `<run>/<generation>` the checkpoint's sha256 and length — which records exactly the logged
+  milestones. Its parity file and `pastdeal.json` stay committed beside where it is fetched to,
+  `milestones/<run>/<generation>/checkpoint.bin`, which git ignores. `tools/checkpoints.mjs`, as
+  the `checkpoints` script:
+  - `fetch [<run>:<g> …] [--all]` MUST put each named checkpoint (with none named, the needed set
+    of [Z11-104]) at that path, keeping a file already there that matches the record without
+    downloading it, refusing one that does not rather than replacing it, and moving a download into
+    place only once its length and sha256 match the record, so a wrong download leaves nothing;
+  - `record` MUST add every milestone checkpoint on disk the record lacks, and refuse one whose
+    bytes differ from those recorded: a milestone is written once. Each milestone the loop writes
+    ([Z11-62]) MUST be recorded the same way, as it is written;
+  - `upload [<run>:<g> …]` MUST put every recorded checkpoint the Release lacks on it, checked
+    against the record first, and refuse when an asset there has a length other than the recorded
+    one. Like the commit of [Z11-62], it is a person's act: the loop MUST NOT upload;
+  - `verify` MUST exit non-zero unless the Release holds exactly the recorded checkpoints at their
+    recorded lengths.
+
+  *Why: at 2.5 MB each, incompressible, the checkpoints were nine tenths of the repository and every
+  clone carried all of them. A Release asset is not versioned the way a commit is; the record is
+  what makes it so, since a replaced asset fails every fetch loudly instead of being read.*
+- **[Z11-104]** The **needed set** is `master` as `web/shipped.json` names it, the members of
+  `milestones/anchors.json`, the pool as `milestones/pool.json` and the log's replacements leave it
+  ([Z11-73]), and each run's latest recorded milestone; a needed milestone the record lacks MUST be
+  an error. The `test`, `typecheck`, `web`, `web-latency`, `test:train`, `tile`, `grzhx` and
+  `test:grzhx` scripts MUST fetch it first, and every lane command MUST, before it runs, fetch it
+  together with each recorded milestone its arguments name, as `<run>:<g>` (alone, in a comma list,
+  or before `=`) or as a checkpoint path. The lanes' suite MUST assert the set on a hand-written
+  package directory, the forms the arguments take, and that the needed set is on disk.
 
 ## The search
 
@@ -1357,7 +1389,7 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
 
 - **[Z11-73]** A run's config MAY set `yardstick` to `pool`; absent means `ladder`, the yardstick of
   [Z11-31]. A run started from another inherits its parent's unless `train init` is given
-  `--yardstick ladder|pool|anchors` ([Z11-66]). The **pool** is three champions, each a committed milestone
+  `--yardstick ladder|pool|anchors` ([Z11-66]). The **pool** is three champions, each a recorded milestone
   checkpoint with an Elo rating, played at a simulation count of the pool's own, 200:
 
   - `pnpm -F alphazero-bot pool init --members <run>:<g>,… --games <n>` MUST seed it once, refusing
@@ -1431,7 +1463,7 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
   these requirements stay for the entries already logged.*
 
 - **[Z11-84]** A run's config MAY set `yardstick` to `anchors`, and `train init` MUST accept
-  `--yardstick anchors`. The **anchors** are committed milestone checkpoints with fixed ratings,
+  `--yardstick anchors`. The **anchors** are recorded milestone checkpoints ([Z11-103]) with fixed ratings,
   held in `milestones/anchors.json`, which only two deliberate commands write, and a person
   commits:
   - `pnpm -F alphazero-bot anchors init --members <run>:<g>,… --pin <run>:<g>=<rating> --games <n>`
@@ -1522,8 +1554,9 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
   of [Z11-63], the decision, and a **reason**: one sentence naming the numbers the decision was
   taken on. The per-move simulation counts are recorded as a histogram, count to moves, which is
   every move's count without fourteen thousand copies of one number. Each milestone MUST also
-  write its checkpoint and parity file to `milestones/<run>/<generation>/`. The loop MUST print the reason when it stops. The loop MUST NOT
-  run `git`; committing the milestone is a person's act.
+  write its checkpoint and parity file to `milestones/<run>/<generation>/`, recording the checkpoint
+  ([Z11-103]). The loop MUST print the reason when it stops. The loop MUST NOT
+  run `git`, nor upload; committing the milestone, and uploading its checkpoint, are a person's acts.
 - **[Z11-63]** Every `milestone` entry and every gate result MUST record its **provenance**:
   - the repository's commit;
   - whether any **source path** had uncommitted changes, where the source paths are the ones hashed
@@ -1826,7 +1859,9 @@ this package, and MUST be corrected in the same change.
 - Every input the network is given accounts for every tile of its state's census ([Z11-51]).
 - Every sample's `result` is in `{-1, 0, 1}`, and a move sample's visits are zero outside its legal
   mask ([Z11-27]).
-- Every committed checkpoint loads, parity included ([Z11-13]).
+- Every checkpoint on disk loads, parity included ([Z11-13]).
+- No milestone checkpoint is committed, and `milestones/checkpoints.json` records exactly the
+  logged milestones, matching every recorded checkpoint on disk ([Z11-103]).
 - `milestones/log.json` only grows.
 
 ## Verification
@@ -1901,8 +1936,9 @@ this package, and MUST be corrected in the same change.
   0.00176, far outside 10%. The Gamma draws are `rand_distr`'s ([Z11-2]); this test is what
   holds them, and the crate's normalising, to the noise the spec asks for.*
 
-- **[Z11-44]** The crate's suite MUST load the **fixture checkpoint** and every checkpoint under
-  `milestones/`, which runs [Z11-13]'s parity check on each. The fixture is a small checkpoint
+- **[Z11-44]** The crate's suite MUST load the **fixture checkpoint** and every checkpoint on disk
+  under `milestones/` — at least the needed set, which the suite fetches first ([Z11-104]) — which
+  runs [Z11-13]'s parity check on each. The fixture is a small checkpoint
   (`W = 16`, `B = 1`, random weights) with its parity file, exported by the trainer once and
   committed as `test/fixtures/checkpoint.bin` and `test/fixtures/checkpoint.parity`, so the check
   has something to fail on from the first commit, before any run exists.
@@ -2078,9 +2114,9 @@ this package, and MUST be corrected in the same change.
   [Z11-54] are what would show it; more games per generation or a shorter window are the remedies.
 - **Should self-play permute the displays?** Answered by [Z11-65], in training rather than
   self-play: run `second` tests it, started from run `first` ([Z11-66]).
-- **Will committed checkpoints outgrow the repository?** At 2.5 MB each and a milestone every ten
-  generations, twenty milestones is 50 MB. If that becomes a problem, keeping only the log and the
-  best checkpoint is the fallback, which [Z11-44] would then cover.
+- **Will committed checkpoints outgrow the repository?** They did: 267 milestones, 680 MB, nine
+  tenths of every clone. Answered by [Z11-103]: the checkpoints moved to a Release, and the
+  history was rewritten to drop the ones committed before.
 
 ## References
 

@@ -40,6 +40,7 @@ import { withLock } from './lock.js';
 import { appendLog, readLog } from './log.js';
 import { checkCounts, runGate, runMilestone, type Player } from './milestone.js';
 import { CORPUS, LATENCY, PACKAGE, RUNS, checkRunName, milestoneCheckpoint, parseMilestonePath, runPaths } from './paths.js';
+import { recordCheckpoint } from '../tools/checkpoints.mjs';
 import { fitPool } from './elo.js';
 import {
   POOL,
@@ -555,6 +556,7 @@ async function milestoneStep(
   // The parity file first, so a checkpoint is never on disk without one ([Z11-13]).
   writeAtomic(dest.replace(/\.bin$/, '.parity'), readFileSync(p.checkpoint(generation).replace(/\.bin$/, '.parity')));
   writeAtomic(dest, readFileSync(p.checkpoint(generation)));
+  recordCheckpoint(name, generation, PACKAGE);
   const player: Player = { binary: bin, checkpoint: dest, config: p.config };
 
   const measured = await runMilestone(player, config.milestoneSimulations, workers);
@@ -622,6 +624,7 @@ async function poolMilestoneStep(
   mkdirSync(dirname(dest), { recursive: true });
   writeAtomic(dest.replace(/\.bin$/, '.parity'), readFileSync(p.checkpoint(generation).replace(/\.bin$/, '.parity')));
   writeAtomic(dest, readFileSync(p.checkpoint(generation)));
+  recordCheckpoint(name, generation, PACKAGE);
 
   const seed = readSeed();
   const log = readLog();
@@ -685,6 +688,7 @@ async function anchoredMilestoneStep(
   mkdirSync(dirname(dest), { recursive: true });
   writeAtomic(dest.replace(/\.bin$/, '.parity'), readFileSync(p.checkpoint(generation).replace(/\.bin$/, '.parity')));
   writeAtomic(dest, readFileSync(p.checkpoint(generation)));
+  recordCheckpoint(name, generation, PACKAGE);
 
   const file = readAnchors();
   const log = readLog();
@@ -827,7 +831,7 @@ function anchorConfig(path: string, config: RunConfig, simulations: number): str
 /** A logged milestone's checkpoint and config, as the anchors' commands read them. */
 function loggedMember(m: { run: string; generation: number }): { checkpoint: string; config: RunConfig } {
   const checkpoint = `milestones/${m.run}/${m.generation}/checkpoint.bin`;
-  if (!existsSync(milestoneCheckpoint(m.run, m.generation))) throw new Error(`${checkpoint} is not committed`);
+  if (!existsSync(milestoneCheckpoint(m.run, m.generation))) throw new Error(`${checkpoint} is not on disk: checkpoints.json does not record it ([Z11-103])`);
   const entry = readLog().find((e) => e.kind === 'milestone' && e.run === m.run && e.generation === m.generation) as
     | MilestoneEntry
     | undefined;
@@ -957,7 +961,7 @@ export async function poolInit(
     if (members.length < 2) throw new Error('a pool needs at least two members');
     const seeded = members.map((m) => {
       const checkpoint = `milestones/${m.run}/${m.generation}/checkpoint.bin`;
-      if (!existsSync(milestoneCheckpoint(m.run, m.generation))) throw new Error(`${checkpoint} is not committed`);
+      if (!existsSync(milestoneCheckpoint(m.run, m.generation))) throw new Error(`${checkpoint} is not on disk: checkpoints.json does not record it ([Z11-103])`);
       return { ...m, checkpoint };
     });
     // The anchor's config as its committed log entry holds it, so the pool is

@@ -36,6 +36,7 @@ import { seriesWorker } from './series.js';
 import { POOL, readSeed } from './pool.js';
 import { patienceTable, poolTable, shipTable, table } from './stop-rule-simulation.js';
 import { MASTER_SIMULATIONS } from '../web/settings.js';
+import { fetchCheckpoints, namedKeys, neededKeys, readManifest } from '../tools/checkpoints.mjs';
 
 function option(args: string[], name: string): string | undefined {
   const i = args.indexOf(`--${name}`);
@@ -54,6 +55,8 @@ function workers(args: string[]): number {
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2).filter((a) => a !== '--');
+  // [Z11-103]: the checkpoints the command may read, on disk before it runs.
+  await fetchCheckpoints([...new Set([...neededKeys(), ...namedKeys(args, readManifest().checkpoints)])]);
   const [command, ...rest] = args;
   const run = (): string => {
     const r = option(rest, 'run');

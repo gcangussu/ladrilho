@@ -9,9 +9,9 @@
     "./web/settings": "./web/settings.ts"
   },
   "scripts": {
-    "test": "cargo test --locked && cargo test --locked --manifest-path web/Cargo.toml && node tools/web.mjs && vitest run",
-    "typecheck": "node tools/web.mjs && tsc --noEmit && cargo clippy --locked --all-targets -- -D warnings && cargo clippy --locked --all-targets --manifest-path web/Cargo.toml -- -D warnings",
-    "test:train": "cargo build --locked && cargo test --locked --test selfplay a_sample_round_trips && bash train/venv.sh -m pytest -q tests",
+    "test": "node tools/checkpoints.mjs fetch && cargo test --locked && cargo test --locked --manifest-path web/Cargo.toml && node tools/web.mjs && vitest run",
+    "typecheck": "node tools/checkpoints.mjs fetch && node tools/web.mjs && tsc --noEmit && cargo clippy --locked --all-targets -- -D warnings && cargo clippy --locked --all-targets --manifest-path web/Cargo.toml -- -D warnings",
+    "test:train": "node tools/checkpoints.mjs fetch && cargo build --locked && cargo test --locked --test selfplay a_sample_round_trips && bash train/venv.sh -m pytest -q tests",
     "train": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs train",
     "stop-simulation": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs stop-simulation",
     "milestone": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs milestone",
@@ -27,11 +27,12 @@
     "past-deal": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs past-deal",
     "climb": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs climb",
     "perf-match": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs perf-match",
-    "web": "node tools/web.mjs",
-    "web-latency": "node tools/web.mjs && node tools/bundle.mjs && node node_modules/.alphazero/web-latency.mjs",
-    "tile": "node tile/bundle.mjs && node node_modules/.alphazero/tile.mjs",
-    "grzhx": "node grzhx/bundle.mjs && node node_modules/.alphazero/grzhx.mjs",
-    "test:grzhx": "vitest run --config grzhx/vitest.config.ts"
+    "checkpoints": "node tools/checkpoints.mjs",
+    "web": "node tools/checkpoints.mjs fetch && node tools/web.mjs",
+    "web-latency": "node tools/checkpoints.mjs fetch && node tools/web.mjs && node tools/bundle.mjs && node node_modules/.alphazero/web-latency.mjs",
+    "tile": "node tools/checkpoints.mjs fetch && node tile/bundle.mjs && node node_modules/.alphazero/tile.mjs",
+    "grzhx": "node tools/checkpoints.mjs fetch && node grzhx/bundle.mjs && node node_modules/.alphazero/grzhx.mjs",
+    "test:grzhx": "node tools/checkpoints.mjs fetch && vitest run --config grzhx/vitest.config.ts"
   },
   "dependencies": {
     "engine": "workspace:*"

@@ -299,8 +299,8 @@ interface Seating {
 ### Which milestone ships
 
 - **[T12-9]** `packages/alphazero-bot/web/shipped.json` MUST be committed and MUST name a
-  **logged** milestone ([0011 Z11-4]) whose checkpoint and parity file are committed and match
-  its two sha256s, and MUST carry the endgame cap ([T12-33]).
+  **logged** milestone ([0011 Z11-4]) whose parity file is committed, whose checkpoint is recorded
+  ([0011 Z11-103]), and whose two files match its two sha256s, and MUST carry the endgame cap ([T12-33]).
 - **[T12-10]** Once the log holds a `ship` entry ([T12-35]), the shipped milestone MUST be
   `master` as the log names it. Before then it was decided by rating, which a test still asserts
   of a log without one:

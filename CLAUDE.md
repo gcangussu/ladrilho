@@ -65,8 +65,12 @@ general-purpose plumbing (JSON, hashing, the random generator, arguments) comes 
 values it on a *pre-deal view*, so no dealt tile is ever read ([0011 Z11-15], [Z11-21]). Two things
 cost time if forgotten. Every checkpoint loads only beside a parity file of PyTorch's own outputs,
 checked on every load ([Z11-13]); a checkpoint without one is not a checkpoint. And the loop
-writes, but never commits: `milestones/log.json`, the milestone checkpoints, `gate/` and `latency/`
-are for a person to commit, while `runs/` is git-ignored scratch. Like `ai-bot`'s gate, its
+writes, but never commits: `milestones/log.json`, `milestones/checkpoints.json`, the parity files,
+`gate/` and `latency/` are for a person to commit, while `runs/` is git-ignored scratch. The
+milestone checkpoints themselves are never committed: they live on the `checkpoints` GitHub
+Release, `checkpoints.json` records each one's sha256, and the scripts fetch what they need
+([Z11-103], [Z11-104]). **Run `pnpm -F alphazero-bot checkpoints upload` when you commit a
+milestone**, or a fresh clone's suite fails to fetch it. Like `ai-bot`'s gate, its
 milestones and gate play `sharp`, so a change to `sharp`'s play starts every run's comparison
 afresh ([Z11-63]).
 
@@ -197,6 +201,9 @@ pnpm -F crosscheck replay <report.json>            # [C10-24]: exit 0 means it n
 
 pnpm -F alphazero-bot test       # the crate (search, network, self-play, formats) and the lanes
 pnpm -F alphazero-bot test:train # the trainer's pytest suite; needs uv. Not in the root suite
+pnpm -F alphazero-bot checkpoints fetch [<run>:<g> …] [--all]  # [Z11-103]: from the Release, hash-checked
+pnpm -F alphazero-bot checkpoints upload       # every recorded checkpoint the Release lacks; needs gh
+pnpm -F alphazero-bot checkpoints verify       # the Release holds exactly what checkpoints.json records
 pnpm -F alphazero-bot train init --run <name>  # [Z11-58]: checkpoint 0 and the config
 pnpm -F alphazero-bot train init --run <name> --from <run>:<g> [--augment displays] \
     [--set gamesPerGeneration=3000] [--gate off] [--yardstick pool] [--patience 5] [--milestone-every 20]
