@@ -116,8 +116,11 @@ impl Memo {
     /// the network has answered.
     pub fn lookup(&self, (observation, legal): Request<'_>) -> Result<Evaluation, Key> {
         let mut buf = [0u8; KEY_BYTES];
-        // A value without a code was in no input the memo holds.
-        let Some(k) = key(observation, legal, &mut |bits| self.codes.of.get(&bits).copied(), &mut buf) else {
+        // A value without a code while codes are left was in no input the
+        // memo holds; once they are all taken, it is written escaped.
+        let full = self.codes.of.len() >= usize::from(ESCAPE);
+        let code = &mut |bits| self.codes.of.get(&bits).copied().or(full.then_some(ESCAPE));
+        let Some(k) = key(observation, legal, code, &mut buf) else {
             return Err(Key::Raw(Box::new(*observation), legal.into()));
         };
         let Some(entry) = self.seen.get(k) else { return Err(Key::Coded(k.into())) };
@@ -315,4 +318,64 @@ pub fn search_memoised_until<S: Shuffler, E: Evaluator>(
         }
     }
     Some(search.finish().0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An observation with `k`'s value at input 3, another at 40, and a
+    /// value every input shares at 100.
+    fn input(k: u32) -> [f32; ENCODED_SIZE] {
+        let mut o = [0f32; ENCODED_SIZE];
+        o[3] = 1.0 + k as f32 / 1024.0;
+        o[40] = -(k as f32) - 0.5;
+        o[100] = 0.25;
+        o
+    }
+
+    fn answer(k: u32, legal: &[Action]) -> Evaluation {
+        let mut e = Evaluation { value: k as f32 / 1000.0, ..Evaluation::default() };
+        for &a in legal {
+            e.policy[usize::from(a)] = k as f32 + f32::from(a);
+        }
+        e
+    }
+
+    /// [Z11-69]: a memo answers a call exactly when it is bit for bit an
+    /// earlier one, once its values have outrun the 255 codes too, so that
+    /// some are written escaped: 600 inputs of two fresh values each, then
+    /// every one asked again, and each asked with a legal set it was not
+    /// stored with, and with `-0` where it held `+0`.
+    ///
+    /// Mutations, seen red: `lookup` taking a value with no code for one never
+    /// stored, as it first did ("input 127 missed": every escaped input
+    /// missed for good); the escape's four bytes not written, and `legal_len`
+    /// stepping one byte past an escape (each reads a key back out of bounds
+    /// and panics).
+    #[test]
+    fn keys_are_exact_past_the_codes() {
+        let legal: [Action; 3] = [2, 7, 179];
+        let mut memo = Memo::new();
+        for k in 0..600 {
+            let o = input(k);
+            let Err(key) = memo.lookup((&o, &legal)) else { panic!("input {k} hit before it was stored") };
+            memo.insert(key, &answer(k, &legal));
+        }
+        assert_eq!(memo.len(), 600);
+        assert_eq!(memo.codes.of.len(), 255, "the codes ran out, so later values were escaped");
+        for k in 0..600 {
+            let o = input(k);
+            let e = memo.lookup((&o, &legal)).unwrap_or_else(|_| panic!("input {k} missed"));
+            let want = answer(k, &legal);
+            assert_eq!(e.value.to_bits(), want.value.to_bits(), "input {k}");
+            for &a in &legal {
+                assert_eq!(e.policy[usize::from(a)].to_bits(), want.policy[usize::from(a)].to_bits(), "input {k}");
+            }
+            assert!(memo.lookup((&o, &legal[..2])).is_err(), "input {k} with another legal set");
+            let mut z = o;
+            z[7] = -0.0;
+            assert!(memo.lookup((&z, &legal)).is_err(), "input {k} with -0 for +0");
+        }
+    }
 }
