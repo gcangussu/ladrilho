@@ -182,3 +182,31 @@ describe('recording [Z11-103]', () => {
     expect(() => recordCheckpoint('r', 20, dir)).toThrow("r/20's checkpoint is not the one checkpoints.json records");
   });
 });
+
+describe('inside a lane bundle [Z11-103]', () => {
+  // tools/bundle.mjs inlines this module into node_modules/.alphazero/cli.mjs, where
+  // its own path is the bundle's: neither its package directory nor its script
+  // guard may take that path for its own. Bundled apart from the lanes' output, so
+  // a live loop's bundle is never rewritten under it.
+  it('leaves a lane command to the lane, and finds the package from the bundle', async () => {
+    const { build } = await import('esbuild');
+    const outdir = join(PACKAGE, 'node_modules', '.alphazero-test');
+    await build({
+      entryPoints: { cli: join(PACKAGE, 'eval', 'cli.ts') },
+      outdir,
+      outExtension: { '.js': '.mjs' },
+      bundle: true,
+      format: 'esm',
+      platform: 'node',
+      target: 'node24',
+      logLevel: 'warning',
+    });
+    let stderr = '';
+    try {
+      execFileSync('node', [join(outdir, 'cli.mjs'), 'train', '--run', 'no-such-run'], { cwd: PACKAGE, stdio: 'pipe' });
+    } catch (e) {
+      stderr = String((e as { stderr: Buffer }).stderr);
+    }
+    expect(stderr).toContain('no run named no-such-run');
+  }, 60_000);
+});

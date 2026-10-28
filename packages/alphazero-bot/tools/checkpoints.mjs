@@ -25,7 +25,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const PACKAGE = join(dirname(fileURLToPath(import.meta.url)), '..');
+// Bundled into node_modules/.alphazero/ by tools/bundle.mjs, this module's own
+// path is the bundle's, as eval/paths.ts allows for too.
+const HERE = dirname(fileURLToPath(import.meta.url));
+const BUNDLED = HERE.includes('node_modules');
+const PACKAGE = BUNDLED ? join(HERE, '..', '..') : join(HERE, '..');
 
 const sha256 = (b) => createHash('sha256').update(b).digest('hex');
 
@@ -278,7 +282,9 @@ async function main() {
   }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+// Run as a script, not inlined into a lane's bundle: there argv[1] is the bundle
+// too, and every lane command would be read as one of these.
+if (!BUNDLED && process.argv[1] === fileURLToPath(import.meta.url)) {
   main().catch((e) => {
     console.error(e.message);
     process.exit(1);
