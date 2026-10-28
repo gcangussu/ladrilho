@@ -1391,6 +1391,19 @@ patience and not by [Z11-33]'s one-back rule.
 - **The browser** runs the module at about 1.47× native AVX2 (1.46 to 1.49, interleaved on the
   idle machine), so a native time is never a stand-in for the budget's, which is the module's.
 
+## Two low anchors, and G1b (`eighteenth`) on them (10-27)
+
+- **Candidates, rated first** on the three anchors, 800 games each: `third`/90 179 ±22,
+  `fourth`/70 420 ±12, `fifth`/270 647 ±8. `seventeenth`/160, at 493, sits between the last
+  two. `third`/90 is too far below to matter.
+- **Added** with `anchors add`, 4 000 games against each anchor already there: `fourth`/70 at
+  **396 ±6** and `fifth`/270 at **642 ±3**. The three original anchors keep their ratings. An
+  anchored milestone now plays five anchors, 4 000 games in all.
+- **The merge of `past-deal`** changes only how master plays in the browser. Milestones, anchors
+  and ship matches still play the milestone search, so the scale is unchanged.
+- **G1b**, `eighteenth` from `seventeenth`/160: G1's recipe unchanged, at lr 0.02, with
+  `--yardstick anchors` and the inherited patience 5. The user asked to resume as planned.
+
 ## Next
 
 - **The boundary into the final round** is where the value limits play: fixing it is worth up to

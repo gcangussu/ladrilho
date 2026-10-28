@@ -30,6 +30,22 @@
       "rating": 856,
       "se": 0,
       "added": "init"
+    },
+    {
+      "run": "fourth",
+      "generation": 70,
+      "checkpoint": "milestones/fourth/70/checkpoint.bin",
+      "rating": 396.0729953759278,
+      "se": 5.713624394978479,
+      "added": "2026-10-28T01:37:07.265Z"
+    },
+    {
+      "run": "fifth",
+      "generation": 270,
+      "checkpoint": "milestones/fifth/270/checkpoint.bin",
+      "rating": 642.1657038723283,
+      "se": 3.1794167424147983,
+      "added": "2026-10-28T02:30:12.039Z"
     }
   ],
   "pairings": [
@@ -53,6 +69,55 @@
       "games": 4000,
       "score": 1829,
       "seedBase": 1367886527
+    },
+    {
+      "a": "fourth/70",
+      "b": "seventh/170",
+      "games": 4000,
+      "score": 423,
+      "seedBase": 858333688
+    },
+    {
+      "a": "fourth/70",
+      "b": "ninth/110",
+      "games": 4000,
+      "score": 301.5,
+      "seedBase": 357949490
+    },
+    {
+      "a": "fourth/70",
+      "b": "twelfth/120",
+      "games": 4000,
+      "score": 290,
+      "seedBase": 1367698616
+    },
+    {
+      "a": "fifth/270",
+      "b": "seventh/170",
+      "games": 4000,
+      "score": 1359.5,
+      "seedBase": 976357893
+    },
+    {
+      "a": "fifth/270",
+      "b": "ninth/110",
+      "games": 4000,
+      "score": 983,
+      "seedBase": 404424678
+    },
+    {
+      "a": "fifth/270",
+      "b": "twelfth/120",
+      "games": 4000,
+      "score": 965.5,
+      "seedBase": 310744764
+    },
+    {
+      "a": "fifth/270",
+      "b": "fourth/70",
+      "games": 4000,
+      "score": 3193.5,
+      "seedBase": 660729268
     }
   ],
   "date": "2026-10-24T16:01:36.712Z",
