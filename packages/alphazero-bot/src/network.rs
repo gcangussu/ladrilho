@@ -416,16 +416,20 @@ fn column_sum<const B: usize>(cols: &[[f32; B]], list: &[(u32, f32)]) -> [f32; B
     acc
 }
 
-/// Every lane's sum for `B` outputs, and the tail's. `cols[j]` holds input
-/// `j`'s weights for those outputs.
+/// Every lane's sum for `B` outputs into `acc`, and the tail's into `tail`.
+/// `cols[j]` holds input `j`'s weights for those outputs. Written in place: a
+/// returned array of sixteen lanes was copied twice on its way out, two
+/// kilobytes each time, for every block of every layer.
 #[inline(never)]
-fn column_lanes<const B: usize>(cols: &[[f32; B]], nz: &NonZero<'_>) -> ([[f32; B]; LANES], [f32; B]) {
-    let lanes = std::array::from_fn(|l| column_sum(cols, &nz.list[nz.starts[l]..nz.starts[l + 1]]));
-    (lanes, column_sum(cols, &nz.list[nz.starts[LANES]..]))
+fn column_lanes<const B: usize>(cols: &[[f32; B]], nz: &NonZero<'_>, acc: &mut [[f32; B]; LANES], tail: &mut [f32; B]) {
+    for l in 0..LANES {
+        acc[l] = column_sum(cols, &nz.list[nz.starts[l]..nz.starts[l + 1]]);
+    }
+    *tail = column_sum(cols, &nz.list[nz.starts[LANES]..]);
 }
 
 /// The fold, the tail and the bias of `finish` and `linear`, for `B` outputs at once.
-fn column_finish<const B: usize>((mut acc, tail): ([[f32; B]; LANES], [f32; B]), b: &[f32], out: &mut [f32]) {
+fn column_finish<const B: usize>(acc: &mut [[f32; B]; LANES], tail: &[f32; B], b: &[f32], out: &mut [f32]) {
     let mut n = LANES;
     while n > 1 {
         n /= 2;
@@ -455,13 +459,17 @@ fn column_finish<const B: usize>((mut acc, tail): ([[f32; B]; LANES], [f32; B]),
 fn linear_columns(wt: &[f32], b: &[f32], nz: &NonZero<'_>, n: usize, out: &mut [f32]) {
     let m = out.len();
     let whole = m / BLOCK * BLOCK;
+    let (mut acc, mut tail) = ([[0f32; BLOCK]; LANES], [0f32; BLOCK]);
     for o in (0..whole).step_by(BLOCK) {
         let cols = wt[o * n..(o + BLOCK) * n].as_chunks::<BLOCK>().0;
-        column_finish(column_lanes(cols, nz), &b[o..o + BLOCK], &mut out[o..o + BLOCK]);
+        column_lanes(cols, nz, &mut acc, &mut tail);
+        column_finish(&mut acc, &tail, &b[o..o + BLOCK], &mut out[o..o + BLOCK]);
     }
+    let (mut acc1, mut tail1) = ([[0f32; 1]; LANES], [0f32; 1]);
     for o in whole..m {
         let cols = wt[o * n..(o + 1) * n].as_chunks::<1>().0;
-        column_finish(column_lanes(cols, nz), &b[o..o + 1], &mut out[o..o + 1]);
+        column_lanes(cols, nz, &mut acc1, &mut tail1);
+        column_finish(&mut acc1, &tail1, &b[o..o + 1], &mut out[o..o + 1]);
     }
 }
 
