@@ -1,8 +1,9 @@
 /**
  * The chooser adapter ([Z11-31]): the trained player as the arena sees it.
  *
- * One `alphazero serve` per chooser, and so per player per game, handed each
- * move's `toCanonical(fromJSON(position, 0))` and nothing else — `toJSON`'s
+ * One `alphazero serve` per chooser, and so per player per game — a process
+ * of its own, or a session of a series' `alphazero host` ([Z11-100]) — handed
+ * each move's `toCanonical(fromJSON(position, 0))` and nothing else — `toJSON`'s
  * bag is counts, so the order the harness holds never reaches the process,
  * and seed 0 is a shuffler nothing below the round boundary ever calls
  * ([Z11-15]). The process keeps only its memo between moves, which changes
@@ -80,6 +81,12 @@ export interface PlayerSpec {
    * set; the slowest search any lane runs takes seconds.
    */
   answerMilliseconds?: number;
+  /**
+   * An `alphazero host`'s socket ([Z11-100]): the chooser's `serve` is a
+   * session of it, sharing its loaded checkpoints, not a process of its own.
+   * A series sets it; the answers are the same either way.
+   */
+  host?: string;
 }
 
 /** A chooser holding a process, to be closed when its game is over. */
@@ -102,6 +109,7 @@ export function alphazeroChooser(spec: PlayerSpec, onMove?: (a: Answer) => void)
       spec.binary,
       ['serve', spec.checkpoint, '--config', spec.config, '--search', spec.search, ...(spec.pastDeal === undefined ? [] : ['--past-deal', spec.pastDeal])],
       spec.answerMilliseconds ?? 10 * 60 * 1000,
+      spec.host,
     );
     const answer = readAnswer(server.ask(frame(words)));
     onMove?.(answer);
@@ -118,6 +126,9 @@ export function alphazeroChooser(spec: PlayerSpec, onMove?: (a: Answer) => void)
 /** The answer's size: four words and their count ([Z11-23]). */
 const ANSWER_BYTES = 20;
 
+/** A host's refusal starts with this word, its reason after it ([Z11-100]). */
+const REFUSED = 0xffffffff;
+
 /** Room for an answer, or for the process's error message, cut to fit. */
 const DATA_BYTES = 1 << 16;
 
@@ -129,7 +140,7 @@ const ANSWERED = 1;
 const FAILED = 2;
 
 /**
- * One `alphazero serve`, asked synchronously. The arena's choosers are plain
+ * One `alphazero serve`, or one session of an `alphazero host`, asked synchronously. The arena's choosers are plain
  * functions, but a process that outlives one call can only be read
  * asynchronously; so a worker thread owns it, and the caller blocks on
  * `Atomics.wait` until the worker has put the answer, or the reason there is
@@ -147,11 +158,12 @@ class Server {
     bin: string,
     args: string[],
     private readonly timeout: number,
+    host?: string,
   ) {
     const shared = new SharedArrayBuffer(8 + DATA_BYTES);
     this.control = new Int32Array(shared, 0, 2);
     this.data = new Uint8Array(shared, 8);
-    this.worker = new Worker(WORKER, { eval: true, workerData: { bin, args, shared } });
+    this.worker = new Worker(WORKER, { eval: true, workerData: { bin, args, host, shared } });
     // The worker never keeps the process alive: when it goes, the server's
     // stdin closes and it ends on its own.
     this.worker.unref();
@@ -182,10 +194,12 @@ class Server {
 const WORKER = `
 const { parentPort, workerData } = require('node:worker_threads');
 const { spawn } = require('node:child_process');
-const { bin, args, shared } = workerData;
+const { createConnection } = require('node:net');
+const { bin, args, host, shared } = workerData;
 const control = new Int32Array(shared, 0, 2);
 const data = new Uint8Array(shared, 8);
 let child = null;
+let input = null;
 let stderr = '';
 let pending = Buffer.alloc(0);
 let waiting = false;
@@ -208,26 +222,50 @@ function fail(why) {
   }
 }
 
+function answered(d) {
+  pending = Buffer.concat([pending, d]);
+  // A host's refusal is read to the end of its stream, then reported.
+  if (pending.length >= 4 && pending.readUInt32LE(0) === ${REFUSED}) return;
+  if (waiting && pending.length >= ${ANSWER_BYTES}) {
+    const answer = pending.subarray(0, ${ANSWER_BYTES});
+    pending = pending.subarray(${ANSWER_BYTES});
+    waiting = false;
+    settle(${ANSWERED}, answer);
+  }
+}
+
+function ended(why) {
+  fail(why);
+  // Until \`close\`, a process that has gone still answers every later
+  // move, with why it went.
+  if (closing) parentPort.close();
+}
+
 function start() {
+  if (host !== undefined) {
+    const socket = createConnection(host);
+    child = socket;
+    input = socket;
+    socket.on('data', answered);
+    // 'close' follows every error and reports it, unless the host said why:
+    // a move written after a refusal fails too, and is not the reason.
+    let error = null;
+    socket.on('error', (e) => { error ??= e.message; });
+    socket.on('close', () => {
+      const refused = pending.length >= 4 && pending.readUInt32LE(0) === ${REFUSED};
+      const why = refused ? pending.subarray(4).toString() : error;
+      ended('alphazero host ended the session' + (why === null ? '' : ': ' + why));
+    });
+    socket.write(JSON.stringify(args) + '\\n');
+    return;
+  }
   child = spawn(bin, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+  input = child.stdin;
   child.stderr.on('data', (d) => { stderr += d; });
-  child.stdout.on('data', (d) => {
-    pending = Buffer.concat([pending, d]);
-    if (waiting && pending.length >= ${ANSWER_BYTES}) {
-      const answer = pending.subarray(0, ${ANSWER_BYTES});
-      pending = pending.subarray(${ANSWER_BYTES});
-      waiting = false;
-      settle(${ANSWERED}, answer);
-    }
-  });
+  child.stdout.on('data', answered);
   child.stdin.on('error', () => {});
   child.on('error', (e) => fail('alphazero ' + args[0] + ' could not start: ' + e.message));
-  child.on('close', (code) => {
-    fail('alphazero ' + args[0] + ' exited ' + code + ': ' + stderr.trim());
-    // Until \`close\`, a process that has gone still answers every later
-    // move, with why it went.
-    if (closing) parentPort.close();
-  });
+  child.on('close', (code) => ended('alphazero ' + args[0] + ' exited ' + code + ': ' + stderr.trim()));
 }
 
 parentPort.on('message', (m) => {
@@ -235,13 +273,13 @@ parentPort.on('message', (m) => {
     if (m === null) {
       closing = true;
       if (child === null || failure !== null) parentPort.close();
-      else child.stdin.end();
+      else input.end();
       return;
     }
     if (child === null) start();
     waiting = true;
     if (failure !== null) return fail(failure);
-    child.stdin.write(m);
+    input.write(m);
   } catch (e) {
     fail(String(e));
   }

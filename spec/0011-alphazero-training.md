@@ -664,6 +664,7 @@ The binary's commands, each loading one checkpoint and one run's settings:
 | --- | --- |
 | `alphazero play <checkpoint> --config <file> --search play\|milestone [--clock-ms N] [--split-ms] [--past-deal <file>]` | reads one position from stdin, writes one answer to stdout ([Z11-23], [Z11-91]) |
 | `alphazero serve <checkpoint> --config <file> --search play\|milestone [--clock-ms N] [--split-ms] [--past-deal <file>]` | reads positions from stdin until it ends, answering each as `play` would ([Z11-72], [Z11-91]) |
+| `alphazero host <socket>` | many `serve`s at once, one per connection, sharing what they load, until stdin ends ([Z11-100]) |
 | `alphazero selfplay <checkpoint> --config <file> --generation G --games N --out <file>` | [Z11-26] |
 | `alphazero latency <checkpoint> <corpus> --config <file> [--simulations N] [--past-deal <file>]` | [Z11-40], [Z11-57], [Z11-91] |
 | `alphazero throughput <checkpoint> --config <file>` | [Z11-53] |
@@ -748,14 +749,35 @@ The binary's commands, each loading one checkpoint and one run's settings:
   before. Its answers' action, simulations and value MUST be exactly those `play` gives each
   position alone: the search still starts from an empty tree on every move ([Z11-19]), and the
   memo changes no evaluation. The milestones' and the gate's chooser runs one `serve` per player
-  per game ([Z11-31]), and gives a process up, with an error, if a move goes unanswered for ten
-  minutes. Under `--clock-ms` each answer is the one `play` gives that position configured for
+  per game ([Z11-31]) — a session of the series' `host` ([Z11-100]) — and gives it up, with an
+  error, if a move goes unanswered for ten minutes. Under `--clock-ms` each answer is the one `play` gives that position configured for
   the count `serve` reports; under `--split-ms` each answer has five words ([Z11-79]).
 
   *Measured on the machine of record, a `play` spent about 15 ms of a 37 ms milestone move
   starting, loading its checkpoint and checking parity; and a game's searches repeat each other's
   evaluations as self-play's do. Forty positions at 800 simulations took 1.9 s as forty `play`s and
   0.6 s through one `serve`, with identical answers.*
+
+- **[Z11-100]** `host <socket>` MUST bind a Unix socket at the path given, write one line to
+  stdout once it accepts connections, and run until its stdin ends, then remove the socket and
+  exit successfully. Each connection is one **session**: its first line is `serve`'s arguments as
+  a JSON array of strings, and from there it is exactly [Z11-72]'s `serve` on that stream — the
+  same positions, the same answers, its own memo — on a thread of its own, so sessions run
+  concurrently. A checkpoint and config named by any session are loaded and parity checked once,
+  by the first session to name them, and every later session reads that copy. A session whose
+  arguments or stream `serve` would refuse is answered with the word `0xFFFFFFFF` and the reason,
+  in place of the answer it could not give, and the connection closed; the host and its other
+  sessions go on. A series ([Z11-31]) starts one host per binary its trained players name, makes
+  every trained player's `serve` a session of it, and ends it when the series ends; the answers
+  are those of a `serve` process of its own, so no result depends on it.
+
+  *Measured on the machine of record on 10-28: the same moves (21 positions, 10 000 simulations,
+  refinement on) on N threads, each with its own network against all reading one, went from 8.0
+  to 13.9 moves a second at 4 threads and from 9.2 to 21.1 at 8. The weights are 2.5 MB against a
+  512 KB L2 and an 8 MB L3, so a forward pass streams them from the shared cache; sixteen
+  processes' copies — a match lane's two players in each of eight games — cannot all live there,
+  and every pass went to memory. Sharing across processes would need `mmap`, outside
+  [Z11-2]'s crates; threads in one process need nothing new.*
 
 ## Self-play and training
 
@@ -1155,7 +1177,8 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
   [0008 A8-30] plays its gate. `sharp` and `steady` play at their shipped budgets with the
   fail-safe out of reach ([0005 M5-8]). The player is a chooser that hands
   `toCanonical(fromJSON(position, 0))` to one `alphazero serve --search milestone` per player per
-  game, each move answered as `alphazero play` would answer it ([Z11-72]), reporting
+  game, a session of the series' host ([Z11-100]), each move answered as `alphazero play` would
+  answer it ([Z11-72]), reporting
   `nodes = simulations`, `depth = 0`, `complete = false`, `curtailed = false`. Games MAY run in
   parallel processes; each game's result does not depend on it.
 - **[Z11-32]** Every rung MUST be played at every milestone.
@@ -1787,6 +1810,13 @@ this package, and MUST be corrected in the same change.
   - [Z11-70] by checking the batched forward pass against [Z11-10]'s reference order bit for bit,
     `evaluate_batch` against `evaluate` at every batch size from 0 to 9, and `self_play`'s bytes
     against the same games played one at a time;
+  - [Z11-100] by checking sessions run at once on one host, two on one checkpoint and config and
+    one on another config, each against `serve`'s answers to the same stream, while another
+    session sits idle; a refused session answered with its reason while the host goes on
+    serving; a checkpoint served from the copy loaded once after its files are gone; the host
+    ending with its stdin; the chooser, as a session, against one-shot `play`s, with its refusal
+    thrown rather than waited on; and a series' games through its host against the same games
+    played without one;
   - [Z11-72] by checking `serve`'s answers over a whole game and the start of another against
     `play`'s for each position, its ends and refusals, `choose_memoised` against `choose` with
     fewer network calls, and the chooser's moves against one-shot `play`s, with a trained player

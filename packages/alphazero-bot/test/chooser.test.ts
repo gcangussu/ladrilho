@@ -18,7 +18,7 @@ import { alphazero } from '../eval/crate.js';
 import { LADDER } from '../eval/decision.js';
 import { checkCounts, runMilestone } from '../eval/milestone.js';
 import { PACKAGE, binary, parseMilestonePath } from '../eval/paths.js';
-import { playOne, type Entrant } from '../eval/series.js';
+import { playOne, playSeries, startHost, type Entrant } from '../eval/series.js';
 
 const checkpoint = join(PACKAGE, 'test/fixtures/checkpoint.bin');
 
@@ -104,6 +104,62 @@ describe('the adapter [Z11-31]', () => {
     const absent = alphazeroChooser({ ...player, binary: join(tmpdir(), 'no-such-alphazero'), search: 'play', answerMilliseconds: 5000 });
     expect(() => absent(position)).toThrow(/could not start/);
     absent.close();
+  });
+
+  it('answers every move of a game as a one-shot play does, as a session of a host [Z11-100]', async () => {
+    const host = await startHost(player.binary);
+    let s = newGame(11);
+    const chooser = alphazeroChooser({ ...player, search: 'milestone', host: host.socket });
+    try {
+      for (let ply = 0; ply < 30; ply++) {
+        const position = toJSON(s);
+        const words = frame(canonicalWords(toCanonical(fromJSON(position, 0))));
+        const alone = readAnswer(alphazero(player.binary, ['play', checkpoint, '--config', player.config, '--search', 'milestone'], words));
+        const play = chooser(position);
+        expect(play.action, `ply ${ply}`).toBe(alone.action);
+        expect(play.nodes).toBe(alone.simulations);
+        s = clone(s);
+        apply(s, play.action);
+      }
+    } finally {
+      chooser.close();
+      await host.close();
+    }
+  });
+
+  // Mutation, seen red ([Z11-48]), in a copy with its anchor confirmed: in
+  // the worker of `eval/chooser.ts`, a refusal read as an answer (the
+  // `return` on its first word removed), which throws a framing error
+  // without the host's reason.
+  it('throws the reason a host refused its session, and does not wait [Z11-100]', async () => {
+    const host = await startHost(player.binary);
+    const position = toJSON(newGame(5));
+    try {
+      const missing = alphazeroChooser({
+        ...player,
+        checkpoint: join(tmpdir(), 'no-such-checkpoint.bin'),
+        search: 'play',
+        answerMilliseconds: 5000,
+        host: host.socket,
+      });
+      expect(() => missing(position)).toThrow(/alphazero host ended the session: .*no-such-checkpoint/);
+      expect(() => missing(position)).toThrow(/ended the session/);
+      missing.close();
+      const served = alphazeroChooser({ ...player, search: 'play', host: host.socket });
+      expect(served(position).nodes).toBe(32);
+      served.close();
+    } finally {
+      await host.close();
+    }
+  });
+
+  it("plays a series' games through its host as they play without one [Z11-100]", async () => {
+    const az: Entrant = { kind: 'alphazero', player: { ...player, search: 'milestone' } };
+    const spec = { subject: az, opponent: az, seeds: WIDE_SEEDS.slice(0, 2) };
+    const hosted = await playSeries(spec, 1);
+    const alone = [0, 1].map((i) => playOne(spec, i));
+    const strip = (g: (typeof alone)[number]) => ({ ...g, work: g.work.map((w) => w.nodes) });
+    expect(hosted.map(strip)).toEqual(alone.map(strip));
   });
 
   it('frames the canonical block the crate reads [Z11-23]', () => {

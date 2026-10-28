@@ -6,9 +6,14 @@
  * Games MAY run in parallel processes ([Z11-31]): each game is a pure
  * function of its seed and its two players, so a series' result does not
  * depend on how its games were shared out. They are aggregated in seed order.
+ * The trained players' searches all run in one `alphazero host` per series
+ * ([Z11-100]), so the parallel games read one copy of each checkpoint.
  */
 
 import { spawn } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RANDOM_CHOOSER_SEED, greedy, match, tier, uniformRandom, wilsonLowerBound, type Chooser } from 'bot/arena';
 import { alphazeroChooser, type Answer, type PlayerSpec } from './chooser.js';
@@ -164,11 +169,71 @@ function bundlePath(): string | null {
   return self.endsWith('.mjs') ? self : null;
 }
 
+/** A running `alphazero host` ([Z11-100]), ended by `close`. */
+export interface Host {
+  socket: string;
+  close(): Promise<void>;
+}
+
+/** Starts `alphazero host` on a socket of its own, resolving once it accepts sessions. */
+export async function startHost(bin: string): Promise<Host> {
+  const dir = mkdtempSync(join(tmpdir(), 'az-host-'));
+  const socket = join(dir, 'host.sock');
+  const child = spawn(bin, ['host', socket], { stdio: ['pipe', 'pipe', 'inherit'] });
+  const gone = new Promise<void>((resolve) => child.on('close', () => resolve()));
+  try {
+    await new Promise<void>((resolve, reject) => {
+      let out = '';
+      child.stdout.on('data', (d: Buffer) => {
+        out += d.toString();
+        if (out.includes('\n')) resolve();
+      });
+      child.on('error', reject);
+      child.on('close', (code) => reject(new Error(`alphazero host exited ${code} before it was ready`)));
+    });
+  } catch (e) {
+    rmSync(dir, { recursive: true, force: true });
+    throw e;
+  }
+  return {
+    socket,
+    // Its stdin ending is what ends it.
+    close: async () => {
+      child.stdin.end();
+      await gone;
+      rmSync(dir, { recursive: true, force: true });
+    },
+  };
+}
+
+/** The entrant, a trained player's searches sent to `hosts`' socket for its binary. */
+function hosted(e: Entrant, hosts: Map<string, Host>): Entrant {
+  const host = e.kind === 'alphazero' ? hosts.get(e.player.binary) : undefined;
+  return e.kind === 'alphazero' && host !== undefined ? { kind: 'alphazero', player: { ...e.player, host: host.socket } } : e;
+}
+
 /**
  * Plays a series on `workers` processes (in this one when 1, or when not
- * running from the bundle), reporting each game to `progress` as it ends.
+ * running from the bundle), reporting each game to `progress` as it ends,
+ * with one `alphazero host` per binary its trained players name.
  */
 export async function playSeries(
+  spec: SeriesSpec,
+  workers: number,
+  progress?: (g: GameRecord, done: number) => void,
+): Promise<GameRecord[]> {
+  const hosts = new Map<string, Host>();
+  try {
+    for (const e of [spec.subject, spec.opponent]) {
+      if (e.kind === 'alphazero' && !hosts.has(e.player.binary)) hosts.set(e.player.binary, await startHost(e.player.binary));
+    }
+    return await playShared({ ...spec, subject: hosted(spec.subject, hosts), opponent: hosted(spec.opponent, hosts) }, workers, progress);
+  } finally {
+    await Promise.all([...hosts.values()].map((h) => h.close()));
+  }
+}
+
+async function playShared(
   spec: SeriesSpec,
   workers: number,
   progress?: (g: GameRecord, done: number) => void,

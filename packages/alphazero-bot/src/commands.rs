@@ -1,8 +1,11 @@
 //! The commands. Argument errors, unreadable files, refused checkpoints and
 //! malformed positions are all error exits with a message ([Z11-22]).
 
-use std::io::{Read, Write};
+use std::collections::HashMap;
+use std::io::{BufRead, BufReader, Read, Write};
+use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use azul_alphazero::config::{RunConfig, SearchKind, Settings, settings};
@@ -66,6 +69,9 @@ enum Command {
         #[arg(long)]
         past_deal: Option<PathBuf>,
     },
+    /// [Z11-100]: many `serve`s in one process, one per connection to a Unix
+    /// socket, each checkpoint loaded once for them all; until stdin ends.
+    Host { socket: PathBuf },
     /// Self-play games, written as a sample file ([Z11-26]).
     Selfplay {
         checkpoint: PathBuf,
@@ -204,6 +210,7 @@ pub fn run(cli: Cli) -> Result<(), String> {
         Command::Serve { checkpoint, config, search, timing, past_deal } => {
             serve(&checkpoint, &config, search, timing, past_deal.as_deref())
         }
+        Command::Host { socket } => host(&socket),
         Command::Selfplay { checkpoint, config, generation, games, out } => {
             selfplay(&checkpoint, &config, generation, games, &out)
         }
@@ -257,7 +264,7 @@ fn answer(out: &mut impl Write, a: &Answer, split: bool) -> Result<(), String> {
     } else {
         words.push((a.search_ms + a.proof_ms).round() as u32);
     }
-    out.write_all(&frame(&words)).and_then(|()| out.flush()).map_err(|e| format!("writing stdout: {e}"))
+    out.write_all(&frame(&words)).and_then(|()| out.flush()).map_err(|e| format!("writing an answer: {e}"))
 }
 
 /// The proof of [Z11-76] after a search that ran in `search_ms`.
@@ -299,13 +306,24 @@ fn play(checkpoint: &Path, config: &Path, search: Search, timing: Timing, pd: Op
 /// whenever a position's round differs from the one before it.
 fn serve(checkpoint: &Path, config: &Path, search: Search, timing: Timing, pd: Option<&Path>) -> Result<(), String> {
     let loaded = load(checkpoint, config, false)?;
+    session(&loaded, search, timing, pd, &mut std::io::stdin().lock(), &mut std::io::stdout().lock())
+}
+
+/// `serve`'s positions and answers on any stream: its stdin and stdout, or
+/// one of `host`'s connections.
+fn session(
+    loaded: &Loaded,
+    search: Search,
+    timing: Timing,
+    pd: Option<&Path>,
+    input: &mut impl Read,
+    out: &mut impl Write,
+) -> Result<(), String> {
     let s = settings(&loaded.config, search_kind(search))?;
-    let pd = past_deal(pd, &loaded, search, timing)?;
-    let mut input = std::io::stdin().lock();
-    let mut out = std::io::stdout().lock();
+    let pd = past_deal(pd, loaded, search, timing)?;
     let mut memo = Memo::new();
     let mut round = None;
-    while let Some(block) = read_message(&mut input)? {
+    while let Some(block) = read_message(input)? {
         let state = position(&block)?;
         if round != Some(state.round_index()) {
             memo.clear();
@@ -320,9 +338,89 @@ fn serve(checkpoint: &Path, config: &Path, search: Search, timing: Timing, pd: O
             return Err(TERMINAL.into());
         };
         let a = proved(&state, result, s.search.endgame_nodes, started.elapsed().as_secs_f64() * 1000.0);
-        answer(&mut out, &a, timing.split_ms)?;
+        answer(out, &a, timing.split_ms)?;
     }
     Ok(())
+}
+
+/// [Z11-100]: the word a refused session's answer starts with, the reason
+/// following it to the end of the stream; an answer's first word is its
+/// length, 4 or 5.
+const REFUSED: u32 = u32::MAX;
+
+/// The longest first line a session may send: its arguments.
+const MAX_HEADER: u64 = 1 << 16;
+
+/// The networks a host has loaded, each with its config, by the paths a
+/// session named; kept for the host's life, which is one series.
+type Loads = Mutex<HashMap<(PathBuf, PathBuf), Arc<Loaded>>>;
+
+/// [Z11-100]: `serve` for every player of a series' games at once. A
+/// session is one connection: its first line is `serve`'s own arguments as
+/// a JSON array of strings, then `serve`'s positions and answers, on a
+/// thread of its own with its own memo. Every session of a checkpoint and
+/// config reads the one copy loaded and parity checked by the first: a
+/// search only reads its network, so sharing it changes no answer, and a
+/// series' parallel games no longer each stream their own copy of the
+/// weights through the cache. It ends when its stdin does.
+fn host(socket: &Path) -> Result<(), String> {
+    let listener = UnixListener::bind(socket).map_err(|e| format!("{}: {e}", socket.display()))?;
+    let path = socket.to_path_buf();
+    std::thread::spawn(move || {
+        let _ = std::io::copy(&mut std::io::stdin().lock(), &mut std::io::sink());
+        let _ = std::fs::remove_file(&path);
+        std::process::exit(0);
+    });
+    let mut stdout = std::io::stdout();
+    writeln!(stdout, "ready").and_then(|()| stdout.flush()).map_err(|e| format!("writing stdout: {e}"))?;
+    let loads: Arc<Loads> = Arc::default();
+    for stream in listener.incoming() {
+        let stream = match stream {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("alphazero host: accepting a session: {e}");
+                continue;
+            }
+        };
+        let loads = Arc::clone(&loads);
+        // The main thread's stack, as `serve` has.
+        let spawned = std::thread::Builder::new().stack_size(8 << 20).spawn(move || {
+            if let Err(why) = hosted(&loads, &stream) {
+                let mut out = &stream;
+                let _ = out.write_all(&REFUSED.to_le_bytes()).and_then(|()| out.write_all(why.as_bytes()));
+            }
+        });
+        if let Err(e) = spawned {
+            eprintln!("alphazero host: starting a session: {e}");
+        }
+    }
+    Ok(())
+}
+
+/// One session of [Z11-100].
+fn hosted(loads: &Loads, stream: &UnixStream) -> Result<(), String> {
+    let mut input = BufReader::new(stream);
+    let mut line = Vec::new();
+    (&mut input).take(MAX_HEADER).read_until(b'\n', &mut line).map_err(|e| format!("reading the session's arguments: {e}"))?;
+    let args: Vec<String> =
+        serde_json::from_slice(&line).map_err(|e| format!("a session's first line is serve's arguments as JSON: {e}"))?;
+    let cli = Cli::try_parse_from(std::iter::once("alphazero".to_string()).chain(args)).map_err(|e| e.to_string())?;
+    let Command::Serve { checkpoint, config, search, timing, past_deal } = cli.command else {
+        return Err("a session's arguments are serve's".into());
+    };
+    let loaded = {
+        let mut loads = loads.lock().map_err(|_| "a session panicked while loading".to_string())?;
+        let key = (checkpoint.clone(), config.clone());
+        match loads.get(&key) {
+            Some(l) => Arc::clone(l),
+            None => {
+                let l = Arc::new(load(&checkpoint, &config, false)?);
+                loads.insert(key, Arc::clone(&l));
+                l
+            }
+        }
+    };
+    session(&loaded, search, timing, past_deal.as_deref(), &mut input, &mut &*stream)
 }
 
 /// [Z11-26].

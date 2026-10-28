@@ -451,3 +451,187 @@ fn the_fit_writes_what_the_player_reads() {
     assert!(sha.contains("ce8343e19ca184f88bd4336d9fe36d4bd2b0030a774419596ff867682b22df34"));
     assert!(pd.blend.sigma > 0.0);
 }
+
+/// A running `alphazero host` on a socket in its own scratch directory.
+struct Host {
+    child: std::process::Child,
+    socket: std::path::PathBuf,
+    _dir: tempfile::TempDir,
+}
+
+impl Host {
+    fn start() -> Host {
+        use std::io::BufRead;
+        let dir = scratch();
+        let socket = dir.path().join("h.sock");
+        let mut child = std::process::Command::new(support::binary())
+            .args(["host", socket.to_str().unwrap()])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .expect("the binary runs");
+        let mut ready = String::new();
+        std::io::BufReader::new(child.stdout.take().unwrap()).read_line(&mut ready).unwrap();
+        assert_eq!(ready, "ready\n");
+        Host { child, socket, _dir: dir }
+    }
+
+    /// A session: `serve`'s arguments as its first line, then `input`.
+    fn open(&self, args: &[&str], input: &[u8]) -> std::os::unix::net::UnixStream {
+        use std::io::Write;
+        let mut s = std::os::unix::net::UnixStream::connect(&self.socket).unwrap();
+        s.set_read_timeout(Some(std::time::Duration::from_secs(120))).unwrap();
+        s.write_all(format!("{}\n", serde_json::to_string(args).unwrap()).as_bytes()).unwrap();
+        s.write_all(input).unwrap();
+        s
+    }
+
+    /// A whole session: everything it answers before it closes.
+    fn session(&self, args: &[&str], input: &[u8]) -> Vec<u8> {
+        use std::io::Read;
+        let mut s = self.open(args, input);
+        s.shutdown(std::net::Shutdown::Write).unwrap();
+        let mut out = Vec::new();
+        s.read_to_end(&mut out).unwrap();
+        out
+    }
+}
+
+impl Drop for Host {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+/// Answers without their milliseconds, which no two runs share.
+fn timeless(answers: &[u32]) -> Vec<u32> {
+    answers.chunks(5).flat_map(|a| a[..4].to_vec()).collect()
+}
+
+/// [Z11-100]: sessions run at once on one host — two on one checkpoint and
+/// config, one on another config of it — each answer exactly what `serve`
+/// gives the same stream, though they share the loaded network. And a
+/// session is served while another, opened first, sits idle: each has a
+/// thread of its own.
+///
+/// Mutation, seen red ([Z11-48]), in a copy with its anchor confirmed: in
+/// `host`, each session run on the accepting thread instead of its own
+/// (`std::thread::Builder::new()…spawn(move ||` replaced by a direct call),
+/// which leaves the second session waiting behind the idle first one until
+/// its read times out.
+#[test]
+fn host_sessions_answer_as_serve_does() {
+    let a = env(&[("milestoneSimulations", "24")]);
+    let b = env(&[("playSimulations", "40")]);
+    let stream = |seeds: &[u64]| -> Vec<u8> {
+        seeds.iter().flat_map(|&g| support::game_positions(g)).flat_map(|s| frame(&block_of(&s))).collect()
+    };
+    let sessions = [
+        (&a, "milestone", stream(&[21, 22])),
+        (&a, "milestone", stream(&[23])),
+        (&b, "play", stream(&[21])),
+    ];
+    let host = Host::start();
+    let idle = host.open(&["serve", &a.checkpoint, "--config", &a.config, "--search", "milestone"], &[]);
+    let served: Vec<Vec<u8>> = std::thread::scope(|scope| {
+        let running: Vec<_> = sessions
+            .iter()
+            .map(|(e, search, input)| {
+                let host = &host;
+                scope.spawn(move || host.session(&["serve", &e.checkpoint, "--config", &e.config, "--search", search], input))
+            })
+            .collect();
+        running.into_iter().map(|t| t.join().unwrap()).collect()
+    });
+    drop(idle);
+    for (i, ((e, search, input), got)) in sessions.iter().zip(&served).enumerate() {
+        let alone = serve(e, search, input);
+        assert!(alone.status.success(), "{}", stderr(&alone));
+        assert!(!alone.stdout.is_empty());
+        assert_eq!(timeless(&words(got)), timeless(&words(&alone.stdout)), "session {i}");
+    }
+}
+
+/// [Z11-100]: a refused session is answered with `0xFFFFFFFF` and its
+/// reason, after every whole position before it, and the host goes on: a
+/// later session is served. Arguments that are not `serve`'s are refused
+/// the same way.
+///
+/// Mutation, seen red ([Z11-48]), in a copy with its anchor confirmed: in
+/// `host`, the refusal not written (`out.write_all(&REFUSED…` removed),
+/// which closes the session with no reason.
+#[test]
+fn a_refused_session_is_told_why_and_the_host_goes_on() {
+    let e = env(&[]);
+    let host = Host::start();
+    let mut end = AzulState::seeded(8);
+    while !end.is_terminal() {
+        let a = end.legal_actions().as_slice()[0];
+        end.apply(a).unwrap();
+    }
+    let input = [frame(&block_of(&AzulState::seeded(5))), frame(&block_of(&end))].concat();
+    let args = ["serve", &e.checkpoint, "--config", &e.config, "--search", "play"];
+    let out = host.session(&args, &input);
+    assert_eq!(words(&out[..20])[0], 4, "the whole position before it is answered");
+    assert_eq!(out[20..24], u32::MAX.to_le_bytes());
+    assert!(String::from_utf8_lossy(&out[24..]).contains("terminal"));
+
+    let out = host.session(&["play", &e.checkpoint, "--config", &e.config, "--search", "play"], &[]);
+    assert_eq!(out[..4], u32::MAX.to_le_bytes());
+    assert!(String::from_utf8_lossy(&out[4..]).contains("serve"));
+
+    let out = host.session(&args, &frame(&block_of(&AzulState::seeded(5))));
+    assert_eq!(words(&out).len(), 5, "a later session is served");
+}
+
+/// [Z11-100]: a checkpoint is loaded and parity checked once, by the first
+/// session to name it: once it is loaded, its files can go, and a later
+/// session on it is still served — while one naming files that were never
+/// there is refused.
+///
+/// Mutation, seen red ([Z11-48]), in a copy with its anchor confirmed: in
+/// `hosted`, every session loading for itself (`loads.get(&key)` replaced
+/// by `None::<&Arc<Loaded>>`), which refuses the later session.
+#[test]
+fn a_host_loads_each_checkpoint_once() {
+    let e = env(&[]);
+    let dir = scratch();
+    let checkpoint = dir.path().join("c.bin");
+    let (c, p) = support::fixture_paths();
+    std::fs::copy(&c, &checkpoint).unwrap();
+    std::fs::copy(&p, dir.path().join("c.parity")).unwrap();
+    let host = Host::start();
+    let args = ["serve", checkpoint.to_str().unwrap(), "--config", &e.config, "--search", "play"];
+    let one = frame(&block_of(&AzulState::seeded(5)));
+    assert_eq!(words(&host.session(&args, &one)).len(), 5);
+    std::fs::remove_file(&checkpoint).unwrap();
+    std::fs::remove_file(dir.path().join("c.parity")).unwrap();
+    assert_eq!(words(&host.session(&args, &one)).len(), 5, "served from the copy already loaded");
+    let missing = dir.path().join("never.bin");
+    let out = host.session(&["serve", missing.to_str().unwrap(), "--config", &e.config, "--search", "play"], &one);
+    assert_eq!(out[..4], u32::MAX.to_le_bytes());
+    assert!(String::from_utf8_lossy(&out[4..]).contains("never.bin"));
+}
+
+/// [Z11-100]: the host ends successfully when its stdin does, and takes its
+/// socket with it.
+///
+/// Mutation, seen red ([Z11-48]), in a copy with its anchor confirmed: in
+/// `host`, the thread that watches stdin not started, which leaves the host
+/// accepting until this test's deadline.
+#[test]
+fn a_host_ends_with_its_stdin() {
+    let mut host = Host::start();
+    drop(host.child.stdin.take());
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    let status = loop {
+        if let Some(s) = host.child.try_wait().unwrap() {
+            break s;
+        }
+        assert!(std::time::Instant::now() < deadline, "the host is still running");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    assert!(status.success());
+    assert!(!host.socket.exists(), "the socket is removed");
+}
