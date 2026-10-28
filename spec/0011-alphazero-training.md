@@ -1796,7 +1796,7 @@ percentile rather than the median, which is stricter and implies the intent's fi
   game twice with the players swapped: every position is timed by each build under the same load,
   and the check of identity comes free. That made it the one measure of a performance pass on a
   machine whose load moved a sequential lane by more than the pass's whole gain: on 10-28,
-  `f979ab3`'s player against the pass's, 200 games, every pair identical, 0.815 of the time
+  `2bda637`'s player against the pass's, 200 games, every pair identical, 0.815 of the time
   (0.807–0.824), the ratio steady within 0.81–0.83 while the desktop's load rose to 18. It
   measures speed at equal simulations only; a build that changes a move fails it by design, and
   is a matter for a match by points ([T12-34]).*

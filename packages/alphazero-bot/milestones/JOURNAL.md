@@ -60,18 +60,18 @@ time.
   1.8899999999999997 < 1.8900000000000001: both are exactly 1.89, which the rule counts as
   improving. Progress is now compared at nine decimals everywhere the rule compares it. Entry 160
   was corrected to `continue`, with the original kept under `correction`, and the run resumed
-  (`fffd77f`, `7415cd9`, [Z11-33]).
+  (`7a7a64a`, `e5aec7a`, [Z11-33]).
 - **The diagnosis that mattered later.** The value head scored about 0.33 on its own training
   samples and about 0.9 on fresh ones. It was memorising games, not learning to judge positions. Each
   game gives about 56 samples sharing one result, and each sample was drawn about 18 times.
 - **The end.** A genuine stop at generation 210, with progress at 1.875 after two milestones that did
-  not improve (`6fc6778`).
+  not improve (`eefe5b3`).
 
 ## `second`: display permutation (09-30)
 
 The five factory displays are interchangeable, so each training sample can be shown under a random
 relabelling of them without searching again ([Z11-65]). To avoid relearning, the run started from
-`first`'s weights, optimiser and window (`aaa030b`, [Z11-66]).
+`first`'s weights, optimiser and window (`8a9afb3`, [Z11-66]).
 
 **Decision (the user):** change one thing at a time, so that it stays clear what worked.
 
@@ -97,8 +97,8 @@ became the ranked plan below. Its first idea, auxiliary targets, remains the nex
 The memorising came from too few independent results for the training done on them. Each generation
 trains the same 1000 steps however many games it played, so 500 games meant six times the training
 per game of 3000, and a window of about 10,000 games instead of 60,000 (reuse about 18 instead of
-about 3). **Decision (the user):** 3000 games, the one change (`5f0f9fa`). Each generation now also
-records the value head by round beside the formula (`a539368`, [Z11-54]).
+about 3). **Decision (the user):** 3000 games, the one change (`c1acc29`). Each generation now also
+records the value head by round beside the formula (`4500e88`, [Z11-54]).
 
 It worked at once:
 
@@ -109,11 +109,11 @@ It worked at once:
 
 **The forward pass, made 2.2× faster mid-run.** A profiling agent found that 99% of self-play time
 was the network, compiled to 2-float vectors. A kernel layout fix and an AVX2 build give
-byte-identical samples, 2.4× faster on one thread and 2.2× at eight (`4fc0c63`, `8acfbc6`). Because
+byte-identical samples, 2.4× faster on one thread and 2.2× at eight (`ea531f1`, `0cc1615`). Because
 the samples are identical, it merged into the running run. Generations went from about 12 to about
 5 minutes.
 
-**The gate passed at generation 90 (10-01 03:20)** (`d7eafcd`, tag `alphazero-gate-passed`):
+**The gate passed at generation 90 (10-01 03:20)** (`f3000e9`, tag `alphazero-gate-passed`):
 
 - 0.7875 against `sharp` over 200 games (156 wins, 41 losses, 3 draws), Wilson lower bound 0.736,
   0.78 / 0.795 by seat.
@@ -127,12 +127,12 @@ keeps its tree between moves.
 
 **Decision (the user):** keep training to see how strong the player becomes. A run from `third`
 would have reached the gate's trigger at its first milestone and ended `done` at once, so the gate
-can now be switched off for a run (`a7c57e8`, [Z11-68]).
+can now be switched off for a run (`aee1a13`, [Z11-68]).
 
-Self-play was made about 3× faster again, with identical samples (`4b5156e`, merged at generation
+Self-play was made about 3× faster again, with identical samples (`d384ee9`, merged at generation
 30): a memo of evaluations within each game ([Z11-69]), four games per thread batched into one
 forward pass ([Z11-70]), and policy logits computed only for legal moves ([Z11-71]). Milestones now
-play through one persistent `serve` process per player per game ([Z11-72], `ed5ad1c`). That changed
+play through one persistent `serve` process per player per game ([Z11-72], `5d16e1f`). That changed
 the ladder hash, so milestone 40 started afresh.
 
 `sharp` rose from 0.63 to 0.89, while the lower rungs pinned at 0.98–1.00 and the losses barely
@@ -144,11 +144,11 @@ They had stayed flat through big gains (`third`, `fourth`) and through no gains 
 cannot tell progress from a plateau. They remain the health panel.
 
 `fourth` ended at generation 140, with decision `continue`, when the session that started its loop
-ended (`50e7586`). Since then the loop runs detached from any session.
+ended (`8f0959b`). Since then the loop runs detached from any session.
 
 ## The pool of champions (10-01)
 
-The user's design, specified as [Z11-73] and [Z11-74] (`0b25298`):
+The user's design, specified as [Z11-73] and [Z11-74] (`3a1271b`):
 
 - Three champions, each a committed milestone checkpoint with an Elo rating, played at **200
   simulations**: self-play's count, so the network carries the play rather than the search.
@@ -160,7 +160,7 @@ The user's design, specified as [Z11-73] and [Z11-74] (`0b25298`):
 The scale is anchored at `third`/90 = 0 and stays anchored after it leaves. The stop rule compares
 ratings instead of progress.
 
-Measured, then seeded (`37dac7f`):
+Measured, then seeded (`e7399b4`):
 
 - A pool game costs 0.23 s at eight workers, so **800 games a champion** gives about 9 minutes per
   milestone (12 with the extra games) and ratings good to about ±7 Elo.
@@ -173,13 +173,13 @@ Measured, then seeded (`37dac7f`):
 continues `fourth`/140 with only the yardstick changed (run detached, `--workers 8`).
 
 - Generation 10: **+301 ±8**. It scored 86% / 71% / 65% against the three champions and replaced
-  `third`/90 outright (`3853abb`). 454 s.
+  `third`/90 outright (`f803178`). 454 s.
 - Generation 20: **+312 ±7.5**, improved. It scored 52.9% against its own predecessor and replaced
-  `fourth`/50 (`a767c24`). 448 s.
+  `fourth`/50 (`11707bb`). 448 s.
 
 The climb went on for 230 more generations, slowing as it went: +342 at 50, +362 at 100, +410 at
-150, +428–436 around 200, and **+464 ±6 at generation 250** (`5b104a5`). Generations 260 (+463) and
-270 (+455) did not beat it, and the stop rule ended the run at 270 (10-02 08:09, `ef0b65b`). The
+150, +428–436 around 200, and **+464 ±6 at generation 250** (`86b86bf`). Generations 260 (+463) and
+270 (+455) did not beat it, and the stop rule ended the run at 270 (10-02 08:09, `6652e0a`). The
 extra third of games was needed at seven milestones, all near the top, where the champions sit
 within a few Elo of each other.
 
@@ -200,7 +200,7 @@ within a few Elo of each other.
 **Decision (the user, authorised in advance):** when `fifth` plateaued, start the most promising
 idea. `sixth` starts from `fifth`/250, the highest rated milestone, with one change: two
 training-only heads predicting the final score margin (÷20) and the 50 final wall cells, weighted
-0.5 each ([Z11-67], branch `alphazero-aux` merged in `ee5f133`). Neither head is exported, so the
+0.5 each ([Z11-67], branch `alphazero-aux` merged in `91d6897`). Neither head is exported, so the
 search, the checkpoint format and the latency are unchanged. The motivation: the value head stopped
 improving at about 0.73 on fresh games, and these targets carry far more signal per game than one
 win or loss. The window's inherited samples have no aux targets; the aux loss uses only the samples
@@ -216,7 +216,7 @@ that do, so it phases in over the first generations. Throughput: 1.2 minutes a g
   `fifth` showed dips of this size.
 
 Then 30: +484, 40: **+496 ±7** (the best), 50: +454, 60: +486, 70: +483, and 80: **+424**. The
-stop rule ended the run at 80 (10-02 13:33, `ea6d460`): 70 did not beat 60, and 80 did not beat 70.
+stop rule ended the run at 80 (10-02 13:33, `8c9470b`): 70 did not beat 60, and 80 did not beat 70.
 
 - **Aux targets helped.** In 40 generations `sixth` passed `fifth`'s best by 32 Elo, against
   `fifth`'s last 60 generations within 458–464. Its plateau sits around +485, about 20 above
@@ -237,11 +237,11 @@ differ less, so the milestones measure the trend rather than the noise.
   momentum and weight decay along with the momentum buffers. So a child run's `--set` of any of
   the three was recorded in `from` and silently not used: `seventh` would have trained at 0.02.
   No earlier run changed them. A restored optimiser now takes them from the run's config
-  (`25a1f36`, [Z11-66]), and generation 0's saved optimisers, body and aux, show 0.002.
+  (`fd0938b`, [Z11-66]), and generation 0's saved optimisers, body and aux, show 0.002.
 
 Generation 10: **+555**, 59 above its parent in ten generations. Then a slow, steady climb with
 small dips: 550, 574, 595, 592, 606, 593, 608, 606, 610, 623, 606, 626, 618, **+643 at 150**, 622,
-616. The stop rule ended it at 170 (10-02 22:20, `9a807ca`).
+616. The stop rule ended it at 170 (10-02 22:20, `46aa6b9`).
 
 - **The lower rate was the biggest single gain on the pool.** +147 over `sixth`'s best, and the
   dips shrank: the largest drop between neighbouring milestones was 21, against `sixth`'s 59.
@@ -263,7 +263,7 @@ milestones still play at 200, so ratings stay comparable. Throughput: 1.8 minute
 
 Generation 10: +623, below its parent while the window still held `seventh`'s 200-simulation
 games. Then 641, 643, **656** (first above `seventh`), 628, 650, 665, 668, 622, 656, 672, 663,
-672, 653, 676, **+689 at 160**, 667, 657. The stop rule ended it at 180 (10-03 09:00, `f3a7e21`).
+672, 653, 676, **+689 at 160**, 667, 657. The stop rule ended it at 180 (10-03 09:00, `a742d27`).
 
 - **Twice the simulations helped, modestly:** +46 over `seventh`'s best in 160 generations, at
   1.5× the time a generation. The dips came back somewhat larger than `seventh`'s (up to 46).
@@ -279,7 +279,7 @@ step of the classic schedule; the first gave `seventh` +147. Throughput: 1.9 min
 
 Generation 10: **+713**, 24 above its parent at once, as `seventh`'s first cut had done. Then
 702, 716, 702, 736, 733, 733, 739, **+750 at 90**, 745, 739. The stop rule ended it at 110 (10-03
-15:20, `eed43f7`).
+15:20, `fe02303`).
 
 - **The second cut gave +61**, against the first's +147: still the cheapest gain available, but
   shrinking. The swings between milestones were the smallest yet, at most 14.
@@ -292,7 +292,7 @@ Generation 10: **+713**, 24 above its parent at once, as `seventh`'s first cut h
 
 **Decision (the user):** prepare playout-cap randomisation and start it when `ninth` stops.
 `eighth` showed that better policy targets help (+46 for 400 simulations instead of 200) but paid
-for them on every move. Under the cap ([Z11-75], `d22350a`, merged in `fc52024`) a quarter of
+for them on every move. Under the cap ([Z11-75], `72b9e6b`, merged in `f55f279`) a quarter of
 the moves get a full search of 1000 simulations with the noise and become move samples; the rest
 get 200, no noise, and become value-only **cheap** samples. That averages 400 simulations a move,
 as before. KataGo drops the cheap positions; here they stay as value samples, since the value
@@ -303,7 +303,7 @@ generation.
 
 Generation 10: +741, below its parent while the window still held `ninth`'s uncapped games. Then
 **764**, 750, 758, 759, 761, 758, 762, 770, **+776 at 100**, 763, 763. The stop rule ended it at 120
-(10-03 22:36, `f9744b6`).
+(10-03 22:36, `229ef74`).
 
 - **The cap helped, modestly:** +26 over `ninth`'s best, at about the same cost a generation. It
   sat at 758–764 for 60 generations, then climbed to 776, so the gain came late.
@@ -320,7 +320,7 @@ a generation.
 
 Generation 10: +762, below its parent, unlike the bigger cuts' immediate jumps. Then 781, 772,
 781, 769, 774, 776, 779, **797**, 797, 802, 800, **+812 at 130**, 808, 804. The stop rule ended it at
-150 (10-04 07:52, `2281238`), the same milestone at which the user had asked for a pause.
+150 (10-04 07:52, `565c380`), the same milestone at which the user had asked for a pause.
 
 - **Half the rate gave +36, late.** For 60 generations it sat at 769–781, level with `tenth`; the
   gain came from generation 90 on. A lower rate learns slowly, so a run at one needs patience
@@ -335,7 +335,7 @@ generation.
 
 Generation 10: +808, level with its parent. Then 806, 810, 808, **828**, 845, 843, 844, 845, 852,
 847, **+856 at 120**, 846, 851, 854, 850, 849. The stop rule ended it at 170 (10-05 05:53,
-`06ebf35`).
+`ae9e167`).
 
 - **The second halving gave +44**, more than the first's +36, and sooner: the climb began at
   generation 50 rather than 90. From generation 60 on it held 843–856 for 110 generations,
@@ -344,12 +344,12 @@ Generation 10: +808, level with its parent. Then 806, 810, 808, **828**, 845, 84
   → 0.00005 (+44). The rate is now 2.5× the float32 floor; a further halving is still possible
   but near the limit, and gains a run have been shrinking to the size of the noise over many
   generations.
-- **Mid-run, `main` moved** (`d886879`, the danluu.com tile match); `twelfth`'s milestone commits
+- **Mid-run, `main` moved** (`1c587bb`, the danluu.com tile match); `twelfth`'s milestone commits
   were rebased onto it, without conflicts, and `main` fast-forwarded again.
 
 ## The endgame proof, validated (10-05)
 
-On `main` (`ab38db0`, `d804a47`, [Z11-76], [Z11-77]): once a wall row holds four tiles, so the
+On `main` (`7ae3f2c`, `79c51f8`, [Z11-76], [Z11-77]): once a wall row holds four tiles, so the
 game can end this round, `play` follows the search with a node-capped alpha-beta over the rest of
 the round. Lines that run into the next round count as the worst case for the claim, so no proof
 reads the deal. The search's move gives way only to a proven win, or, when it is a proven loss,
@@ -374,7 +374,7 @@ Pulled into the training branch as a fast-forward and checked independently:
 This is a gain for the player that ships, not for the network: the pool still rates the search
 alone, as [Z11-77] intends.
 
-**Shipped (10-05).** `main` (`b38495b`, [0012 T12-33]) puts the proof in the browser master at
+**Shipped (10-05).** `main` (`5b1a631`, [0012 T12-33]) puts the proof in the browser master at
 300,000 nodes, the largest cap inside the browser's latency and memory budgets. Pulled, both
 suites green (105 and `ui`'s 201). The same 3,201 pool games at the shipped cap: **+897 ±6**,
 against 856 without and 905 at 2M. 223 games changed, 222 for the better; only 47 differ from
@@ -1131,7 +1131,7 @@ Every self-play search, cheap ones included, is a Gumbel search; nothing else is
 
 - **The binary under the run.** The first round found that my builds in the main checkout had
   replaced the binary the `sixteenth` loop spawns each generation. The loop was stopped, and
-  generations 11 to 19 were re-run with `6164cef`'s binary: all byte-identical. The G binary also
+  generations 11 to 19 were re-run with `75e5aee`'s binary: all byte-identical. The G binary also
   reproduces generation 20. G now lives in a worktree, and no release build happens in the main
   checkout during a run.
 - **Two untested seams.** The round also found two seams no test held: the root ignoring the
@@ -1425,7 +1425,7 @@ memory natively. Kept and rejected changes, with figures and method: `PERF-2026-
   with one move in their first pass, on different positions, and those positions take 0.5–0.8 s
   in every other pass. The clean passes are inside it, but its worst move is within a fifth of
   the bound.
-- **A 200-game match, `f979ab3`'s player against this one**, the shipped native player on both
+- **A 200-game match, `2bda637`'s player against this one**, the shipped native player on both
   sides, each seed played twice with the seats swapped: every pair was one game, move for move,
   and the new player took 0.815 of the old one's time (p95 3 038 → 2 389 ms, p99 6 021 →
   4 787 ms).
