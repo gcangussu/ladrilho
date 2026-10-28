@@ -79,6 +79,7 @@ pub unsafe extern "C" fn load(
     drop((checkpoint, parity, past_deal));
     with(|s| match loaded {
         Ok(p) => {
+            p.warm();
             s.player = Some(p);
             0
         }

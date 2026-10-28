@@ -61,6 +61,29 @@ impl Player {
         Ok(Player { net, cpuct, fpu, endgame_nodes, past_deal })
     }
 
+    /// A small search, its answer thrown away, so that the engine running the
+    /// module has compiled the search's loops before the first real move.
+    /// WebAssembly has no on-stack replacement: a search entered in V8's
+    /// baseline code stays there to its end, so the first move of a game,
+    /// which is also its widest, ran its whole tree walk unoptimised, about
+    /// 11% slower than the same move again (3.4 s against 3.0 s at 100 000
+    /// simulations). Ten thousand simulations on a position with few moves
+    /// take about 40 ms; the position is the opening played forward, the
+    /// first legal action each ply, until at most six moves remain. Changes
+    /// nothing a later `choose` answers: every move starts from an empty tree
+    /// and a fresh memo.
+    pub fn warm(&self) {
+        let mut state = AzulState::seeded(0);
+        while state.legal_actions().len() > 6 {
+            let first = state.legal_actions().as_slice()[0];
+            if state.apply(first).is_err() {
+                return;
+            }
+        }
+        let config = SearchConfig { simulations: 10_000, cpuct: self.cpuct, fpu: self.fpu, endgame_nodes: 0 };
+        let _ = choose_played(&self.net, &state, &config, None, Memo::new());
+    }
+
     /// [T12-3], [T12-4]: the block decoded as `play` decodes it, and the move
     /// `choose_played` makes from it at `simulations`.
     pub fn choose(&self, block: &[u32], simulations: u32) -> Result<(u8, f32), Refusal> {
