@@ -480,7 +480,10 @@ impl Host {
     fn open(&self, args: &[&str], input: &[u8]) -> std::os::unix::net::UnixStream {
         use std::io::Write;
         let mut s = std::os::unix::net::UnixStream::connect(&self.socket).unwrap();
-        s.set_read_timeout(Some(std::time::Duration::from_secs(120))).unwrap();
+        // A host that never reads or never answers fails the test, not hangs
+        // it: a session's input is larger than the socket's buffer.
+        s.set_read_timeout(Some(std::time::Duration::from_secs(60))).unwrap();
+        s.set_write_timeout(Some(std::time::Duration::from_secs(60))).unwrap();
         s.write_all(format!("{}\n", serde_json::to_string(args).unwrap()).as_bytes()).unwrap();
         s.write_all(input).unwrap();
         s
@@ -519,7 +522,7 @@ fn timeless(answers: &[u32]) -> Vec<u32> {
 /// `host`, each session run on the accepting thread instead of its own
 /// (`std::thread::Builder::new()…spawn(move ||` replaced by a direct call),
 /// which leaves the second session waiting behind the idle first one until
-/// its read times out.
+/// its write or read times out, rather than hanging the suite.
 #[test]
 fn host_sessions_answer_as_serve_does() {
     let a = env(&[("milestoneSimulations", "24")]);
