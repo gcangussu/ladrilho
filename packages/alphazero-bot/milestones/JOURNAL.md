@@ -1425,6 +1425,10 @@ memory natively. Kept and rejected changes, with figures and method: `PERF-2026-
   with one move in their first pass, on different positions, and those positions take 0.5–0.8 s
   in every other pass. The clean passes are inside it, but its worst move is within a fifth of
   the bound.
+- **A 200-game match, `f979ab3`'s player against this one**, the shipped native player on both
+  sides, each seed played twice with the seats swapped: every pair was one game, move for move,
+  and the new player took 0.815 of the old one's time (p95 3 038 → 2 389 ms, p99 6 021 →
+  4 787 ms).
 
 ## Next
 
