@@ -536,9 +536,20 @@ fn rows_of(c: &[f32], rows: usize, cols: usize, out: &mut Vec<f32>) {
     }
 }
 
+/// The ReLU: `x` where it is above zero, else `+0`. The same as `x.max(0.0)`
+/// on every input the pass meets but `-0`, whose sign nothing downstream reads:
+/// the sparse layers skip either zero, and a dense dot product's lanes are
+/// never `-0`, so adding a product with either leaves them as they were. Written
+/// as a comparison and a choice, it is one instruction a lane in WebAssembly,
+/// where `max`, which must also order NaNs and signed zeros, was a dozen.
+#[inline(always)]
+fn relu1(x: f32) -> f32 {
+    if x > 0.0 { x } else { 0.0 }
+}
+
 fn relu(x: &mut [f32]) {
     for v in x {
-        *v = v.max(0.0);
+        *v = relu1(*v);
     }
 }
 
@@ -678,7 +689,7 @@ impl Network {
             relu(t);
             linear_columns(col(n * n), &w[b2b..b2b + n], &NonZero::of(t, &mut buf), n, u);
             for i in 0..n {
-                h[i] = (h[i] + u[i]).max(0.0);
+                h[i] = relu1(h[i] + u[i]);
             }
         }
         linear_rows(&w[l.pol_w..l.pol_b], &w[l.pol_b..l.pol_b + POLICY], h, logits, rows);
@@ -741,7 +752,7 @@ impl Network {
             linear_x4(row(n * n), &w[b2b..b2b + n], t.each_ref().map(|r| &r[..n]), u.each_mut().map(|r| &mut r[..n]));
             for k in 0..BATCH {
                 for i in 0..n {
-                    h[k][i] = (h[k][i] + u[k][i]).max(0.0);
+                    h[k][i] = relu1(h[k][i] + u[k][i]);
                 }
             }
         }
