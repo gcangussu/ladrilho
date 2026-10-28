@@ -23,11 +23,46 @@ use crate::search::{Search, SearchConfig, SearchResult};
 #[derive(Default)]
 pub struct Memo {
     seen: HashSet<Entry, BuildHasherDefault<KeyHasher>>,
+    /// The codes the keys write the observation's values in.
+    codes: Codes,
 }
 
 /// A call's input as the memo keys it, once the memo has missed it: to
-/// `insert` once the network has answered.
-pub struct Key(Box<[u8]>);
+/// `insert` once the network has answered. The key itself when every value
+/// had a code; otherwise the input, to be keyed once `insert` has given its
+/// new values theirs.
+pub enum Key {
+    Coded(Box<[u8]>),
+    Raw(Box<[f32; ENCODED_SIZE]>, Box<[Action]>),
+}
+
+/// The byte each of the first values met stands for in a key, 0 to 254;
+/// a value met once all are taken is written as `ESCAPE` and its four bytes.
+/// An observation holds few distinct values (the latency corpus, 71 in all:
+/// counts over small divisors), so nearly every value is a byte instead of
+/// four. A value keeps its code while the memo lives, and one met after the
+/// codes ran out is always escaped, so each value has one way of being
+/// written, and a key is still the input exactly.
+#[derive(Default)]
+struct Codes {
+    of: std::collections::HashMap<u32, u8, BuildHasherDefault<KeyHasher>>,
+}
+
+const ESCAPE: u8 = u8::MAX;
+
+impl Codes {
+    /// `value`'s code, giving it the next free one if it has none and one is left.
+    fn assign(&mut self, bits: u32) -> Option<u8> {
+        let next = self.of.len();
+        if let Some(&c) = self.of.get(&bits) {
+            return Some(c);
+        }
+        (next < usize::from(ESCAPE)).then(|| {
+            self.of.insert(bits, next as u8);
+            next as u8
+        })
+    }
+}
 
 /// One remembered call, in one allocation: the legal set's length, the key,
 /// the value's bits, then the policy's over the legal set in the key's order.
@@ -81,8 +116,11 @@ impl Memo {
     /// the network has answered.
     pub fn lookup(&self, (observation, legal): Request<'_>) -> Result<Evaluation, Key> {
         let mut buf = [0u8; KEY_BYTES];
-        let k = key(observation, legal, &mut buf);
-        let Some(entry) = self.seen.get(k) else { return Err(Key(k.into())) };
+        // A value without a code was in no input the memo holds.
+        let Some(k) = key(observation, legal, &mut |bits| self.codes.of.get(&bits).copied(), &mut buf) else {
+            return Err(Key::Raw(Box::new(*observation), legal.into()));
+        };
+        let Some(entry) = self.seen.get(k) else { return Err(Key::Coded(k.into())) };
         let mut eval = Evaluation::default();
         let mut answer = entry.answer();
         eval.value = answer.next().unwrap_or_default();
@@ -92,11 +130,21 @@ impl Memo {
         Ok(eval)
     }
 
-    pub fn insert(&mut self, Key(key): Key, eval: &Evaluation) {
-        let legal = legal_of(&key);
+    pub fn insert(&mut self, k: Key, eval: &Evaluation) {
+        let mut buf = [0u8; KEY_BYTES];
+        let (key, legal): (&[u8], usize) = match &k {
+            Key::Coded(k) => (k, legal_len(k)),
+            Key::Raw(observation, legal) => {
+                let codes = &mut self.codes;
+                // Every value can be written: given a code, or escaped.
+                let coded = key(observation, legal, &mut |bits| Some(codes.assign(bits).unwrap_or(ESCAPE)), &mut buf);
+                (coded.unwrap_or_default(), legal.len())
+            }
+        };
+        let legal = &key[key.len() - legal..];
         let mut entry = Vec::with_capacity(1 + key.len() + 4 * (legal.len() + 1));
         entry.push(legal.len() as u8);
-        entry.extend_from_slice(&key);
+        entry.extend_from_slice(key);
         entry.extend_from_slice(&eval.value.to_le_bytes());
         for &a in legal {
             entry.extend_from_slice(&eval.policy[usize::from(a)].to_le_bytes());
@@ -105,7 +153,8 @@ impl Memo {
     }
 
     /// Forgets every call. What the memo answers is exact however often it is
-    /// emptied; emptying it is for memory.
+    /// emptied; emptying it is for memory. The values' codes stay: there are
+    /// at most 255 of them.
     pub fn clear(&mut self) {
         self.seen.clear();
     }
@@ -120,45 +169,62 @@ impl Memo {
     }
 }
 
-/// Ends the observation's part of a key: no input index is this large.
-const SEPARATOR: u8 = u8::MAX;
-const _: () = assert!(ENCODED_SIZE < SEPARATOR as usize && ACTION_SPACE <= 256);
+const _: () = assert!(ACTION_SPACE <= 256);
 
-/// The longest key: every observation bit with its index, the separator, then
-/// at most every action.
-const KEY_BYTES: usize = 5 * ENCODED_SIZE + 1 + ACTION_SPACE;
+/// The bytes of a key's mask: a bit for each input.
+const MASK: usize = ENCODED_SIZE.div_ceil(8);
 
-/// The input exactly, written into `buf`: each observation float whose bits
-/// are not zero as its index and its bits, then the separator, then the legal
-/// set, a byte an action. Three quarters of an observation is `+0`, so this is
-/// a quarter of its bits. Built on the stack, so a lookup that hits allocates
+/// The longest key: the mask, every input escaped, then every action.
+const KEY_BYTES: usize = MASK + 5 * ENCODED_SIZE + ACTION_SPACE;
+
+/// The input exactly, written into `buf`: a mask of the inputs whose bits are
+/// not zero, then each of those in order as its code (`code` of its bits, the
+/// code `ESCAPE` followed by the bits themselves), then the legal set, a byte
+/// an action. `None` if `code` has none for a value. Three quarters of an
+/// observation is `+0` and the rest takes few values, so this is about a
+/// twelfth of its bits. Built on the stack, so a lookup that hits allocates
 /// nothing; only a miss copies its key out to be remembered.
-fn key<'a>(observation: &[f32; ENCODED_SIZE], legal: &[Action], buf: &'a mut [u8; KEY_BYTES]) -> &'a [u8] {
-    let mut n = 0;
+///
+/// Two inputs have the same key only if they are equal: the mask places the
+/// values, each value is written one way, and a value's code (one byte, or
+/// five beginning `ESCAPE`) says where the next begins, so the legal set is
+/// the rest.
+fn key<'a>(
+    observation: &[f32; ENCODED_SIZE],
+    legal: &[Action],
+    code: &mut dyn FnMut(u32) -> Option<u8>,
+    buf: &'a mut [u8; KEY_BYTES],
+) -> Option<&'a [u8]> {
+    buf[..MASK].fill(0);
+    let mut n = MASK;
     for (i, f) in observation.iter().enumerate() {
         let bits = f.to_bits();
         if bits != 0 {
-            buf[n] = i as u8;
-            buf[n + 1..n + 5].copy_from_slice(&bits.to_le_bytes());
-            n += 5;
+            buf[i / 8] |= 1 << (i % 8);
+            let c = code(bits)?;
+            buf[n] = c;
+            n += 1;
+            if c == ESCAPE {
+                buf[n..n + 4].copy_from_slice(&bits.to_le_bytes());
+                n += 4;
+            }
         }
     }
-    buf[n] = SEPARATOR;
-    n += 1;
     for &a in &legal[..legal.len().min(ACTION_SPACE)] {
         buf[n] = a;
         n += 1;
     }
-    &buf[..n]
+    Some(&buf[..n])
 }
 
-/// The legal set a key ends with.
-fn legal_of(key: &[u8]) -> &[Action] {
-    let mut at = 0;
-    while key[at] != SEPARATOR {
-        at += 5;
+/// The length of the legal set a key ends with: what its mask and codes leave.
+fn legal_len(key: &[u8]) -> usize {
+    let values: u32 = key[..MASK].iter().map(|b| b.count_ones()).sum();
+    let mut at = MASK;
+    for _ in 0..values {
+        at += if key[at] == ESCAPE { 5 } else { 1 };
     }
-    &key[at + 1..]
+    key.len() - at
 }
 
 /// The memo's hasher: a multiply-and-rotate over eight bytes at a time, in the
