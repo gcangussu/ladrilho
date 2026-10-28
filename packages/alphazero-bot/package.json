@@ -26,6 +26,7 @@
     "ship": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs ship",
     "past-deal": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs past-deal",
     "climb": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs climb",
+    "perf-match": "node tools/bundle.mjs && node node_modules/.alphazero/cli.mjs perf-match",
     "web": "node tools/web.mjs",
     "web-latency": "node tools/web.mjs && node tools/bundle.mjs && node node_modules/.alphazero/web-latency.mjs",
     "tile": "node tile/bundle.mjs && node node_modules/.alphazero/tile.mjs",

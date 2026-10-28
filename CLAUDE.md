@@ -224,6 +224,9 @@ pnpm -F alphazero-bot ship <checkpoint>                     # [T12-34]: the dire
 pnpm -F alphazero-bot ship pin <run>:<g> --reason "…"       # [T12-35]: name master without a match
 pnpm -F alphazero-bot web                      # [T12-7]: the master's payload, from web/shipped.json
 pnpm -F alphazero-bot web-latency              # [T12-25]: master's moves at the default; idle machine
+pnpm -F alphazero-bot perf-match <old-binary>  # [Z11-101]: master as that build against this tree's, each
+                                               # seed twice, seats swapped: identity and paired time per
+                                               # move. How to measure a speed change on a busy machine
 pnpm -F alphazero-bot tile play --us 800 --them nnue-ms:1000@8   # master vs danluu.com/game/tile's AI:
                                                # tile/README.md. Their files are cached in
                                                # ~/.cache/azul-tile, never committed

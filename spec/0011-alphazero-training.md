@@ -1713,6 +1713,31 @@ percentile rather than the median, which is stricter and implies the intent's fi
   500 games × 73 plies × 200 simulations, 7.3 million evaluations: about 18 minutes on four cores
   at a sequential accumulator's speed, about 3 with lanes.*
 
+- **[Z11-101]** An on-demand lane, `pnpm -F alphazero-bot perf-match <old-binary> [--seeds N]
+  [--simulations N] [--workers N]`, MUST play the player `master` is natively, as `serve --search
+  play` with its logged config at `--simulations` (the default's count unless given), the shipped
+  proof cap and the shipped `pastdeal.json` if `shipped.json` names one ([0012 T12-33],
+  [T12-36]), built twice: once as the binary named, once as this tree's release build. It plays
+  each of `--seeds` seeds (100 unless given) twice, the new build in seat 0 and then in seat 1,
+  each player a `serve` of its own — no host ([Z11-100]), so a move's time is the player's alone —
+  and the two games of a seed side by side, so that each position is searched by both builds at
+  the same moment. It MUST report: the pairs whose two games differ in any action, simulation
+  count or value bit, or in the scores, naming their seeds; the new build's points and the first
+  seat's wins; and, over the positions each build searched, both builds' mean, p50, p95, p99 and
+  max of the milliseconds `serve` answered ([Z11-23]), pN as [Z11-40] ranks it, the new build's
+  total time over the old one's with a 95% bootstrap interval over seeds, and the median of the
+  per-position ratio over positions of at least 50 ms. It MUST exit with an error if any pair
+  differs. Printed, not written.
+
+  *Two builds that answer alike play the same game from both seats, so a seed's two games are one
+  game twice with the players swapped: every position is timed by each build under the same load,
+  and the check of identity comes free. That made it the one measure of a performance pass on a
+  machine whose load moved a sequential lane by more than the pass's whole gain: on 10-28,
+  `f979ab3`'s player against the pass's, 200 games, every pair identical, 0.815 of the time
+  (0.807–0.824), the ratio steady within 0.81–0.83 while the desktop's load rose to 18. It
+  measures speed at equal simulations only; a build that changes a move fails it by design, and
+  is a matter for a match by points ([T12-34]).*
+
 ## Starting values
 
 The first run's `config.json`, each setting under the key the table names. These are recorded,
@@ -1810,6 +1835,9 @@ this package, and MUST be corrected in the same change.
   - [Z11-70] by checking the batched forward pass against [Z11-10]'s reference order bit for bit,
     `evaluate_batch` against `evaluate` at every batch size from 0 to 9, and `self_play`'s bytes
     against the same games played one at a time;
+  - [Z11-101] by checking a lane of two identical builds against each other at a small count: every
+    pair one game, the ratio and the figures computed from the plies; and its summary against
+    games made by hand, naming a pair that differs in one value's bit and none that do not;
   - [Z11-100] by checking sessions run at once on one host, two on one checkpoint and config and
     one on another config, each against `serve`'s answers to the same stream, while another
     session sits idle; a refused session answered with its reason while the host goes on

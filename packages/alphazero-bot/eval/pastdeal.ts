@@ -52,7 +52,7 @@ function loggedConfig(m: { run: string; generation: number }, log: readonly LogE
 }
 
 /** `m`'s logged config at `simulations` with the shipped proof cap: what `play` reads ([0011 Z11-60]). */
-function playConfig(m: { run: string; generation: number }, log: readonly LogEntry[], simulations: number): string {
+export function playConfig(m: { run: string; generation: number }, log: readonly LogEntry[], simulations: number): string {
   const dir = join(RUNS, 'master');
   mkdirSync(dir, { recursive: true });
   const path = join(dir, `${m.run}-${m.generation}-${simulations}.json`);

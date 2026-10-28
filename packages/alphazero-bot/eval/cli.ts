@@ -31,9 +31,11 @@ import {
 import { anchorsExist, readAnchors } from './anchors.js';
 import { CORPUS } from './paths.js';
 import { climb, pastDealDrop, pastDealFit, pastDealMatch } from './pastdeal.js';
+import { perfMatch, perfMatchWorker } from './perfmatch.js';
 import { seriesWorker } from './series.js';
 import { POOL, readSeed } from './pool.js';
 import { patienceTable, poolTable, shipTable, table } from './stop-rule-simulation.js';
+import { MASTER_SIMULATIONS } from '../web/settings.js';
 
 function option(args: string[], name: string): string | undefined {
   const i = args.indexOf(`--${name}`);
@@ -210,6 +212,19 @@ async function main(): Promise<void> {
       process.stdout.write('train/layout.json and train/tests/fixtures/displays.json written from the engine\n');
       return;
     }
+    case 'perf-match': {
+      // [0011 Z11-101].
+      if (rest[0] === undefined || rest[0].startsWith('--')) {
+        throw new Error('usage: perf-match <old-binary> [--seeds <n>] [--simulations <n>] [--workers <n>]');
+      }
+      const seeds = Number(option(rest, 'seeds') ?? 100);
+      const simulations = Number(option(rest, 'simulations') ?? MASTER_SIMULATIONS.default);
+      if (!Number.isInteger(seeds) || seeds < 1) throw new Error('--seeds is a whole number');
+      if (!Number.isInteger(simulations) || simulations < 1) throw new Error('--simulations is a whole number');
+      return perfMatch(resolve(rest[0]), seeds, simulations, workers(rest));
+    }
+    case 'perf-match-worker':
+      return perfMatchWorker();
     case 'series-worker':
       return seriesWorker();
     default:
@@ -217,7 +232,7 @@ async function main(): Promise<void> {
         'usage: train init --run <name> [--from <run>:<generation>] [--augment none|displays] [--set <setting>=<n>]… [--gate end|off] [--yardstick ladder|pool|anchors] [--patience <n>] | train --run <name> [--override "<reason>"] | latency --run <name> | ' +
           'throughput --run <name> | milestone <checkpoint> | panel <checkpoint> [--against <checkpoint>] | gate <checkpoint> | stop-simulation | latency-corpus | ' +
           'augment-fixtures | pool init --members <run>:<g>,… --games <n> | anchors init|add|rate … | ship <checkpoint> | ship pin <run>:<g> --reason "…" | ' +
-          'past-deal fit|match <checkpoint> | past-deal drop <run>:<g> --reason "…" | climb <checkpoint> --to <n> --latency <file>',
+          'past-deal fit|match <checkpoint> | past-deal drop <run>:<g> --reason "…" | climb <checkpoint> --to <n> --latency <file> | perf-match <old-binary> [--seeds <n>] [--simulations <n>]',
       );
   }
 }
