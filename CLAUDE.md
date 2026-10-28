@@ -125,7 +125,11 @@ to fail" is actually carried out, and three rules separate evidence from theatre
 - **Mutate a copy, not the tree.** `git archive HEAD` into a scratch directory. `git checkout --`
   compares against the index, so a mutation that reached the index reverts to itself and reports a
   clean tree; that is how one got committed here, in a commit whose message said it only touched a
-  stylesheet.
+  stylesheet. And mind the mtimes in that copy, because cargo rebuilds by them: extract with
+  `tar -x -m`, since a plain `tar` stamps each file with its commit time and cargo may keep an older
+  build; and `touch` a file after restoring it, since a `cp` or `mv` back from a pre-mutation copy
+  is older than the mutated build, and the next run quietly tests the mutation again. Both cost a
+  performance pass hours here: a stale baseline read as a speed-up, and a pristine copy read red.
 - **Re-run a recorded mutation when the code it names moves.** [0007 S7-31] keeps mutation records
   beside the assertions they justify, naming a function and a line. A record pointing at code that
   has since moved is worse than no record: the next person finds nothing to mutate and concludes

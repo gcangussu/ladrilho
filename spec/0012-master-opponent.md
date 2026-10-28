@@ -696,6 +696,20 @@ These requirements were proposals for *0006*, in the manner of [0008 A8-33]. Eac
   At the maximum, 4.3 s and 35 MB on the slowest position at 10 000, 8.0 s and 72 MB on the
   heaviest.*
 
+  *Measured again on 10-28, after the performance pass of `milestones/PERF-2026-10-28.md` (every
+  move and value unchanged), the machine idle but for the desktop. At 100 000: pass 1 p95 2 125,
+  p99 3 392, max 7 793 ms; pass 2 p95 1 747, p99 3 035, max 4 878 ms; 32 MB after the corpus; at
+  the maximum, 6.1 s and 48 MB on the heaviest position. The default's budgets hold. At 10 000,
+  two runs (1 978 positions each) each broke `quick`'s bound with one move in their first pass,
+  1 094 and 1 634 ms, on different positions (702, 1 224), which took 0.48–0.81 s in the other
+  three passes: interruptions, not slow positions; the clean pass gave p95 387, p99 514, max
+  900 ms. So `quick`'s worst move sits within a fifth of its bound. Between its two passes the
+  first run did the same moves 8% (10 000) and 19% (100 000) faster in the second, the load from a
+  stopped training run still decaying; that is the lane's noise, and why speed is measured in
+  pairs, old and new on each position under the same load: there the pass took 0.73–0.84 of the
+  time in V8, and a 200-game match of the old native player against the new, the shipped settings
+  on both sides and every pair of games identical, 0.815.*
+
 ## Verification
 
 - **[T12-26]** The web crate's `cargo test` MUST call its exports, natively, on at least 50
