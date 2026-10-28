@@ -374,7 +374,17 @@ fn linear_x4_rows(w: &[f32], b: &[f32], x: [&[f32]; BATCH], out: [&mut [f32]; BA
 /// in V8, from more passes over the input list; sixty-four, from spills.
 const BLOCK: usize = 32;
 
-/// The inputs `linear_columns` reads, lane by lane: `(j, x[j])` for each
+/// Where input `j` of `cols` sits in a block of `columns_of`: the whole
+/// chunks' inputs lane by lane (lane `l`'s, `j = l, l + 16, …`, in ascending
+/// `j`), then the tail's in order. A lane's columns are then contiguous, so
+/// the sums of `column_lanes`, which go lane by lane, read their weights
+/// forward through memory rather than in strides of sixteen columns.
+fn slot(j: usize, cols: usize) -> usize {
+    let whole = cols / LANES * LANES;
+    if j < whole { j % LANES * (whole / LANES) + j / LANES } else { j }
+}
+
+/// The inputs `linear_columns` reads, lane by lane: `(slot(j), x[j])` for each
 /// non-zero `x[j]` of a whole chunk, lane `l`'s at `list[starts[l]..starts[l + 1]]`
 /// in ascending `j`, and the tail's non-zero ones last, from `starts[LANES]`.
 struct NonZero<'a> {
@@ -387,11 +397,13 @@ impl<'a> NonZero<'a> {
         let whole = x.len() / LANES * LANES;
         let mut starts = [0; LANES + 1];
         let mut len = 0;
+        let mut at = 0;
         for l in 0..LANES {
             starts[l] = len;
             for j in (l..whole).step_by(LANES) {
-                buf[len] = (j as u32, x[j]);
+                buf[len] = (at as u32, x[j]);
                 len += usize::from(x[j] != 0.0);
+                at += 1;
             }
         }
         starts[LANES] = len;
@@ -403,7 +415,7 @@ impl<'a> NonZero<'a> {
     }
 }
 
-/// One lane's sum for `B` outputs: `cols[j][k] · v` added in the list's order.
+/// One lane's sum for `B` outputs: `cols[s][k] · v` added in the list's order.
 #[inline(always)]
 fn column_sum<const B: usize>(cols: &[[f32; B]], list: &[(u32, f32)]) -> [f32; B] {
     let mut acc = [0f32; B];
@@ -417,9 +429,9 @@ fn column_sum<const B: usize>(cols: &[[f32; B]], list: &[(u32, f32)]) -> [f32; B
 }
 
 /// Every lane's sum for `B` outputs into `acc`, and the tail's into `tail`.
-/// `cols[j]` holds input `j`'s weights for those outputs. Written in place: a
-/// returned array of sixteen lanes was copied twice on its way out, two
-/// kilobytes each time, for every block of every layer.
+/// `cols[slot(j)]` holds input `j`'s weights for those outputs. Written in
+/// place: a returned array of sixteen lanes was copied twice on its way out,
+/// two kilobytes each time, for every block of every layer.
 #[inline(never)]
 fn column_lanes<const B: usize>(cols: &[[f32; B]], nz: &NonZero<'_>, acc: &mut [[f32; B]; LANES], tail: &mut [f32; B]) {
     for l in 0..LANES {
@@ -475,15 +487,21 @@ fn linear_columns(wt: &[f32], b: &[f32], nz: &NonZero<'_>, n: usize, out: &mut [
 
 /// An `rows × cols` row-major matrix as `linear_columns` reads it: each whole
 /// block of `BLOCK` rows as `[cols][BLOCK]`, then each row past the last whole
-/// block as its own `[cols]`.
+/// block as its own `[cols]`, the columns in either at their `slot`.
 fn columns_of(w: &[[u8; 4]], rows: usize, cols: usize, out: &mut Vec<f32>) {
     let whole = rows / BLOCK * BLOCK;
+    let mut order = vec![0; cols];
+    for j in 0..cols {
+        order[slot(j, cols)] = j;
+    }
     for o0 in (0..whole).step_by(BLOCK) {
-        for j in 0..cols {
+        for &j in &order {
             out.extend((o0..o0 + BLOCK).map(|o| f32::from_le_bytes(w[o * cols + j])));
         }
     }
-    out.extend(w[whole * cols..rows * cols].iter().map(|b| f32::from_le_bytes(*b)));
+    for o in whole..rows {
+        out.extend(order.iter().map(|&j| f32::from_le_bytes(w[o * cols + j])));
+    }
 }
 
 /// Every matrix of `columns`, row-major, in its order.
@@ -507,11 +525,15 @@ fn rows_of(c: &[f32], rows: usize, cols: usize, out: &mut Vec<f32>) {
     for o0 in (0..whole).step_by(BLOCK) {
         for j in 0..cols {
             for k in 0..BLOCK {
-                w[(o0 + k) * cols + j] = c[o0 * cols + j * BLOCK + k];
+                w[(o0 + k) * cols + j] = c[o0 * cols + slot(j, cols) * BLOCK + k];
             }
         }
     }
-    w[whole * cols..].copy_from_slice(&c[whole * cols..rows * cols]);
+    for o in whole..rows {
+        for j in 0..cols {
+            w[o * cols + j] = c[o * cols + slot(j, cols)];
+        }
+    }
 }
 
 fn relu(x: &mut [f32]) {
