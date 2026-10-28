@@ -1430,6 +1430,24 @@ memory natively. Kept and rejected changes, with figures and method: `PERF-2026-
   and the new player took 0.815 of the old one's time (p95 3 038 → 2 389 ms, p99 6 021 →
   4 787 ms).
 
+## G2 onward: a milestone every 20 generations, patience 3 (10-28)
+
+- **Why.** At a milestone every 10 generations, the anchors' 4 000 games were 29% of
+  `eighteenth`'s cycle (11 of 37 minutes). The user asked for less measuring and more training.
+  Dropping anchors was set aside: three anchors instead of five save about 13% and widen each
+  rating by about 1.2×, just when the gains between milestones are a few Elo. Spacing the
+  milestones keeps every rating as precise and halves the matches' share, to about 17%: about
+  17% more generations an hour.
+- **The rule that goes with it.** Patience counts milestones. So at every 20 the patience is 3,
+  waiting 60 generations against today's 50. In generations it is the more patient rule
+  ([Z11-102]'s table): within 200 generations it stops a level run 0.95 of the time, against
+  0.99, and a climb of 2 Elo every 10 generations 0.30, against 0.49.
+- **Built:** `train init --milestone-every <n>` and `stop-simulation --every <n>` ([Z11-102]),
+  with three mutations seen red.
+- **The plan changes from G2 on:** G2, G3 and G4 (and G5, if run) are started with
+  `--milestone-every 20 --patience 3`. Each child inherits both, so G2 sets them and the rest
+  keep them. G1b keeps its milestone every 10 and patience 5, as it started.
+
 ## Next
 
 - **The boundary into the final round** is where the value limits play: fixing it is worth up to

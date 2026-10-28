@@ -87,6 +87,11 @@ async function main(): Promise<void> {
         if (patience !== undefined && !/^[1-9]\d*$/.test(patience)) {
           throw new Error(`--patience takes a whole number from 1, not ${patience}`);
         }
+        // [Z11-102]: the generations between milestones, likewise as typed.
+        const every = option(rest, 'milestone-every');
+        if (every !== undefined && !/^[1-9]\d*$/.test(every)) {
+          throw new Error(`--milestone-every takes a whole number from 1, not ${every}`);
+        }
         return initRun(
           option(rest, 'run') ?? '',
           from === undefined ? undefined : parseFrom(from),
@@ -95,6 +100,7 @@ async function main(): Promise<void> {
           gate,
           yardstick,
           patience === undefined ? undefined : Number(patience),
+          every === undefined ? undefined : Number(every),
         );
       }
       {
@@ -196,7 +202,7 @@ async function main(): Promise<void> {
       process.stdout.write(`${poolTable(Number(option(rest, 'runs') ?? 20000), Number(poolGames))}\n\n`);
       // [Z11-90]: the anchors' own count and the patience new runs take.
       const anchorGames = anchorsExist() ? readAnchors().gamesPerMember : 800;
-      process.stdout.write(`${patienceTable(Number(option(rest, 'runs') ?? 20000), anchorGames, Number(option(rest, 'patience') ?? STOP_PATIENCE))}\n\n`);
+      process.stdout.write(`${patienceTable(Number(option(rest, 'runs') ?? 20000), anchorGames, Number(option(rest, 'patience') ?? STOP_PATIENCE), Number(option(rest, 'every') ?? 10))}\n\n`);
       // [0012 T12-34]: the ship match, 4 000 matches a row.
       process.stdout.write(`${shipTable(Number(option(rest, 'ship-runs') ?? 4000))}\n`);
       return;
@@ -229,8 +235,8 @@ async function main(): Promise<void> {
       return seriesWorker();
     default:
       throw new Error(
-        'usage: train init --run <name> [--from <run>:<generation>] [--augment none|displays] [--set <setting>=<n>]… [--gate end|off] [--yardstick ladder|pool|anchors] [--patience <n>] | train --run <name> [--override "<reason>"] | latency --run <name> | ' +
-          'throughput --run <name> | milestone <checkpoint> | panel <checkpoint> [--against <checkpoint>] | gate <checkpoint> | stop-simulation | latency-corpus | ' +
+        'usage: train init --run <name> [--from <run>:<generation>] [--augment none|displays] [--set <setting>=<n>]… [--gate end|off] [--yardstick ladder|pool|anchors] [--patience <n>] [--milestone-every <n>] | train --run <name> [--override "<reason>"] | latency --run <name> | ' +
+          'throughput --run <name> | milestone <checkpoint> | panel <checkpoint> [--against <checkpoint>] | gate <checkpoint> | stop-simulation [--patience <n>] [--every <n>] | latency-corpus | ' +
           'augment-fixtures | pool init --members <run>:<g>,… --games <n> | anchors init|add|rate … | ship <checkpoint> | ship pin <run>:<g> --reason "…" | ' +
           'past-deal fit|match <checkpoint> | past-deal drop <run>:<g> --reason "…" | climb <checkpoint> --to <n> --latency <file> | perf-match <old-binary> [--seeds <n>] [--simulations <n>]',
       );

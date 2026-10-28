@@ -201,6 +201,17 @@ function patienceFor(
 }
 
 /**
+ * [Z11-102]: the milestone spacing a run is asked for, else the parent's.
+ * Like the patience a measurement setting, so not in `from.changes`; a whole
+ * number from 1, or the loop would never reach a multiple of it.
+ */
+function spacingFor(inherited: number, asked: number | undefined): { milestoneEvery: number } {
+  if (asked === undefined) return { milestoneEvery: inherited };
+  if (!Number.isInteger(asked) || asked < 1) throw new Error(`milestoneEvery must be a whole number from 1, not ${String(asked)}`);
+  return { milestoneEvery: asked };
+}
+
+/**
  * [Z11-66]'s config: the parent's, with a fresh seed, its own `augment`, the
  * changes asked for, and `from` recording the parent and what differs from it.
  */
@@ -213,6 +224,7 @@ export function childConfig(
   gate?: GateSetting,
   yardstick?: 'ladder' | 'pool' | 'anchors',
   patience?: number,
+  every?: number,
 ): RunConfig {
   const {
     from: _grandparent,
@@ -245,6 +257,7 @@ export function childConfig(
     // [Z11-90]: a run on the anchors decides by patience, inherited or new;
     // any run by the patience `--patience` asks for.
     ...patienceFor(yardstick ?? parentYardstick, parentPatience, patience),
+    ...spacingFor(inherited.milestoneEvery, every),
     from: { ...origin, changes },
   };
 }
@@ -255,13 +268,16 @@ export function freshConfig(
   gate?: GateSetting,
   yardstick?: 'ladder' | 'pool' | 'anchors',
   patience?: number,
+  every?: number,
 ): RunConfig {
+  const start = startingConfig();
   return {
-    ...startingConfig(),
+    ...start,
     ...(augment === undefined ? {} : { augment }),
     ...(gate === undefined ? {} : { gate }),
     ...(yardstick === undefined ? {} : { yardstick }),
     ...patienceFor(yardstick, undefined, patience),
+    ...spacingFor(start.milestoneEvery, every),
   };
 }
 
@@ -279,13 +295,14 @@ export function initRun(
   gate?: GateSetting,
   yardstick?: 'ladder' | 'pool' | 'anchors',
   patience?: number,
+  every?: number,
 ): void {
   checkRunName(name);
   const p = runPaths(name);
   if (existsSync(p.dir)) throw new Error(`${p.dir} already exists`);
   if (from === undefined && Object.keys(set).length > 0) throw new Error('--set goes with --from');
   if (from === undefined) {
-    const config = freshConfig(augment, gate, yardstick, patience);
+    const config = freshConfig(augment, gate, yardstick, patience, every);
     mkdirSync(p.dir, { recursive: true });
     writeJson(p.config, config);
     trainer(['init', '--run-dir', p.dir]);
@@ -324,6 +341,7 @@ export function initRun(
     gate,
     yardstick,
     patience,
+    every,
   );
   mkdirSync(p.dir, { recursive: true });
   writeJson(p.config, config);

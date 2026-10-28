@@ -1325,6 +1325,34 @@ the progress they make against the weaker rungs; once those saturate, the sum mo
   the ladder for `seventeenth` (10-26), a run from random weights that the anchors cannot yet
   rate.*
 
+- **[Z11-102]** `train init --milestone-every <n>` MUST write `n` as the run's `milestoneEvery`,
+  on a fresh run or over a parent's, and MUST refuse anything but a whole number from 1 before the
+  run exists. Without it, a run started from another inherits its parent's. Like `stopPatience`
+  it is a measurement setting, not a change in `from.changes`: it moves when milestones are
+  measured, not how the run trains. `stop-simulation --every <n>` MUST print [Z11-90]'s table for
+  a milestone every `n` generations, its climbs and horizons counted in generations; at 10 it is
+  [Z11-90]'s table as it stands.
+
+  *Asked for on 10-28, so a run on the anchors spends less of its time measuring: at a milestone
+  every 10 generations the anchors' 4 000 games were 29% of `eighteenth`'s cycle. Doubling the
+  spacing halves that, and patience 3 then waits 60 generations to patience 5's 50. In
+  generations it is the more patient rule, as `pnpm -F alphazero-bot stop-simulation --patience 3
+  --every 20` prints it, 20 000 runs a row:*
+
+  | rating per milestone (σ ≈ 7.1 Elo, 800 games an anchor), patience 3, a milestone every 20 generations | P(`stop`) within 100 / 200 / 400 generations |
+  | --- | --- |
+  | flat | 0.45 / 0.95 / 1.00 |
+  | climbs 2 Elo every 10 generations | 0.09 / 0.30 / 0.60 |
+  | climbs 3 Elo every 10 generations | 0.03 / 0.09 / 0.21 |
+  | climbs 5 Elo every 10 generations | 0.00 / 0.00 / 0.01 |
+  | climbs 10 Elo every 10 generations | 0.00 / 0.00 / 0.00 |
+  | climbs 20 Elo every 10 generations | 0.00 / 0.00 / 0.00 |
+
+  *Against [Z11-90]'s patience 5 every 10, it stops a level run a little later (0.95 within 200
+  generations, to 0.99) and a 2 Elo climb less often (0.30, to 0.49). Patience 2 stops that climb
+  0.75 of the time; patience 4 waits 80 generations. The person chose 3, from G2 of the Gumbel
+  lineage.*
+
 - **[Z11-73]** A run's config MAY set `yardstick` to `pool`; absent means `ladder`, the yardstick of
   [Z11-31]. A run started from another inherits its parent's unless `train init` is given
   `--yardstick ladder|pool|anchors` ([Z11-66]). The **pool** is three champions, each a committed milestone
@@ -1765,7 +1793,7 @@ not required: [Z11-25] makes the file the record, and a later run MAY change any
 | `stepsPerGeneration`, `batch` | 1000, 512 | draw ratio about 0.68, reuse about 14; run `first` measured 0.91 and 18 |
 | `boundaryWeight` | 1 | boundary samples are about 7% of the data |
 | `optimiser`, `momentum`, `learningRate`, `weightDecay` | `"sgd"`, 0.9, 0.02, 1e-4 | |
-| `milestoneEvery` | 10 generations | |
+| `milestoneEvery` | 10 generations | [Z11-102]: `train init --milestone-every` |
 | `threads`, `torchThreads` | 8, 4 | self-play's threads, and the trainer's |
 | `maxGenerationMinutes` | 30 | [Z11-53] |
 
@@ -2008,6 +2036,7 @@ this package, and MUST be corrected in the same change.
 | The refusal of the Gumbel keys dropped from `train init` | [Z11-89]'s `--set` case |
 | The best not reset at a fresh start; equalling the best counted as beating it; the patience off by one; its range check dropped | [Z11-90]'s cases |
 | `train init` ignoring the parent's patience | [Z11-90]'s `train init` case |
+| `train init` ignoring the asked spacing; the spacing dropped from a child's config; `stop-simulation` ignoring `--every` | [Z11-102]'s case |
 | The refusal of the improved keys dropped from `train init` | [Z11-87]'s `--set` case |
 | The target normalised by the legal count instead of its sum | [Z11-87]'s trainer case |
 

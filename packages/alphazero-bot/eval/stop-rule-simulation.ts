@@ -195,16 +195,27 @@ export function simulatePool(
  * pool's model's. P(`stop`) within 10, 20 and 40 milestones, flat and
  * climbing. None stops sooner than `patience + 1` milestones: the first is a
  * fresh start, and so the first best.
+ *
+ * With a milestone every `every` generations ([Z11-102]) other than 10, the
+ * same climbs and horizons are counted in generations: a climb of `step` Elo
+ * every 10 generations is `step · every / 10` a milestone, and 100, 200 and
+ * 400 generations are `1000 / every` milestones and so on. At 10 it prints
+ * [Z11-90]'s table as it stands.
  */
-export function patienceTable(runs: number, gamesPerMember: number, patience: number): string {
+export function patienceTable(runs: number, gamesPerMember: number, patience: number, every = 10): string {
   const se = simulatePool(0, 1, gamesPerMember, 1).se;
+  const tens = every === 10;
   const lines = [
-    `| rating per milestone (σ ≈ ${se.toFixed(1)} Elo, ${gamesPerMember} games an anchor), patience ${patience} | P(\`stop\`) within 10 / 20 / 40 milestones |`,
+    tens
+      ? `| rating per milestone (σ ≈ ${se.toFixed(1)} Elo, ${gamesPerMember} games an anchor), patience ${patience} | P(\`stop\`) within 10 / 20 / 40 milestones |`
+      : `| rating per milestone (σ ≈ ${se.toFixed(1)} Elo, ${gamesPerMember} games an anchor), patience ${patience}, a milestone every ${every} generations | P(\`stop\`) within 100 / 200 / 400 generations |`,
     '| --- | --- |',
   ];
   for (const step of [0, 2, 3, 5, 10, 20]) {
-    const at = (n: number): string => simulatePool(step, n, gamesPerMember, runs, 20261026, patience).stop.toFixed(2);
-    lines.push(`| ${step === 0 ? 'flat' : `climbs ${step} Elo`} | ${at(10)} / ${at(20)} / ${at(40)} |`);
+    const at = (n: number): string =>
+      simulatePool((step * every) / 10, Math.floor((n * 10) / every), gamesPerMember, runs, 20261026, patience).stop.toFixed(2);
+    const label = step === 0 ? 'flat' : tens ? `climbs ${step} Elo` : `climbs ${step} Elo every 10 generations`;
+    lines.push(`| ${label} | ${at(10)} / ${at(20)} / ${at(40)} |`);
   }
   return lines.join('\n');
 }

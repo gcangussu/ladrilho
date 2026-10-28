@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { DISPLAYS_FIXTURE, LAYOUT, displayFixture, displayLayout, permuteDisplays } from '../eval/augment.js';
 import { startingConfig } from '../eval/config.js';
 import { STOP_PATIENCE, childConfig, freshConfig, parseFrom, parseSet } from '../eval/loop.js';
+import { patienceTable } from '../eval/stop-rule-simulation.js';
 
 describe('display permutation [Z11-65]', () => {
   it("keeps train/layout.json and the trainer's fixture what the engine says", () => {
@@ -180,6 +181,35 @@ describe('a run started from another [Z11-66]', () => {
     expect('stopPatience' in freshConfig(undefined, undefined, 'ladder')).toBe(false);
     expect(freshConfig(undefined, undefined, 'ladder', 4).stopPatience).toBe(4);
     expect(freshConfig(undefined, undefined, 'anchors', 9).stopPatience).toBe(9);
+  });
+
+  /**
+   * [Z11-102]: the asked spacing is written on a fresh run and over a
+   * parent's, outside `from.changes`; without it a child keeps its parent's;
+   * anything but a whole number from 1 is refused; and the simulation's
+   * table at a spacing. Mutations, seen red: `spacingFor` ignoring the asked
+   * spacing; `childConfig` passing none; `patienceTable` ignoring `every`.
+   */
+  it('writes the asked milestone spacing, else the parent\'s', () => {
+    const c = childConfig(parent, origin, 42, undefined, { learningRate: 0.002 }, undefined, 'anchors', 3, 20);
+    expect(c.milestoneEvery).toBe(20);
+    expect(c.stopPatience).toBe(3);
+    expect(c.from?.changes).toEqual({ learningRate: { parent: parent.learningRate, run: 0.002 } });
+    expect(childConfig({ ...parent, milestoneEvery: 20 }, origin, 42, undefined).milestoneEvery).toBe(20);
+    expect(childConfig({ ...parent, milestoneEvery: 20 }, origin, 42, undefined, {}, undefined, undefined, undefined, 30).milestoneEvery).toBe(30);
+    expect(freshConfig(undefined, undefined, 'ladder', undefined, 20).milestoneEvery).toBe(20);
+    expect(freshConfig().milestoneEvery).toBe(10);
+    for (const bad of [0, -1, 2.5, Number.NaN]) {
+      expect(() => childConfig(parent, origin, 42, undefined, {}, undefined, undefined, undefined, bad)).toThrow(/whole number/);
+      expect(() => freshConfig(undefined, undefined, undefined, undefined, bad)).toThrow(/whole number/);
+    }
+    // `stop-simulation --every`: at 10 the table as it stands; at 20 its
+    // horizons and climbs in generations, so different rows.
+    expect(patienceTable(200, 800, 3, 10)).toBe(patienceTable(200, 800, 3));
+    const twenty = patienceTable(200, 800, 3, 20).split('\n');
+    expect(twenty[0]).toMatch(/every 20 generations .* within 100 \/ 200 \/ 400 generations/);
+    const numbers = (rows: string[]): string[] => rows.slice(2).map((r) => r.split('|')[2]);
+    expect(numbers(twenty)).not.toEqual(numbers(patienceTable(200, 800, 3).split('\n')));
   });
 
   /**
