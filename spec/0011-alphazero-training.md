@@ -766,8 +766,10 @@ The binary's commands, each loading one checkpoint and one run's settings:
   concurrently. A checkpoint and config named by any session are loaded and parity checked once,
   by the first session to name them, and every later session reads that copy. A session whose
   arguments or stream `serve` would refuse is answered with the word `0xFFFFFFFF` and the reason,
-  in place of the answer it could not give, and the connection closed; the host and its other
-  sessions go on. A series ([Z11-31]) starts one host per binary its trained players name, makes
+  in place of the answer it could not give, and the host's side of the connection shut down; it
+  then reads and drops what the session sends until the client ends its side, and only then
+  closes, so a move the client wrote before the refusal reached it neither fails nor costs the
+  client the reason. The host and its other sessions go on. A series ([Z11-31]) starts one host per binary its trained players name, makes
   every trained player's `serve` a session of it, and ends it when the series ends; the answers
   are those of a `serve` process of its own, so no result depends on it.
 

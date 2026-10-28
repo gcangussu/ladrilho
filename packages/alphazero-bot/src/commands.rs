@@ -3,6 +3,7 @@
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
+use std::net::Shutdown;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -388,6 +389,15 @@ fn host(socket: &Path) -> Result<(), String> {
             if let Err(why) = hosted(&loads, &stream) {
                 let mut out = &stream;
                 let _ = out.write_all(&REFUSED.to_le_bytes()).and_then(|()| out.write_all(why.as_bytes()));
+                // Only our side ends here. A client may already have written
+                // its first move behind its arguments; were the connection
+                // closed under it, that write would fail, and a client that
+                // gives up on a failed write (Node destroys the socket on
+                // EPIPE) never reads the refusal waiting in its buffer. So
+                // the session reads, and drops, whatever the client sends
+                // until it ends its side, as it does once it reads ours.
+                let _ = stream.shutdown(Shutdown::Write);
+                let _ = std::io::copy(&mut &stream, &mut std::io::sink());
             }
         });
         if let Err(e) = spawned {

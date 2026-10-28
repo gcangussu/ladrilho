@@ -8,6 +8,7 @@
  */
 
 import { mkdtempSync, writeFileSync } from 'node:fs';
+import { createConnection } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { apply, clone, fromJSON, newGame, toCanonical, toJSON } from 'engine';
@@ -148,6 +149,42 @@ describe('the adapter [Z11-31]', () => {
       const served = alphazeroChooser({ ...player, search: 'play', host: host.socket });
       expect(served(position).nodes).toBe(32);
       served.close();
+    } finally {
+      await host.close();
+    }
+  });
+
+  // The chooser writes its first move behind its arguments, so the move can
+  // reach a host that has already refused: on a busy machine the previous
+  // test lost the reason to `write EPIPE` that way. Here the move is written
+  // after the host has refused, every time, by holding the event loop until
+  // it has. Mutation, seen red ([Z11-48]), in a copy with its anchor
+  // confirmed: in `host` of `src/commands.rs`, the refused session closed
+  // without reading the client's side to its end (the `shutdown` and `copy`
+  // removed), which fails here with `write EPIPE`.
+  it('delivers a refusal to a client whose first move reaches the host after it [Z11-100]', async () => {
+    const host = await startHost(player.binary);
+    try {
+      const outcome = await new Promise<{ received: Buffer; error: string | null }>((resolve) => {
+        const socket = createConnection(host.socket);
+        let received = Buffer.alloc(0);
+        let error: string | null = null;
+        socket.on('data', (d: Buffer) => { received = Buffer.concat([received, d]); });
+        socket.on('error', (e) => { error ??= e.message; });
+        socket.on('close', () => resolve({ received, error }));
+        const args = ['serve', join(tmpdir(), 'no-such-checkpoint.bin'), '--config', player.config, '--search', 'play'];
+        socket.write(JSON.stringify(args) + '\n');
+        socket.once('connect', () => {
+          // Long enough for the host to read the arguments, fail to load and
+          // answer; nothing it sends is read meanwhile.
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
+          socket.write(frame(canonicalWords(toCanonical(newGame(5)))));
+        });
+      });
+      expect(outcome.error).toBeNull();
+      expect(outcome.received.length).toBeGreaterThan(4);
+      expect(outcome.received.readUInt32LE(0)).toBe(0xffffffff);
+      expect(outcome.received.subarray(4).toString()).toMatch(/no-such-checkpoint/);
     } finally {
       await host.close();
     }
