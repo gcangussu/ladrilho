@@ -369,10 +369,18 @@ fn linear_x4_rows(w: &[f32], b: &[f32], x: [&[f32]; BATCH], out: [&mut [f32]; BA
     }
 }
 
-/// Outputs per block of the column form: their accumulators fill eight of the
-/// sixteen 128-bit registers wasm has, two of AVX2's. Sixteen measured slower
-/// in V8, from more passes over the input list; sixty-four, from spills.
+/// Outputs per block of the column form. In wasm their accumulators fill
+/// eight of the sixteen 128-bit registers it has: sixteen outputs measured
+/// slower in V8, from more passes over the input list; sixty-four, from
+/// spills. Natively, with AVX2's 256-bit registers, sixty-four fill eight of
+/// sixteen and measured 10% faster than thirty-two (a hundred and twenty-eight,
+/// 6%): the pass waits on its weights there, and longer runs of them read
+/// forward. The layout is built for the target's own, so either gives the
+/// same bits.
+#[cfg(target_arch = "wasm32")]
 const BLOCK: usize = 32;
+#[cfg(not(target_arch = "wasm32"))]
+const BLOCK: usize = 64;
 
 /// Where input `j` of `cols` sits in a block of `columns_of`: the whole
 /// chunks' inputs lane by lane (lane `l`'s, `j = l, l + 16, …`, in ascending
