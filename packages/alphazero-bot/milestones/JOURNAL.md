@@ -1411,8 +1411,20 @@ before (all 1 978 corpus positions at 10 000, both builds). The browser module i
 default 100 000 and 20% at 10 000; the first move of a game no longer runs in V8's baseline code. Native
 moves are 20–25% faster. Memory is 27–28% lower on the heaviest position (browser 70 → 50 MB at
 200 000). The forward pass is now at V8's arithmetic floor (no FMA, by [Z11-10]) and bound by
-memory natively. Kept and rejected changes, with figures and method: `PERF-2026-10-28.md`. The
-lane of [0012 T12-25] was not rerun: the machine was never idle.
+memory natively. Kept and rejected changes, with figures and method: `PERF-2026-10-28.md`.
+
+- **The match lanes now share their weights** ([0011 Z11-100]). A series starts one `alphazero
+  host`, and every trained player of every game is a session of it, on its own thread, reading the
+  one copy of each checkpoint. Anchors, ship, pool, milestones and the gate play **2.0× as many
+  games an hour at the anchors' 200 simulations and 2.45× at 2 000**, with 8 workers, every game
+  identical. The chooser file is in the ladder hash ([Z11-63]), so once this is merged
+  `eighteenth`'s next milestone starts afresh, though nothing it plays changes.
+- **The latency lane, rerun on the idle machine**, keeps the default's budgets, with memory down
+  a quarter to a third. It cannot show the speed: its second pass ran the same moves up to 19%
+  faster than its first, because the run began just after the training load stopped. At `quick`, two runs each broke the 1 s bound
+  with one move in their first pass, on different positions, and those positions take 0.5–0.8 s
+  in every other pass. The clean passes are inside it, but its worst move is within a fifth of
+  the bound.
 
 ## Next
 
