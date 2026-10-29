@@ -42,6 +42,20 @@ export function choose(sheet: HTMLElement, value: string): void {
   flush();
 }
 
+/** The master's configurations for the seat being edited, `Custom` last. */
+export function presets(sheet: HTMLElement): HTMLInputElement[] {
+  const group = within(sheet).getByRole('group', { name: /^How hard Player \d thinks$/ });
+  return within(group).getAllByRole('radio') as HTMLInputElement[];
+}
+
+/** Choose `Custom` for the seat being edited, which shows the slider and the number. */
+export function chooseCustom(sheet: HTMLElement): void {
+  const radio = presets(sheet).find((r) => r.value === 'Custom');
+  if (!radio) throw new Error('the sheet offers no Custom');
+  radio.click();
+  flush();
+}
+
 /** Commit a value into an input the way a player does: type, then leave it. */
 export function commit(input: HTMLInputElement, value: string): void {
   input.value = value;

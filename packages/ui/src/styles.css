@@ -2668,6 +2668,16 @@ input {
   accent-color: var(--ink);
 }
 
+/* Under the slider, its two ends in words; not the row's uppercase heading. */
+.budget-row > .budget-ends {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
 .budget input[type='number'],
 .deal-number input {
   min-height: 44px;

@@ -77,9 +77,9 @@ const CHOICES: Readonly<Record<Level | 'human', { name: string; line: string }>>
 /** The offered choices, in [W6-1]'s order: a person, then each level. */
 const OFFERED: readonly (Level | 'human')[] = ['human', ...LEVELS];
 
-/** A seat's simulations input, by the name the seat is shown under [W6-45]. */
+/** A seat's number input, by the name the seat is shown under [W6-45]. */
 export function simulationsLabel(seat: 0 | 1): string {
-  return `Player ${seat + 1}: simulations per move`;
+  return `Player ${seat + 1}: exact setting`;
 }
 
 const RANGE = `${MASTER_SIMULATIONS.min.toLocaleString('en')} to ${MASTER_SIMULATIONS.max.toLocaleString('en')}`;
@@ -109,14 +109,22 @@ function nearestStop(value: number): number {
 }
 
 /**
- * Each configuration's line [W6-45], [0012 T12-37]: what it is for, never how
- * long it takes, since the times are promised on one laptop only (intent 0016).
+ * Each configuration's line [W6-45], [0012 T12-37]: what it is for, in plain
+ * words — never its count, and never how long it takes, since the times are
+ * promised on one laptop only (intent 0016). Deep thinks about twice as long as
+ * Balanced for a small gain, so neither line makes the gap sound larger.
  */
 const PRESET_LINES: Readonly<Record<(typeof MASTER_PRESETS)[number]['name'], string>> = {
-  Quick: 'Thinks least',
-  Balanced: 'The default: thinks as long as it pays',
-  Deep: 'Thinks longest, and was shown to play stronger',
+  Quick: 'Faster, a little weaker',
+  Balanced: 'Recommended',
+  Deep: 'Slower, a little stronger',
 };
+
+/** The slider's value in words [W6-45]: the count, and whether it is the recommended one. */
+function valueText(simulations: number): string {
+  const n = simulations.toLocaleString('en');
+  return simulations === MASTER_SIMULATIONS.default ? `${n} (recommended)` : n;
+}
 
 /** The configuration a count is, if it is one. */
 export function presetOf(simulations: number): (typeof MASTER_PRESETS)[number] | undefined {
@@ -135,6 +143,19 @@ export function NewGameSheet(props: {
   const [players, setPlayers] = createSignal<SeatingModel['players']>([...props.seating.players]);
   const [sims, setSims] = createSignal<SeatingModel['simulations']>([...props.seating.simulations]);
   const [editing, setEditing] = createSignal<0 | 1>(0);
+  /**
+   * Each seat's `Custom`, held once chosen — by its radio, the slider or the
+   * number — so landing on a configuration's count does not close the
+   * controls being used [W6-45].
+   */
+  const [customChosen, setCustomChosen] = createSignal<[boolean, boolean]>([false, false]);
+  /** A seat is custom when chosen so, or when its count is no configuration's. */
+  const custom = (seat: 0 | 1): boolean => customChosen()[seat] || presetOf(sims()[seat]) === undefined;
+  const chooseCustom = (seat: 0 | 1, on: boolean): void => {
+    const next: [boolean, boolean] = [...customChosen()];
+    next[seat] = on;
+    setCustomChosen(next);
+  };
   /** The deal-number field, read when Deal is pressed: what is in it then is what counts. */
   let dealField!: HTMLInputElement;
   /** Why the last entry was refused, or nothing [W6-45], [U3-104]. */
@@ -152,8 +173,10 @@ export function NewGameSheet(props: {
   const swap = (): void => {
     const [a, b] = players();
     const [x, y] = sims();
+    const [p, q] = customChosen();
     setPlayers([b, a]);
     setSims([y, x]);
+    setCustomChosen([q, p]);
     // The card being edited follows the player who moved, so what was on
     // screen — a master's setting, say — stays there rather than vanishing.
     setEditing(editing() === 0 ? 1 : 0);
@@ -174,10 +197,11 @@ export function NewGameSheet(props: {
     const n = Number(raw);
     if (!/^\d+$/.test(raw) || !validSimulations(n)) {
       input.value = String(sims()[seat]);
-      setRefusal(`${raw === '' ? 'An empty value' : raw} is not a number of simulations from ${RANGE}.`);
+      setRefusal(`Pick a whole number from ${RANGE}.`);
       return;
     }
     setRefusal('');
+    chooseCustom(seat, true);
     stage(seat, n);
   };
 
@@ -274,60 +298,81 @@ export function NewGameSheet(props: {
             <Show when={players()[editing()] === 'master'}>
               <div class="budget">
                 <fieldset class="choices presets">
-                  <legend>{`Player ${editing() + 1} thinks`}</legend>
+                  <legend>{`How hard Player ${editing() + 1} thinks`}</legend>
                   <For each={MASTER_PRESETS}>
                     {(preset) => (
-                      <label class={['choice', { chosen: sims()[editing()] === preset.simulations }]}>
+                      <label
+                        class={['choice', { chosen: !custom(editing()) && sims()[editing()] === preset.simulations }]}
+                      >
                         <input
                           type="radio"
                           name="master-preset"
                           value={preset.name}
-                          checked={sims()[editing()] === preset.simulations}
+                          checked={!custom(editing()) && sims()[editing()] === preset.simulations}
                           onChange={() => {
                             setRefusal('');
+                            chooseCustom(editing(), false);
                             stage(editing(), preset.simulations);
                           }}
                         />
                         <span class="choice-text">
                           <span class="choice-name">{preset.name}</span>
-                          <span class="choice-line">
-                            {`${PRESET_LINES[preset.name]} · ${preset.simulations.toLocaleString('en')} simulations`}
-                          </span>
+                          <span class="choice-line">{PRESET_LINES[preset.name]}</span>
                         </span>
                       </label>
                     )}
                   </For>
+                  <label class={['choice', { chosen: custom(editing()) }]}>
+                    <input
+                      type="radio"
+                      name="master-preset"
+                      value="Custom"
+                      checked={custom(editing())}
+                      onChange={() => chooseCustom(editing(), true)}
+                    />
+                    <span class="choice-text">
+                      <span class="choice-name">Custom</span>
+                      <span class="choice-line">Set it yourself</span>
+                    </span>
+                  </label>
                 </fieldset>
-                <label class="budget-row">
-                  <span>Thinking time</span>
-                  <input
-                    type="range"
-                    min="0"
-                    max={STOPS.length - 1}
-                    step="1"
-                    value={nearestStop(sims()[editing()])}
-                    aria-valuetext={`${sims()[editing()].toLocaleString('en')} simulations`}
-                    onInput={(event) => {
-                      setRefusal('');
-                      stage(editing(), STOPS[Number(event.currentTarget.value)]);
-                    }}
-                  />
-                </label>
-                <label class="budget-row">
-                  <span>{simulationsLabel(editing())}</span>
-                  <input
-                    type="number"
-                    inputmode="numeric"
-                    min={MASTER_SIMULATIONS.min}
-                    max={MASTER_SIMULATIONS.max}
-                    step="1"
-                    value={sims()[editing()]}
-                    onChange={(event) => commitNumber(editing(), event.currentTarget)}
-                  />
-                </label>
-                <p class="sheet-note">
-                  {`Or a number of your own: more simulations play stronger and slower. Default ${MASTER_SIMULATIONS.default.toLocaleString('en')}; from ${RANGE}.`}
-                </p>
+                <Show when={custom(editing())}>
+                  <label class="budget-row">
+                    <span>Thinking</span>
+                    <input
+                      type="range"
+                      min="0"
+                      max={STOPS.length - 1}
+                      step="1"
+                      value={nearestStop(sims()[editing()])}
+                      aria-valuetext={valueText(sims()[editing()])}
+                      onInput={(event) => {
+                        setRefusal('');
+                        chooseCustom(editing(), true);
+                        stage(editing(), STOPS[Number(event.currentTarget.value)]);
+                      }}
+                    />
+                    <span class="budget-ends" aria-hidden="true">
+                      <span>Lighter</span>
+                      <span>Deeper</span>
+                    </span>
+                  </label>
+                  <label class="budget-row">
+                    <span>{simulationsLabel(editing())}</span>
+                    <input
+                      type="number"
+                      inputmode="numeric"
+                      min={MASTER_SIMULATIONS.min}
+                      max={MASTER_SIMULATIONS.max}
+                      step="1"
+                      value={sims()[editing()]}
+                      onChange={(event) => commitNumber(editing(), event.currentTarget)}
+                    />
+                  </label>
+                  <p class="sheet-note">
+                    {`Higher plays a little stronger and a little slower. Recommended: ${MASTER_SIMULATIONS.default.toLocaleString('en')}.`}
+                  </p>
+                </Show>
               </div>
             </Show>
 

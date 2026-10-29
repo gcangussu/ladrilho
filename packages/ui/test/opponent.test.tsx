@@ -30,7 +30,7 @@ import { floorLineName } from '../src/components/FloorLine.jsx';
 import { patternLineName } from '../src/components/PatternLines.jsx';
 import { createMasterSeat } from '../src/masters.js';
 import { simulationsLabel } from '../src/components/Seating.jsx';
-import { choiceNames, choices, commit, deal, editSeat, openSheet } from './sheet-helpers.js';
+import { chooseCustom, choiceNames, choices, commit, deal, editSeat, openSheet, presets } from './sheet-helpers.js';
 import { holdsInvariants } from './estimate-helpers.js';
 import { holdsRecordInvariants } from './record-helpers.js';
 import {
@@ -993,12 +993,15 @@ describe("the master's setting in the sheet [W6-45]", () => {
     editSeat(sheet, 0);
     expect(spinbuttons(sheet)).toEqual([]);
     editSeat(sheet, 1);
+    // At a configuration's count, the number waits behind Custom.
+    expect(spinbuttons(sheet)).toEqual([]);
+    chooseCustom(sheet);
     const inputs = spinbuttons(sheet);
     expect(inputs).toHaveLength(1);
     expect(within(sheet).getByLabelText(simulationsLabel(1))).toBe(inputs[0]);
     expect([inputs[0].value, inputs[0].min, inputs[0].max]).toEqual(['100000', '100', '200000']);
-    expect(within(sheet).getByRole('slider')).toHaveAttribute('aria-valuetext', '100,000 simulations');
-    expect(sheet.textContent).toContain('Default 100,000; from 100 to 200,000.');
+    expect(within(sheet).getByRole('slider')).toHaveAttribute('aria-valuetext', '100,000 (recommended)');
+    expect(sheet.textContent).toContain('Higher plays a little stronger and a little slower. Recommended: 100,000.');
   });
 
   // Seen red, on a copy, with the refusal branch's `return` deleted: the
@@ -1008,6 +1011,7 @@ describe("the master's setting in the sheet [W6-45]", () => {
       const { screen, state } = await mount('?seed=42&seating=master-master&p2Simulations=700');
       const sheet = openSheet(screen);
       editSeat(sheet, 0);
+      chooseCustom(sheet);
       const [first] = spinbuttons(sheet);
       expect(first).toBe(within(sheet).getByLabelText(simulationsLabel(0)));
 
@@ -1020,7 +1024,7 @@ describe("the master's setting in the sheet [W6-45]", () => {
       for (const bad of ['50', '200001', '12.5', '']) {
         commit(spinbuttons(sheet)[0], bad);
         expect(spinbuttons(sheet)[0].value, bad).toBe('2500');
-        expect(within(sheet).getByRole('status').textContent, bad).toContain('100 to 200,000');
+        expect(within(sheet).getByRole('status').textContent, bad).toBe('Pick a whole number from 100 to 200,000.');
       }
       expect(state.view().seed).toBe(before);
 
@@ -1039,23 +1043,25 @@ describe("the master's setting in the sheet [W6-45]", () => {
     const { screen, state } = await mount('?seed=42&seating=master-master&p1Simulations=700');
     const sheet = openSheet(screen);
     editSeat(sheet, 1);
-    const group = within(sheet).getByRole('group', { name: 'Player 2 thinks' });
-    const presets = within(group).getAllByRole('radio') as HTMLInputElement[];
-    expect(presets.map((r) => r.value)).toEqual(MASTER_PRESETS.map((p) => p.name));
-    expect(presets.find((r) => r.checked)?.value).toBe('Balanced');
-    presets[0].click();
+    const group = within(sheet).getByRole('group', { name: 'How hard Player 2 thinks' });
+    const radios = within(group).getAllByRole('radio') as HTMLInputElement[];
+    expect(radios.map((r) => r.value)).toEqual([...MASTER_PRESETS.map((p) => p.name), 'Custom']);
+    expect(radios.find((r) => r.checked)?.value).toBe('Balanced');
+    radios[0].click();
     flush();
+    expect(radios.find((r) => r.checked)?.value).toBe('Quick');
+    chooseCustom(sheet);
     expect(spinbuttons(sheet)[0].value).toBe(String(MASTER_SIMULATIONS.quick));
-    expect(presets.find((r) => r.checked)?.value).toBe('Quick');
-    // A number of one's own is no configuration: none is checked.
+    // A number of one's own is no configuration: only Custom is checked.
     commit(spinbuttons(sheet)[0], '2600');
-    expect(presets.some((r) => r.checked)).toBe(false);
+    expect(radios.filter((r) => r.checked).map((r) => r.value)).toEqual(['Custom']);
     // A refusal's line goes when a configuration is chosen.
     commit(spinbuttons(sheet)[0], '50');
     expect(within(sheet).getByRole('status').textContent).toContain('100 to 200,000');
-    presets[0].click();
+    radios[0].click();
     flush();
     expect(within(sheet).getByRole('status').textContent).toBe('');
+    chooseCustom(sheet);
     // Every configuration is a stop of the slider, which reaches the default
     // exactly: a count the climb names off the 1-2-5 ladder fails here.
     const slider = within(sheet).getByRole('slider') as HTMLInputElement;
@@ -1066,11 +1072,49 @@ describe("the master's setting in the sheet [W6-45]", () => {
       stops.push(Number(spinbuttons(sheet)[0].value));
     }
     for (const p of MASTER_PRESETS) expect(stops, p.name).toContain(p.simulations);
-    presets[0].click();
+    radios[0].click();
     flush();
     deal(sheet);
     expect(state.view().seating.simulations).toEqual([700, MASTER_SIMULATIONS.quick]);
     expect(simulationsToUrl(state.view().seating)).toEqual({ p1Simulations: '700', p2Simulations: String(MASTER_SIMULATIONS.quick) });
+  });
+
+  // The wording names no count, and Custom holds its controls open. Each seen
+  // red, on a copy with its anchor confirmed: a configuration's line ending
+  // in its count again; the slider's handler not choosing Custom (the
+  // controls vanished on landing at the default); the swap leaving each
+  // seat's Custom behind.
+  it('[W6-45] [W6-50] words the configurations without counts, and keeps Custom open while it is used', async () => {
+    // A count of one's own, so Custom is checked without being chosen.
+    const { screen } = await mount('?seed=42&seating=master-human&p1Simulations=50000');
+    const sheet = openSheet(screen);
+    const lines = presets(sheet).map((r) => r.closest('label')!.querySelector('.choice-line')!.textContent);
+    expect(lines).toEqual([
+      'Faster, a little weaker',
+      'Recommended',
+      ...(MASTER_PRESETS.some((p) => p.name === 'Deep') ? ['Slower, a little stronger'] : []),
+      'Set it yourself',
+    ]);
+    expect(sheet.textContent).not.toMatch(/simulation/i);
+
+    // Sliding onto the default's stop keeps Custom, and its controls.
+    expect(presets(sheet).filter((r) => r.checked).map((r) => r.value)).toEqual(['Custom']);
+    const slider = within(sheet).getByRole('slider') as HTMLInputElement;
+    fireEvent.input(slider, { target: { value: String(Number(slider.value) + 1) } });
+    flush();
+    expect(spinbuttons(sheet)[0].value).toBe(String(MASTER_SIMULATIONS.default));
+    expect(presets(sheet).filter((r) => r.checked).map((r) => r.value)).toEqual(['Custom']);
+    expect(within(sheet).queryByRole('slider')).not.toBeNull();
+
+    // The swap carries Custom with its seat; a configuration closes it.
+    within(sheet).getByRole('button', { name: 'Swap seats' }).click();
+    flush();
+    expect(presets(sheet).filter((r) => r.checked).map((r) => r.value)).toEqual(['Custom']);
+    presets(sheet)[1].click();
+    flush();
+    expect(presets(sheet).filter((r) => r.checked).map((r) => r.value)).toEqual(['Balanced']);
+    expect(within(sheet).queryByRole('slider')).toBeNull();
+    expect(spinbuttons(sheet)).toEqual([]);
   });
 });
 

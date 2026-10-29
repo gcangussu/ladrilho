@@ -9,7 +9,7 @@
 import { fireEvent, render, within } from '@solidjs/testing-library';
 import { flush } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { choiceNames, choices, choose, commit, deal, editSeat, openSheet } from './sheet-helpers.js';
+import { chooseCustom, choiceNames, choices, choose, commit, deal, editSeat, openSheet } from './sheet-helpers.js';
 
 type State = typeof import('../src/game.js');
 type Screen = ReturnType<typeof render>;
@@ -59,6 +59,7 @@ describe('the sheet [W6-49]', () => {
     let sheet = openSheet(screen);
     editSeat(sheet, 1);
     choose(sheet, 'master');
+    chooseCustom(sheet);
     commit(within(sheet).getByRole('spinbutton') as HTMLInputElement, '500');
     commit(within(sheet).getByLabelText('Deal number') as HTMLInputElement, '7');
     expect(state.view(), 'a staged choice reached the game').toBe(before);
@@ -103,6 +104,7 @@ describe('the sheet [W6-49]', () => {
     choose(sheet, 'easy');
     editSeat(sheet, 1);
     choose(sheet, 'master');
+    chooseCustom(sheet);
     commit(within(sheet).getByRole('spinbutton') as HTMLInputElement, '2500');
     commit(within(sheet).getByLabelText('Deal number') as HTMLInputElement, '12345');
     deal(sheet);
@@ -185,19 +187,20 @@ describe("the master's setting in the sheet [W6-45]", () => {
   it('[W6-45] [W6-53] moves the slider and the number together', async () => {
     const { screen } = await mount('?seed=42&seating=master-human');
     const sheet = openSheet(screen);
+    chooseCustom(sheet);
     const slider = within(sheet).getByRole('slider') as HTMLInputElement;
     const number = within(sheet).getByRole('spinbutton') as HTMLInputElement;
-    expect(slider).toHaveAttribute('aria-valuetext', '100,000 simulations');
+    expect(slider).toHaveAttribute('aria-valuetext', '100,000 (recommended)');
     expect(number.value).toBe('100000');
 
     // The slider's stops are a 1-2-5 ladder; one step up from the default.
     fireEvent.input(slider, { target: { value: String(Number(slider.value) + 1) } });
     flush();
     expect(number.value).toBe('200000');
-    expect(slider).toHaveAttribute('aria-valuetext', '200,000 simulations');
+    expect(slider).toHaveAttribute('aria-valuetext', '200,000');
 
     commit(number, '12345');
-    expect(slider).toHaveAttribute('aria-valuetext', '12,345 simulations');
+    expect(slider).toHaveAttribute('aria-valuetext', '12,345');
   });
 });
 

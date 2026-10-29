@@ -945,28 +945,40 @@ seat, and a worker that a game without it never builds.*
 - **[W6-45]** The master's setting MUST be offered inside the new-game sheet ([W6-49]), beside the
   seat it belongs to, and only while that seat is staged as `master`. *(It was a closed `Advanced`
   disclosure beside the seat selectors; [W6-49] moved both into the sheet.)*
-  - It is one range slider and one number input, both bound to the seat's staged setting, so
-    moving either moves the other. The slider is coarse and logarithmic — 100 at one end, 200 000
-    at the other, with the default reachable exactly — and states its value in words through
-    `aria-valuetext` ("10,000 simulations"). The number input sets any value in range exactly,
-    which is intent 0010's "set the number themselves"; it is labelled `Player 1: simulations
-    per move` or `Player 2: simulations per move`, with `min`, `max` and the staged value. One
-    line states the default and the range.
-  - *(Amended by intent 0016, [0012 T12-37].)* Before them, a group of radio buttons with the
-    legend `Player 1 thinks` or `Player 2 thinks` MUST offer `MASTER_PRESETS`, quickest first:
-    `Quick`, `Balanced` (the default) and, only when the climb named one, `Deep`. Each says what
-    it is for and its count — `Thinks least · 5,000 simulations` — and never a time. A radio is
-    checked exactly when the seat's staged setting is its count, so a number of one's own checks
-    none. Choosing one MUST stage its count as a valid value does, for that seat alone, and clear
-    the status line. The line under the number input begins `Or a number of your own:`.
+  - *(Amended by intent 0016, [0012 T12-37]; its wording since made plain, with no count and no
+    term of the search's own.)* A group of radio buttons with the legend `How hard Player 1 thinks`
+    or `How hard Player 2 thinks` MUST offer `MASTER_PRESETS`, quickest first — `Quick`,
+    `Balanced` (the default) and, only when the climb named one, `Deep` — and then `Custom`. Each
+    configuration's line says what it is for in words alone, never its count and never a time:
+    `Faster, a little weaker`, `Recommended`, `Slower, a little stronger`;
+    `Custom`'s line is `Set it yourself`. A configuration is checked exactly when the seat's staged
+    setting is its count and `Custom` is not; `Custom` is checked when chosen — by its radio, or by
+    using the slider or the number input — or when the staged setting is no configuration's count,
+    and it stays checked while those controls are in use, even on a configuration's count, so they
+    never vanish under a person's hand. Choosing a configuration MUST stage its count as a valid
+    value does, for that seat alone, and clear the status line. The swap of [W6-50] carries each
+    seat's `Custom` with it.
+  - While, and only while, `Custom` is checked, the group is followed by one range slider and one
+    number input, both bound to the seat's staged setting, so moving either moves the other. The
+    slider is labelled `Thinking`, with its ends named `Lighter` and `Deeper`; it is coarse and
+    logarithmic — 100 at one end, 200 000 at the other, with the default reachable exactly — and
+    states its value through `aria-valuetext` as the number alone (`12,345`), or `100,000
+    (recommended)` at the default. The number input sets any value in range exactly, which is
+    intent 0010's "set the number themselves"; it is labelled `Player 1: exact setting` or `Player
+    2: exact setting`, with `min`, `max` and the staged value. One line under it reads `Higher plays
+    a little stronger and a little slower. Recommended: 100,000.`, naming the default.
   - A valid value, committed on `change`, MUST stage [W6-44] for that seat alone. An invalid one
     MUST leave both staged settings as they were, restore the input to the seat's staged setting,
-    and say why — with the range — in a `role="status"` line inside the sheet. Nothing deals until
-    the sheet is committed.
+    and say why — `Pick a whole number from 100 to 200,000.` — in a `role="status"` line inside the
+    sheet. Nothing deals until the sheet is committed.
   - It stays available while a search is in flight, as the new-game control does ([W6-23]).
 
   *The configurations name no times because intent 0016 promises them on one laptop only; what a
   person can rely on everywhere is the order, and that `Balanced` is the default.*
+
+  *Nor do they name a count: a number of simulations means nothing to a person choosing an
+  opponent, and `Custom` keeps the number for anyone who wants it. `Deep` thinks about twice as
+  long as `Balanced` for a small gain, so neither line makes the gap sound larger than it is.*
 
   *A status line of its own rather than [0003 U3-56]'s live region, which is derived from the view
   model alone: a refused entry changes nothing the view model holds, and giving it a place there
