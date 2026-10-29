@@ -207,6 +207,7 @@ describe('inside a lane bundle [Z11-103]', () => {
     } catch (e) {
       stderr = String((e as { stderr: Buffer }).stderr);
     }
-    expect(stderr).toContain('no run named no-such-run');
+    // The lane's own answer: the missing run, or, while a loop runs, its lock.
+    expect(stderr).toMatch(/no run named no-such-run|train --run no-such-run: the package is locked/);
   }, 60_000);
 });
