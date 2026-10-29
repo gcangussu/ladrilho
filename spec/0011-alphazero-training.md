@@ -416,8 +416,8 @@ result, winrate) keep their meaning.
   clone carried all of them. A Release asset is not versioned the way a commit is; the record is
   what makes it so, since a replaced asset fails every fetch loudly instead of being read.*
 - **[Z11-104]** The **needed set** is `master` as `web/shipped.json` names it, the members of
-  `milestones/anchors.json`, the pool as `milestones/pool.json` and the log's replacements leave it
-  ([Z11-73]), and each run's latest recorded milestone; a needed milestone the record lacks MUST be
+  `milestones/anchors.json`, the pool's seed as `milestones/pool.json` records it, the pool as the
+  log's replacements leave it ([Z11-73]), and each run's latest recorded milestone; a needed milestone the record lacks MUST be
   an error. The `test`, `typecheck`, `web`, `web-latency`, `test:train`, `tile`, `grzhx` and
   `test:grzhx` scripts MUST fetch it first, and every lane command MUST, before it runs, fetch it
   together with each recorded milestone its arguments name, as `<run>:<g>` (alone, in a comma list,

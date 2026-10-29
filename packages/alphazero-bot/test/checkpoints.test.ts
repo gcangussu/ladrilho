@@ -78,20 +78,22 @@ describe('the committed record [Z11-103]', () => {
 
 describe('the needed set [Z11-104]', () => {
   const b = (n: number) => Buffer.from([n]);
-  const files = { 'a/10': b(1), 'a/20': b(2), 'a/30': b(3), 'b/5': b(4), 'b/15': b(5), 'c/1': b(6), 'c/2': b(7) };
+  const files = { 'a/10': b(1), 'a/20': b(2), 'a/30': b(3), 'b/5': b(4), 'b/15': b(5), 'c/1': b(6), 'c/2': b(7), 'c/3': b(8) };
 
-  it('is master, the anchors, the pool after its replacements, and each run\'s latest', () => {
+  it('is master, the anchors, the pool\'s seed and the pool after its replacements, and each run\'s latest', () => {
     const dir = packageWith(files, {
       shipped: { run: 'a', generation: 10 },
       anchors: { members: [{ run: 'b', generation: 5 }] },
       pool: { members: [{ run: 'c', generation: 1 }, { run: 'a', generation: 20 }] },
       log: [
         { kind: 'milestone', run: 'c', generation: 2, pool: { replaced: { run: 'c', generation: 1 } } },
+        { kind: 'milestone', run: 'c', generation: 3, pool: { replaced: { run: 'c', generation: 2 } } },
         { kind: 'milestone', run: 'a', generation: 30, pool: { replaced: null } },
       ],
     });
-    // Mutation, seen red: the replaced member kept in the set (`pool.delete` removed) adds c/1.
-    expect(neededKeys(dir)).toEqual(['a/10', 'a/20', 'a/30', 'b/15', 'b/5', 'c/2']);
+    // Mutations, seen red: the replaced member kept in the set (`pool.delete` removed) adds c/2;
+    // the seed left out drops c/1, which the committed pool's check reads though c/2 replaced it.
+    expect(neededKeys(dir)).toEqual(['a/10', 'a/20', 'a/30', 'b/15', 'b/5', 'c/1', 'c/3']);
   });
 
   it('refuses a needed milestone the manifest does not record', () => {

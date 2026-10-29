@@ -93,9 +93,10 @@ export function recordCheckpoint(run, generation, packageDir = PACKAGE) {
 
 /**
  * The milestones the suite and the payload read ([Z11-104]): `master`, as
- * `web/shipped.json` names it; the anchors; the pool as its seed and the
- * log's replacements leave it ([Z11-73]); and each run's latest recorded
- * milestone, which [Z11-44]'s width-256 check loads.
+ * `web/shipped.json` names it; the anchors; the pool's seed, whose files the
+ * committed pool's check asserts, and the pool as the log's replacements
+ * leave it ([Z11-73]); and each run's latest recorded milestone, which
+ * [Z11-44]'s width-256 check loads.
  */
 export function neededKeys(packageDir = PACKAGE) {
   const manifest = readManifest(packageDir);
@@ -115,6 +116,7 @@ export function neededKeys(packageDir = PACKAGE) {
       pool.add(keyOf(e.run, e.generation));
     }
     for (const k of pool) keys.add(k);
+    for (const m of seed.members) keys.add(keyOf(m.run, m.generation));
   }
   const latest = new Map();
   for (const k of Object.keys(manifest.checkpoints)) {
